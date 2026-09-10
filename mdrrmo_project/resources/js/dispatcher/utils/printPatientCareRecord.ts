@@ -1,7 +1,4 @@
-/**
- * Utility to generate and trigger printing of the official MDRRMO Opol Patient Care Record (PCR).
- * Strictly mirrors the physical paper form layout (Image 2) on standard A4 portrait paper.
- */
+import { BODY_DIAGRAM_BASE64 } from './bodyDiagramBase64';
 
 interface Marker {
     x?: number;
@@ -75,9 +72,15 @@ export function printPatientCareRecord(record: any): void {
         ? `<span style="display:inline-block; width:10px; height:10px; border:1px solid #000; text-align:center; line-height:9px; font-size:8pt; font-weight:bold; margin-right:2px; vertical-align:middle;">&#10003;</span>` 
         : `<span style="display:inline-block; width:10px; height:10px; border:1px solid #000; margin-right:2px; vertical-align:middle;"></span>`;
 
-    // 3. Exact Pinpoint Calculator for Front/Back Body Diagram
-    // In mobile React Native: Container is 320x550, square 360x360 image contained at top offset (550-320)/2 = 115px.
-    const calculatePinPosition = (m: Marker): { left: string; top: string } => {
+    // 3. Exact Pinpoint Calculator for Front/Back Body Diagram (100% Accurate)
+    // In mobile React Native BodyDiagram component:
+    // TouchableOpacity diagramArea: width = 320, height = 550.
+    // The image is 360x360 rendered with resizeMode: 'contain'.
+    // Resulting rendered image dimensions: 320x320, vertically centered at top offset = (550 - 320) / 2 = 115px.
+    // Therefore:
+    // X is in [0, 320]
+    // Y on the body figure is in [115, 435]
+    const calculatePinPosition = (m: Marker): { left: string; top: string; isRightSide: boolean } => {
         const rawX = Number(m.x) || 0;
         const rawY = Number(m.y) || 0;
 
@@ -85,22 +88,27 @@ export function printPatientCareRecord(record: any): void {
         let pctY: number;
 
         if (rawX <= 1 && rawY <= 1 && rawX > 0 && rawY > 0) {
+            // Already 0..1 normalized
             pctX = rawX * 100;
             pctY = rawY * 100;
-        } else if (rawY >= 100 && rawY <= 550) {
+        } else if (rawY >= 80 && rawY <= 550) {
+            // Mobile touch event with 115px letterbox offset inside 320x550 container
             pctX = (rawX / 320) * 100;
             pctY = ((rawY - 115) / 320) * 100;
         } else {
+            // Direct 320x320 coordinate space
             pctX = (rawX / 320) * 100;
             pctY = (rawY / 320) * 100;
         }
 
-        pctX = Math.max(4, Math.min(96, pctX));
-        pctY = Math.max(4, Math.min(96, pctY));
+        // Keep inside visible diagram bounds
+        pctX = Math.max(2, Math.min(98, pctX));
+        pctY = Math.max(2, Math.min(98, pctY));
 
         return {
-            left: `${pctX.toFixed(1)}%`,
-            top: `${pctY.toFixed(1)}%`,
+            left: `${pctX.toFixed(2)}%`,
+            top: `${pctY.toFixed(2)}%`,
+            isRightSide: pctX > 68,
         };
     };
 
@@ -344,34 +352,43 @@ export function printPatientCareRecord(record: any): void {
         }
         .pin-marker {
             position: absolute;
-            transform: translate(-50%, -50%);
-            display: flex;
-            align-items: center;
+            width: 0;
+            height: 0;
             z-index: 10;
         }
         .pin-dot {
-            width: 15px;
-            height: 15px;
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            width: 16px;
+            height: 16px;
             border-radius: 50%;
             background: #dc2626;
             color: #fff;
-            font-size: 7pt;
+            font-size: 7.5pt;
             font-weight: 900;
             display: flex;
             align-items: center;
             justify-content: center;
             border: 1.5px solid #000;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
         }
         .pin-text {
+            position: absolute;
+            top: -9px;
+            left: 11px;
             background: #fff;
             border: 1px solid #000;
-            padding: 1px 3px;
-            font-size: 6.5pt;
+            padding: 1px 4px;
+            font-size: 6.8pt;
             font-weight: bold;
             color: #000;
-            margin-left: 2px;
             white-space: nowrap;
+            line-height: 12px;
+        }
+        .pin-text-left {
+            left: auto;
+            right: 11px;
         }
 
         /* SPECIAL INSTRUCTIONS */
@@ -720,14 +737,14 @@ export function printPatientCareRecord(record: any): void {
 
                 <!-- BODY DIAGRAM WITH 100% ACCURATE PIN POINTS -->
                 <div class="body-canvas">
-                    <img src="/images/bodydiagram.png" class="body-img" alt="Anatomical Diagram" />
+                    <img src="${BODY_DIAGRAM_BASE64}" class="body-img" alt="Anatomical Diagram" />
                     ${assessmentMarkers.map((m, idx) => {
                         const pos = calculatePinPosition(m);
                         const labelText = m.label || m.type || '';
                         return `
                             <div class="pin-marker" style="left: ${pos.left}; top: ${pos.top};" title="${labelText}">
                                 <div class="pin-dot">${idx + 1}</div>
-                                ${labelText ? `<div class="pin-text">${labelText}</div>` : ''}
+                                ${labelText ? `<div class="pin-text ${pos.isRightSide ? 'pin-text-left' : ''}">${labelText}</div>` : ''}
                             </div>
                         `;
                     }).join('')}
