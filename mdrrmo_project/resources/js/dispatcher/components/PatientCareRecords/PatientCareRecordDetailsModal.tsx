@@ -64,13 +64,18 @@ export default function PatientCareRecordDetailsModal({
         ? [record.disposition]
         : [];
 
-    const formattedDate = record.record_date || (record.created_at
-        ? new Date(record.created_at).toLocaleDateString('en-PH', {
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric',
-          })
-        : '—');
+    const formatSafeDate = (d: string | null | undefined) => {
+        if (!d) return '—';
+        const parsed = new Date(typeof d === 'string' && d.includes('-') && !d.includes('T') ? d.replace(/-/g, '/') : d);
+        if (isNaN(parsed.getTime())) return d;
+        return parsed.toLocaleDateString('en-PH', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+        });
+    };
+
+    const formattedDate = formatSafeDate(record.record_date || record.created_at);
 
     return (
         <Modal
@@ -83,7 +88,15 @@ export default function PatientCareRecordDetailsModal({
                 <div className="flex items-center justify-between w-full">
                     <span className="text-xs text-slate-400">
                         {record.created_at
-                            ? `Completed: ${new Date(record.created_at).toLocaleString('en-PH')}`
+                            ? `Completed: ${new Date(record.created_at).toLocaleString('en-PH', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  second: '2-digit',
+                                  hour12: true,
+                              })}`
                             : ''}
                     </span>
                     <Button variant="secondary" onClick={onClose}>

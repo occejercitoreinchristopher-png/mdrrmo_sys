@@ -53,19 +53,28 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
                 const markers = Array.isArray(r.assessment_markers) ? r.assessment_markers : [];
                 const dispositions = Array.isArray(r.disposition) ? r.disposition : (r.disposition ? [r.disposition] : []);
 
-                const formattedIncidentDate = r.record_date
-                    ? new Date(r.record_date).toLocaleDateString('en-PH', {
+                const safeDate = (d: string | null | undefined) => {
+                    if (!d) return null;
+                    const parsed = new Date(typeof d === 'string' && d.includes('-') && !d.includes('T') ? d.replace(/-/g, '/') : d);
+                    return isNaN(parsed.getTime()) ? null : parsed;
+                };
+
+                const dateObj = safeDate(r.record_date) || safeDate(r.created_at);
+                const formattedIncidentDate = dateObj
+                    ? dateObj.toLocaleDateString('en-PH', {
                           month: 'short',
                           day: 'numeric',
                           year: 'numeric',
                       })
-                    : (r.created_at
-                    ? new Date(r.created_at).toLocaleDateString('en-PH', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
+                    : '—';
+
+                const formattedIncidentTime = r.created_at
+                    ? new Date(r.created_at).toLocaleTimeString('en-PH', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true,
                       })
-                    : '—');
+                    : null;
 
                 return (
                     <Card
@@ -89,6 +98,11 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
                                         <span className="text-xs font-medium text-slate-300 flex items-center gap-1">
                                             <Calendar className="w-3.5 h-3.5 text-rose-400" />
                                             {formattedIncidentDate}
+                                            {formattedIncidentTime && (
+                                                <span className="text-slate-400 font-mono text-[11px] ml-1">
+                                                    ({formattedIncidentTime})
+                                                </span>
+                                            )}
                                         </span>
                                     </div>
                                     <p className="text-[11px] text-slate-400">

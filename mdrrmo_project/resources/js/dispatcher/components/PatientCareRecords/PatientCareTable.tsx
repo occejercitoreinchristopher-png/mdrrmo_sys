@@ -114,13 +114,22 @@ export default function PatientCareTable({ records = [], pagination = null }: Pa
             sortable: true,
             render: (v) => (
                 v ? (
-                    <span className="text-xs text-slate-400">
-                        {new Date(v).toLocaleDateString('en-PH', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                        })}
-                    </span>
+                    <div>
+                        <span className="text-xs text-slate-200 font-medium">
+                            {new Date(v).toLocaleDateString('en-PH', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                            })}
+                        </span>
+                        <span className="text-[11px] text-slate-400 block font-mono">
+                            {new Date(v).toLocaleTimeString('en-PH', {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true,
+                            })}
+                        </span>
+                    </div>
                 ) : (
                     <span className="text-slate-500 text-xs">—</span>
                 )

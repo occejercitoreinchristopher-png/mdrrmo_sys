@@ -68,8 +68,9 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
           })
         : '—';
 
-    const latestPcrDate = care_records.length > 0 && (care_records[0].record_date || care_records[0].created_at)
-        ? new Date(care_records[0].record_date || care_records[0].created_at).toLocaleDateString('en-PH', {
+    const rawPcrDate = care_records.length > 0 ? (care_records[0].record_date || care_records[0].created_at) : null;
+    const latestPcrDate = rawPcrDate
+        ? new Date(typeof rawPcrDate === 'string' && rawPcrDate.includes('-') && !rawPcrDate.includes('T') ? rawPcrDate.replace(/-/g, '/') : rawPcrDate).toLocaleDateString('en-PH', {
               month: 'short',
               day: 'numeric',
               year: 'numeric',
