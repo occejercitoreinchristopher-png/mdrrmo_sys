@@ -92,7 +92,7 @@ class ResidentController extends Controller
                 'incidentType',
                 'images',
                 'dispatches' => function ($q) {
-                    $q->with(['ambulance', 'driver', 'emt', 'teamLeader', 'pcrRecord']);
+                    $q->with(['ambulance', 'driver', 'emt', 'teamLeader', 'patientCareRecord']);
                 },
             ])
             ->latest('reported_at')

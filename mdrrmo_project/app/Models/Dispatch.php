@@ -43,6 +43,11 @@ class Dispatch extends Model
         return $this->hasOne(PatientCareRecord::class);
     }
 
+    public function pcrRecord()
+    {
+        return $this->patientCareRecord();
+    }
+
     public function dispatcher()
     {
         return $this->belongsTo(User::class, 'dispatcher_id');
