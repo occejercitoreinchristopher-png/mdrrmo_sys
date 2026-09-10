@@ -4,6 +4,7 @@ import Button from '@/shared/components/Button';
 import StatusBadge from '@/shared/components/StatusBadge';
 import {
     Activity,
+    AlertCircle,
     AlertTriangle,
     Building2,
     Calendar,
@@ -407,65 +408,88 @@ export default function PatientCareRecordDetailsModal({
                     <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                         <FileSignature className="w-4 h-4" /> Legal Signatures & Waivers
                     </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {/* Patient Signature */}
-                        <div className="bg-white/5 p-3 rounded-xl border border-white/10 flex flex-col items-center justify-between text-center min-h-[140px]">
-                            <span className="text-[11px] font-medium text-slate-300">Patient Signature</span>
-                            {record.patient_signature ? (
-                                <img
-                                    src={record.patient_signature}
-                                    alt="Patient Signature"
-                                    className="max-h-16 w-auto object-contain my-2 bg-white/10 rounded p-1"
-                                />
-                            ) : (
-                                <span className="text-xs text-slate-500 italic my-auto">No signature captured</span>
-                            )}
-                            <span className="text-[10px] text-slate-400">Patient Endorsement</span>
-                        </div>
+                    {(() => {
+                        const effectivePatientSig = record.patient_signature || record.waiver_signature;
+                        const effectiveWaiverSig = record.waiver_signature || record.patient_signature;
+                        const isPatientUnableToSign = record.patient_signature === 'UNABLE_TO_SIGN' || record.waiver_signature === 'UNABLE_TO_SIGN';
+                        const hasPatientSig = effectivePatientSig && effectivePatientSig !== 'UNABLE_TO_SIGN';
+                        const hasWaiverSig = effectiveWaiverSig && effectiveWaiverSig !== 'UNABLE_TO_SIGN';
 
-                        {/* Witness Signature */}
-                        <div className="bg-white/5 p-3 rounded-xl border border-white/10 flex flex-col items-center justify-between text-center min-h-[140px]">
-                            <span className="text-[11px] font-medium text-slate-300">Witness Signature</span>
-                            {record.witness_signature ? (
-                                <img
-                                    src={record.witness_signature}
-                                    alt="Witness Signature"
-                                    className="max-h-16 w-auto object-contain my-2 bg-white/10 rounded p-1"
-                                />
-                            ) : (
-                                <span className="text-xs text-slate-500 italic my-auto">No witness signature</span>
-                            )}
-                            <span className="text-[10px] text-slate-400">
-                                {record.witness_name ? `Witness: ${record.witness_name}` : 'Witness Endorsement'}
-                            </span>
-                        </div>
-
-                        {/* Waiver Signature */}
-                        <div className="bg-white/5 p-3 rounded-xl border border-white/10 flex flex-col items-center justify-between text-center min-h-[140px]">
-                            <span className="text-[11px] font-medium text-slate-300">Transport Waiver</span>
-                            {record.waiver_signed ? (
-                                <>
-                                    {record.waiver_signature ? (
+                        return (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                {/* Patient Signature */}
+                                <div className="bg-white/5 p-3 rounded-xl border border-white/10 flex flex-col items-center justify-between text-center min-h-[140px]">
+                                    <span className="text-[11px] font-medium text-slate-300">Patient Signature</span>
+                                    {hasPatientSig ? (
                                         <img
-                                            src={record.waiver_signature}
-                                            alt="Waiver Signature"
+                                            src={effectivePatientSig}
+                                            alt="Patient Signature"
+                                            className="max-h-16 w-auto object-contain my-2 bg-white/10 rounded p-1"
+                                        />
+                                    ) : isPatientUnableToSign ? (
+                                        <div className="my-auto py-2 px-3 bg-amber-500/10 border border-amber-500/25 rounded-lg text-amber-300 text-xs font-semibold flex items-center gap-1.5">
+                                            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                                            <span>Unable to Sign (Unconscious / Minor)</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-xs text-slate-500 italic my-auto">No signature captured</span>
+                                    )}
+                                    <span className="text-[10px] text-slate-400">Patient Endorsement</span>
+                                </div>
+
+                                {/* Witness Signature */}
+                                <div className="bg-white/5 p-3 rounded-xl border border-white/10 flex flex-col items-center justify-between text-center min-h-[140px]">
+                                    <span className="text-[11px] font-medium text-slate-300">Witness Signature</span>
+                                    {record.witness_signature ? (
+                                        <img
+                                            src={record.witness_signature}
+                                            alt="Witness Signature"
                                             className="max-h-16 w-auto object-contain my-2 bg-white/10 rounded p-1"
                                         />
                                     ) : (
-                                        <div className="my-auto text-emerald-400 font-bold text-xs flex items-center gap-1">
-                                            <FileCheck2 className="w-4 h-4" /> Waiver Signed
-                                        </div>
+                                        <span className="text-xs text-slate-500 italic my-auto">No witness signature</span>
                                     )}
-                                    <span className="text-[10px] text-emerald-400 font-semibold">Refusal/Waiver Executed</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span className="text-xs text-slate-500 italic my-auto">No waiver required</span>
-                                    <span className="text-[10px] text-slate-500">Standard Transport</span>
-                                </>
-                            )}
-                        </div>
-                    </div>
+                                    <span className="text-[10px] text-slate-400">
+                                        {record.witness_name ? `Witness: ${record.witness_name}` : 'Witness Endorsement'}
+                                    </span>
+                                </div>
+
+                                {/* Waiver Signature */}
+                                <div className="bg-white/5 p-3 rounded-xl border border-white/10 flex flex-col items-center justify-between text-center min-h-[140px]">
+                                    <span className="text-[11px] font-medium text-slate-300">Transport Waiver</span>
+                                    {isPatientUnableToSign ? (
+                                        <>
+                                            <div className="my-auto py-2 px-3 bg-amber-500/10 border border-amber-500/25 rounded-lg text-amber-300 text-xs font-semibold flex items-center gap-1.5">
+                                                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                                                <span>Exempt / Unable to Sign</span>
+                                            </div>
+                                            <span className="text-[10px] text-amber-400 font-semibold">Patient Unconscious / Minor</span>
+                                        </>
+                                    ) : hasWaiverSig || record.waiver_signed ? (
+                                        <>
+                                            {hasWaiverSig && effectiveWaiverSig.startsWith('data:image') ? (
+                                                <img
+                                                    src={effectiveWaiverSig}
+                                                    alt="Waiver Signature"
+                                                    className="max-h-16 w-auto object-contain my-2 bg-white/10 rounded p-1"
+                                                />
+                                            ) : (
+                                                <div className="my-auto text-emerald-400 font-bold text-xs flex items-center gap-1">
+                                                    <FileCheck2 className="w-4 h-4" /> Waiver Signed
+                                                </div>
+                                            )}
+                                            <span className="text-[10px] text-emerald-400 font-semibold">Refusal/Waiver Executed</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="text-xs text-slate-500 italic my-auto">No waiver required</span>
+                                            <span className="text-[10px] text-slate-500">Standard Transport</span>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
             </div>
         </Modal>

@@ -60,6 +60,19 @@ class PatientCareRecordController extends Controller
 
         $pcrData = collect($validated)->except(['age', 'incident_address'])->all();
 
+        // Cross-sync patient_signature and waiver_signature if either is populated
+        if (!empty($validated['waiver_signature']) && empty($pcrData['patient_signature'])) {
+            $pcrData['patient_signature'] = $validated['waiver_signature'];
+        }
+        if (!empty($validated['patient_signature']) && empty($pcrData['waiver_signature'])) {
+            $pcrData['waiver_signature'] = $validated['patient_signature'];
+        }
+
+        if (isset($pcrData['waiver_signature']) || isset($pcrData['patient_signature'])) {
+            $sig = $pcrData['waiver_signature'] ?? $pcrData['patient_signature'] ?? '';
+            $pcrData['waiver_signed'] = !empty($sig) && $sig !== 'UNABLE_TO_SIGN';
+        }
+
         $pcr = $dispatch->patientCareRecord()->updateOrCreate(
             ['dispatch_id' => $dispatch->id],
             $pcrData

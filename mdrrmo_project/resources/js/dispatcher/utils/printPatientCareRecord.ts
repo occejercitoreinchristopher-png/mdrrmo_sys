@@ -956,8 +956,18 @@ export function printPatientCareRecord(record: any): void {
 
         <div class="waiver-bottom-cols">
             <div class="sig-col">
-                <div style="min-height: 30px; display: flex; align-items: flex-end;">
-                    ${record.patient_signature ? `<img src="${record.patient_signature}" class="sig-holder-img" alt="Signature" />` : ''}
+                <div style="min-height: 28px; display: flex; align-items: flex-end;">
+                    ${(() => {
+                        const effectivePatientSig = record.patient_signature || record.waiver_signature;
+                        const isPatientUnableToSign = record.patient_signature === 'UNABLE_TO_SIGN' || record.waiver_signature === 'UNABLE_TO_SIGN';
+                        if (!isPatientUnableToSign && effectivePatientSig && String(effectivePatientSig).startsWith('data:image')) {
+                            return `<img src="${effectivePatientSig}" class="sig-holder-img" alt="Signature" />`;
+                        }
+                        if (isPatientUnableToSign) {
+                            return `<span style="font-size: 7.5pt; font-weight: bold; color: #b91c1c; font-style: italic; margin-bottom: 2px;">[ PATIENT UNABLE TO SIGN / UNCONSCIOUS ]</span>`;
+                        }
+                        return '';
+                    })()}
                 </div>
                 <div style="margin-bottom: 2px;">
                     <span class="field-name">SIGNATURE:</span>
