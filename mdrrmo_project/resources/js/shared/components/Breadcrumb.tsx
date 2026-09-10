@@ -1,7 +1,7 @@
 import { ChevronRight, Home } from 'lucide-react';
 import { Link, usePage } from '@inertiajs/react';
 
-const routeLabels = {
+const routeLabels: Record<string, string> = {
     'admin/dashboard': 'Dashboard',
     'admin/users': 'Users',
     'admin/residents': 'Residents',
@@ -17,7 +17,12 @@ const routeLabels = {
     'dispatcher/residents': 'Residents',
 };
 
-export default function Breadcrumb({ items }) {
+const routeHrefs: Record<string, string> = {
+    '/admin': '/admin/dashboard',
+    '/dispatcher': '/dispatcher/dashboard',
+};
+
+export default function Breadcrumb({ items }: { items?: any[] } = {}) {
     const { url } = usePage();
 
     // Auto-generate from URL if no items provided
@@ -31,7 +36,7 @@ export default function Breadcrumb({ items }) {
                 label:
                     routeLabels[cumulative.replace(/^\//, '')] ||
                     part.charAt(0).toUpperCase() + part.slice(1),
-                href: cumulative,
+                href: routeHrefs[cumulative] || cumulative,
             });
         }
         return result;
@@ -47,19 +52,19 @@ export default function Breadcrumb({ items }) {
                             <Home className="w-3 h-3 text-slate-500" />
                         )}
                         {isLast ? (
-                            <span className="text-slate-300 font-medium">
+                            <span className="text-slate-800 dark:text-slate-300 font-semibold">
                                 {crumb.label}
                             </span>
                         ) : (
                             <Link
                                 href={crumb.href}
-                                className="text-slate-500 hover:text-white transition-colors"
+                                className="text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
                             >
                                 {crumb.label}
                             </Link>
                         )}
                         {!isLast && (
-                            <ChevronRight className="w-3 h-3 text-slate-600" />
+                            <ChevronRight className="w-3 h-3 text-slate-400 dark:text-slate-600" />
                         )}
                     </span>
                 );

@@ -31,7 +31,12 @@ const AVAILABILITY_OPTIONS = [
     { value: 'sick', label: '🔴 Sick' },
 ];
 
-export default function ResponderManagement({ users = [], pagination = null }) {
+interface ResponderManagementProps {
+    users?: any[];
+    pagination?: any;
+}
+
+export default function ResponderManagement({ users = [], pagination = null }: ResponderManagementProps) {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [selectedResponder, setSelectedResponder] = useState<any | null>(null);
@@ -195,11 +200,11 @@ export default function ResponderManagement({ users = [], pagination = null }) {
                                     Borrowed to: {mission.borrowed_to || mission.dispatch_team || 'Other Team'}
                                 </span>
                             </div>
-                            <div className="text-[11px] text-slate-300 flex items-center gap-1">
-                                <Siren className="w-3 h-3 text-amber-400 shrink-0" />
-                                <span>Incident: <strong className="text-white">#{mission.incident_id}</strong></span>
+                            <div className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                <Siren className="w-3 h-3 text-amber-500 shrink-0" />
+                                <span>Incident: <strong className="text-slate-900 dark:text-white">#{mission.incident_id}</strong></span>
                                 {mission.incident_code && (
-                                    <span className="text-slate-400 font-mono">({mission.incident_code})</span>
+                                    <span className="text-slate-500 dark:text-slate-400 font-mono">({mission.incident_code})</span>
                                 )}
                             </div>
                         </div>
@@ -247,14 +252,15 @@ export default function ResponderManagement({ users = [], pagination = null }) {
                     <div className="flex items-center gap-3 flex-1 max-w-lg">
                         <SearchInput 
                             placeholder="Search by name, crew, role..." 
+                            value={search}
                             onChange={setSearch} 
                             className="flex-1" 
                         />
                         <Select
+                            id="status-filter"
                             value={statusFilter}
                             onChange={setStatusFilter}
                             options={AVAILABILITY_OPTIONS}
-                            placeholder={null}
                             className="w-44"
                         />
                     </div>
@@ -347,28 +353,28 @@ export default function ResponderManagement({ users = [], pagination = null }) {
                                         : 'bg-cyan-500/10 border-cyan-500/20'
                                 }`}>
                                     <div className="flex items-center justify-between">
-                                        <span className="font-mono text-xs font-bold text-white">
+                                        <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">
                                             Incident: #{selectedResponder.temporary_mission.incident_id}
                                         </span>
                                         {selectedResponder.is_borrowed ? (
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/30 text-amber-200 border border-amber-500/40">
+                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-200 border border-amber-500/30">
                                                 Borrowed
                                             </span>
                                         ) : (
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/30 text-cyan-200">
+                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-700 dark:text-cyan-200">
                                                 Active Crew
                                             </span>
                                         )}
                                     </div>
 
                                     {selectedResponder.is_borrowed && (
-                                        <div className="text-xs font-semibold text-amber-300">
-                                            Borrowed to: <span className="text-white">{selectedResponder.temporary_mission.borrowed_to || selectedResponder.temporary_mission.dispatch_team}</span>
+                                        <div className="text-xs font-semibold text-amber-600 dark:text-amber-300">
+                                            Borrowed to: <span className="text-slate-900 dark:text-white">{selectedResponder.temporary_mission.borrowed_to || selectedResponder.temporary_mission.dispatch_team}</span>
                                         </div>
                                     )}
 
-                                    <div className="text-xs text-slate-300">
-                                        Status: <span className="capitalize font-medium text-white">{selectedResponder.temporary_mission.dispatch_status}</span>
+                                    <div className="text-xs text-slate-600 dark:text-slate-300">
+                                        Status: <span className="capitalize font-medium text-slate-900 dark:text-white">{selectedResponder.temporary_mission.dispatch_status}</span>
                                     </div>
 
                                     {selectedResponder.temporary_mission.incident_type && (

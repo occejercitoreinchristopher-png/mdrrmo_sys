@@ -1,21 +1,29 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
+
+interface SearchInputProps {
+    placeholder?: string;
+    value?: string;
+    onChange?: (value: string) => void;
+    debounce?: number;
+    className?: string;
+}
 
 export default function SearchInput({
     placeholder = 'Search...',
-    value,
+    value = '',
     onChange,
     debounce = 300,
     className = '',
-}) {
+}: SearchInputProps) {
     const [localValue, setLocalValue] = useState(value || '');
-    const timerRef = useRef(null);
+    const timerRef = useRef<any>(null);
 
     useEffect(() => {
         setLocalValue(value || '');
     }, [value]);
 
-    const handleChange = (e) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
         setLocalValue(val);
         if (timerRef.current) clearTimeout(timerRef.current);

@@ -1,9 +1,14 @@
 import { clsx } from 'clsx';
 import { ButtonHTMLAttributes, ReactNode } from 'react';
+import { usePage } from '@inertiajs/react';
 
 const variants = {
     primary:
         'bg-gradient-to-r from-rose-600 to-orange-600 text-white hover:from-rose-500 hover:to-orange-500 shadow-[0_0_15px_rgba(244,63,94,0.3)] hover:shadow-[0_0_20px_rgba(244,63,94,0.5)] active:scale-95',
+    admin:
+        'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 shadow-md shadow-blue-500/25 hover:shadow-lg hover:shadow-blue-500/40 border border-blue-400/20 active:scale-95',
+    blue:
+        'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 shadow-md shadow-blue-500/25 hover:shadow-lg hover:shadow-blue-500/40 border border-blue-400/20 active:scale-95',
     secondary:
         'bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-white hover:bg-slate-200 dark:hover:bg-white/15 border border-slate-200 dark:border-white/10 shadow-[0_0_10px_rgba(0,0,0,0.05)] dark:shadow-[0_0_10px_rgba(255,255,255,0.05)] active:scale-95',
     danger:
@@ -26,7 +31,7 @@ const sizes = {
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
     children: ReactNode;
-    variant?: 'primary' | 'secondary' | 'danger' | 'destructive' | 'ghost' | 'outline' | 'success';
+    variant?: 'primary' | 'secondary' | 'danger' | 'destructive' | 'ghost' | 'outline' | 'success' | 'blue' | 'admin';
     size?: 'xs' | 'sm' | 'md' | 'lg';
     loading?: boolean;
 }
@@ -42,6 +47,17 @@ export default function Button({
     onClick,
     ...props
 }: ButtonProps) {
+    let resolvedVariant = variant;
+    try {
+        const page = usePage();
+        const isAdmin = page?.url ? (page.url.startsWith('/admin') || page.url.includes('/admin/')) : false;
+        if (variant === 'primary' && isAdmin) {
+            resolvedVariant = 'admin';
+        }
+    } catch {
+        // Safe fallback if rendered outside Inertia context
+    }
+
     return (
         <button
             type={type}
@@ -49,7 +65,7 @@ export default function Button({
             disabled={disabled || loading}
             className={clsx(
                 'inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed',
-                variants[variant],
+                variants[resolvedVariant] || variants.primary,
                 sizes[size],
                 className,
             )}

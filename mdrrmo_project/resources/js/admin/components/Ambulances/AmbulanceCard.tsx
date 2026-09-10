@@ -12,7 +12,7 @@ export default function AmbulanceCard({ ambulance, onEdit }: { ambulance: any; o
                     </div>
                     <AmbulanceStatusBadge status={ambulance.status} />
                 </div>
-                <p className="font-mono font-semibold text-white">{ambulance.plate_number}</p>
+                <p className="font-mono font-semibold text-slate-900 dark:text-white">{ambulance.plate_number}</p>
                 <p className="text-xs text-slate-400 mt-0.5">{ambulance.model} {ambulance.year ? `(${ambulance.year})` : ''}</p>
             </div>
         </Card>

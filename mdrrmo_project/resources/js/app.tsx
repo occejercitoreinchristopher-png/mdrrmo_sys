@@ -39,6 +39,8 @@ createInertiaApp({
         switch (true) {
             case name === 'welcome':
                 return null;
+            case name === 'profile':
+                return null; // Dynamically wraps with AdminLayout or DispatcherLayout
             case name.startsWith('admin/'):
                 return null; // Admin pages use AdminLayout explicitly
             case name.startsWith('dispatcher/'):

@@ -110,7 +110,7 @@ export default function UserManagement({
                 subtitle={subtitle}
                 actions={
                     canCreate && (
-                        <Button onClick={openCreate}>
+                        <Button onClick={openCreate} variant="admin">
                             <UserPlus className="w-4 h-4" />
                             Add User
                         </Button>

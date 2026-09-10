@@ -1,21 +1,25 @@
 import { useState } from 'react';
 import { router } from '@inertiajs/react';
-import { Plus, Pencil, Trash2, Ambulance } from 'lucide-react';
-import DataTable from '@/shared/components/DataTable';
+import { Plus, Pencil, Trash2, Ambulance as AmbulanceIcon } from 'lucide-react';
+import DataTable, { type Column } from '@/shared/components/DataTable';
 import AmbulanceStatusBadge from './AmbulanceStatusBadge';
 import Button from '@/shared/components/Button';
 import PageHeader from '@/shared/components/PageHeader';
 import Card from '@/shared/components/Card';
 import SearchInput from '@/shared/components/SearchInput';
 import Drawer from '@/shared/components/Drawer';
-import AmbulanceForm from './AmbulanceForm';
+import AmbulanceForm, { type Ambulance } from './AmbulanceForm';
 import ConfirmDialog from '@/shared/components/ConfirmDialog';
 
-export default function AmbulanceTable({ ambulances = [] }) {
+interface AmbulanceTableProps {
+    ambulances?: Ambulance[];
+}
+
+export default function AmbulanceTable({ ambulances = [] }: AmbulanceTableProps) {
     const [search, setSearch] = useState('');
     const [drawerOpen, setDrawerOpen] = useState(false);
-    const [editing, setEditing] = useState(null);
-    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [editing, setEditing] = useState<Ambulance | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<Ambulance | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
@@ -25,7 +29,7 @@ export default function AmbulanceTable({ ambulances = [] }) {
     });
 
     const openCreate = () => { setEditing(null); setDrawerOpen(true); };
-    const openEdit = (a) => { setEditing(a); setDrawerOpen(true); };
+    const openEdit = (a: Ambulance) => { setEditing(a); setDrawerOpen(true); };
 
     const handleSubmit = (form) => {
         setSubmitting(true);
@@ -46,9 +50,9 @@ export default function AmbulanceTable({ ambulances = [] }) {
         });
     };
 
-    const columns = [
-        { key: 'ambulance_code', header: 'Code', sortable: true, render: (v) => <span className="font-mono font-bold text-white">{v}</span> },
-        { key: 'plate_number', header: 'Plate Number', sortable: true, render: (v) => <span className="font-mono font-medium text-slate-300">{v}</span> },
+    const columns: Column<Ambulance>[] = [
+        { key: 'ambulance_code', header: 'Code', sortable: true, render: (v) => <span className="font-mono font-bold text-slate-900 dark:text-white">{v}</span> },
+        { key: 'plate_number', header: 'Plate Number', sortable: true, render: (v) => <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{v}</span> },
         { key: 'vehicle_name', header: 'Vehicle Name', sortable: true },
         { key: 'vehicle_type', header: 'Type' },
         { key: 'status', header: 'Status', sortable: true, render: (v) => <AmbulanceStatusBadge status={v} /> },
@@ -72,14 +76,14 @@ export default function AmbulanceTable({ ambulances = [] }) {
             <PageHeader
                 title="Ambulance Management"
                 subtitle="Manage the ambulance fleet and their availability."
-                actions={<Button onClick={openCreate}><Plus className="w-4 h-4" />Add Ambulance</Button>}
+                actions={<Button onClick={openCreate} variant="admin"><Plus className="w-4 h-4" />Add Ambulance</Button>}
             />
             <Card padding={false}>
                 <div className="flex items-center gap-3 p-4 border-b border-white/10">
                     <SearchInput placeholder="Search ambulances..." onChange={setSearch} className="flex-1 max-w-sm" />
                 </div>
                 <div className="p-4">
-                    <DataTable columns={columns} data={filtered} keyField="id" emptyTitle="No ambulances found" emptyIcon={Ambulance} />
+                    <DataTable columns={columns} data={filtered} keyField="id" emptyTitle="No ambulances found" emptyIcon={AmbulanceIcon} />
                 </div>
             </Card>
 

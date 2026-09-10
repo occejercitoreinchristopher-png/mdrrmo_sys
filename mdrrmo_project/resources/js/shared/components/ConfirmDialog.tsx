@@ -2,6 +2,18 @@ import { AlertTriangle } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 
+interface ConfirmDialogProps {
+    open: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    title?: string;
+    description?: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    variant?: 'primary' | 'secondary' | 'danger' | 'destructive' | 'ghost' | 'outline' | 'success';
+    loading?: boolean;
+}
+
 export default function ConfirmDialog({
     open,
     onClose,
@@ -12,7 +24,7 @@ export default function ConfirmDialog({
     cancelLabel = 'Cancel',
     variant = 'danger',
     loading = false,
-}) {
+}: ConfirmDialogProps) {
     return (
         <Modal
             open={open}
@@ -38,8 +50,8 @@ export default function ConfirmDialog({
                     <AlertTriangle className="w-6 h-6 text-red-400" />
                 </div>
                 <div>
-                    <h3 className="font-semibold text-white">{title}</h3>
-                    <p className="text-sm text-slate-400 mt-1">{description}</p>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">{title}</h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{description}</p>
                 </div>
             </div>
         </Modal>

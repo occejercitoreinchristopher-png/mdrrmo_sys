@@ -9,7 +9,7 @@ export default function DispatchCard({ dispatch, onClick }) {
                     <span className="font-mono text-xs text-slate-500">#{dispatch.id}</span>
                     <StatusBadge status={dispatch.status} />
                 </div>
-                <p className="text-sm font-medium text-white">
+                <p className="text-sm font-medium text-slate-900 dark:text-white">
                     {dispatch.ambulance?.plate_number ?? 'N/A'}
                 </p>
                 <p className="text-xs text-slate-400 mt-1">

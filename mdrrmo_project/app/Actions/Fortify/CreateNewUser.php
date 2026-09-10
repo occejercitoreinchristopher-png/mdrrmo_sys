@@ -21,11 +21,13 @@ class CreateNewUser implements CreatesNewUsers
 
         return User::create([
             'first_name' => $input['first_name'],
+            'middle_name' => $input['middle_name'] ?? null,
             'last_name' => $input['last_name'],
-            'phone_number' => $input['phone_number'],
+            'phone_number' => $input['phone_number'] ?? null,
             'email' => $input['email'],
             'password' => $input['password'],
             'role' => 'resident',
+            'status' => 'active',
         ]);
     }
 }

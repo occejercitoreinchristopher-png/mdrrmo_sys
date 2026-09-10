@@ -9,6 +9,7 @@ import {
     Siren,
     ChevronRight,
     Users,
+    User,
 } from 'lucide-react';
 import { useState } from 'react';
 import { clsx } from 'clsx';
@@ -49,8 +50,8 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl 
     const btnClass = clsx(
         'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 group relative overflow-hidden outline-none',
         (active || (!subItems && isSubActive))
-            ? 'bg-gradient-to-r from-rose-600/80 to-orange-600/60 text-white shadow-lg shadow-rose-500/25 font-medium border border-rose-500/30'
-            : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent',
+            ? 'bg-gradient-to-r from-rose-600 to-orange-600 text-white shadow-md shadow-rose-500/25 font-medium border border-rose-500/30'
+            : 'text-slate-600 hover:bg-rose-50/60 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200 border border-transparent',
     );
 
     return (
@@ -81,8 +82,8 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl 
                                     className={clsx(
                                         'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs transition-all duration-200',
                                         subActive
-                                            ? 'bg-rose-500/10 text-rose-300 font-medium'
-                                            : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
+                                            ? 'bg-rose-50 text-rose-600 font-medium dark:bg-rose-500/10 dark:text-rose-300'
+                                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-500 dark:hover:bg-white/5 dark:hover:text-slate-300'
                                     )}
                                 >
                                     <subItem.icon className={clsx("w-3.5 h-3.5", subActive ? "text-rose-400" : "text-slate-500")} />
@@ -100,7 +101,7 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl 
 function NavGroup({ group, items, currentUrl }) {
     return (
         <div className="mb-5">
-            <p className="text-[10px] font-bold text-rose-700/80 uppercase tracking-widest mb-1.5 px-3">
+            <p className="text-[10px] font-bold text-rose-600 dark:text-rose-700/80 uppercase tracking-widest mb-1.5 px-3">
                 {group}
             </p>
             <div className="space-y-0.5">
@@ -156,23 +157,29 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
                 { label: 'Patients', icon: Heart, href: '/dispatcher/patients' },
             ],
         },
+        {
+            group: 'Account',
+            items: [
+                { label: 'Profile', icon: User, href: '/profile' },
+            ],
+        },
     ];
 
     return (
         <aside
             className={clsx(
-                'h-full flex flex-col border-r border-rose-500/10 transition-all duration-500 ease-in-out relative flex-shrink-0 overflow-hidden',
+                'h-full flex flex-col border-r border-slate-200 dark:border-rose-500/10 transition-all duration-500 ease-in-out relative flex-shrink-0 overflow-hidden shadow-sm dark:shadow-none',
                 collapsed ? 'w-0' : 'w-64',
-                'bg-[#080d1a]',
+                'bg-white dark:bg-[#080d1a]',
             )}
         >
             {/* Sidebar background glow */}
             <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-0 left-0 w-full h-40 bg-rose-900/15 blur-2xl" />
+                <div className="absolute top-0 left-0 w-full h-40 bg-rose-500/5 dark:bg-rose-900/15 blur-2xl" />
             </div>
 
             {/* Logo / Header */}
-            <div className="h-16 flex items-center px-5 border-b border-rose-500/10 flex-shrink-0 relative z-10">
+            <div className="h-16 flex items-center px-5 border-b border-slate-200 dark:border-rose-500/10 flex-shrink-0 relative z-10">
                 {/* Icon */}
                 <div className="relative flex-shrink-0">
                     <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-orange-600 flex items-center justify-center shadow-lg shadow-rose-500/30">
@@ -183,10 +190,10 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
                 </div>
 
                 <div className="ml-3 overflow-hidden">
-                    <h1 className="text-sm font-bold text-white leading-tight truncate tracking-wide">
+                    <h1 className="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate tracking-wide">
                         MDRRMO
                     </h1>
-                    <p className="text-[10px] text-rose-400/70 truncate font-medium tracking-widest uppercase">
+                    <p className="text-[10px] text-rose-600 dark:text-rose-400/70 truncate font-semibold tracking-widest uppercase">
                         Dispatcher Panel
                     </p>
                 </div>
@@ -204,10 +211,10 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
             </div>
 
             {/* Footer */}
-            <div className="px-4 py-3 border-t border-rose-500/10 relative z-10 flex items-center justify-between">
+            <div className="px-4 py-3 border-t border-slate-200 dark:border-rose-500/10 relative z-10 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <p className="text-[10px] text-slate-600 font-medium">System Online</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-600 font-medium">System Online</p>
                 </div>
                 <ThemeToggle />
             </div>

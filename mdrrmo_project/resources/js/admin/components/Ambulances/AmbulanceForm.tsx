@@ -3,7 +3,31 @@ import Input from '@/shared/components/Input';
 import Select from '@/shared/components/Select';
 import Button from '@/shared/components/Button';
 
-export default function AmbulanceForm({ ambulance = null, onSubmit, onCancel, loading = false, errors = {} }) {
+export interface Ambulance {
+    id?: number | string;
+    ambulance_code?: string;
+    plate_number?: string;
+    vehicle_name?: string;
+    vehicle_type?: string;
+    status?: string;
+    [key: string]: any;
+}
+
+interface AmbulanceFormProps {
+    ambulance?: Ambulance | null;
+    onSubmit?: (form: any) => void;
+    onCancel?: () => void;
+    loading?: boolean;
+    errors?: Record<string, string>;
+}
+
+export default function AmbulanceForm({
+    ambulance = null,
+    onSubmit,
+    onCancel,
+    loading = false,
+    errors = {},
+}: AmbulanceFormProps) {
     const [form, setForm] = useState({
         ambulance_code: ambulance?.ambulance_code ?? '',
         plate_number: ambulance?.plate_number ?? '',
@@ -12,7 +36,7 @@ export default function AmbulanceForm({ ambulance = null, onSubmit, onCancel, lo
         status: ambulance?.status ?? 'available',
     });
 
-    const set = (field) => (e) =>
+    const set = (field: string) => (e: any) =>
         setForm((f) => ({ ...f, [field]: e.target ? e.target.value : e }));
 
     return (
@@ -29,7 +53,7 @@ export default function AmbulanceForm({ ambulance = null, onSubmit, onCancel, lo
                 ]}
             />
             <div className="flex gap-3 pt-2">
-                <Button type="submit" loading={loading} className="flex-1">
+                <Button type="submit" loading={loading} variant="admin" className="flex-1">
                     {ambulance ? 'Update Ambulance' : 'Add Ambulance'}
                 </Button>
                 {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>}

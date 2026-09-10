@@ -58,10 +58,10 @@ export default function DataTable<T extends Record<string, any>>({
         <div className="relative">
             {loading && <LoadingSpinner overlay />}
 
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10 shadow-sm dark:shadow-none">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10 shadow-sm dark:shadow-none bg-white dark:bg-transparent">
                 <table className="w-full text-sm">
                     <thead>
-                        <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5">
+                        <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-white/5">
                             {columns.map((col) => (
                                 <th
                                     key={col.key}
@@ -111,16 +111,16 @@ export default function DataTable<T extends Record<string, any>>({
                                             : undefined
                                     }
                                     className={clsx(
-                                        'border-b border-slate-200 dark:border-white/5 transition-colors duration-150',
-                                        'hover:bg-slate-50 dark:hover:bg-white/5',
+                                        'border-b border-slate-200/80 dark:border-white/5 transition-colors duration-150',
+                                        'hover:bg-slate-50/80 dark:hover:bg-white/5',
                                         onRowClick && 'cursor-pointer',
-                                        i % 2 === 1 && 'bg-slate-50/50 dark:bg-white/[0.02]',
+                                        i % 2 === 1 && 'bg-slate-50/40 dark:bg-white/[0.02]',
                                     )}
                                 >
                                     {columns.map((col) => (
                                         <td
                                             key={col.key}
-                                            className="px-4 py-3 text-slate-700 dark:text-slate-300 whitespace-nowrap"
+                                            className="px-4 py-3 text-slate-800 dark:text-slate-300 whitespace-nowrap"
                                         >
                                             {col.render
                                                 ? col.render(row[col.key], row)

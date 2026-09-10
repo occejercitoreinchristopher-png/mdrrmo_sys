@@ -24,19 +24,19 @@ export default function DispatcherAppLayout({ children, title = 'Dispatcher', Si
     return (
         <ThemeProvider>
             <Head title={title} />
-            <div className="flex h-screen bg-[#0a0f1e] dark:bg-[#0a0f1e] text-slate-100 overflow-hidden font-sans">
-                {/* Decorative background — deep navy with crimson emergency glow */}
+            <div className="flex h-screen bg-slate-100/80 dark:bg-[#0a0f1e] text-slate-900 dark:text-slate-100 overflow-hidden font-sans">
+                {/* Decorative background — subtle emergency aura in light, deep navy glow in dark */}
                 <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                    <div className="absolute -top-40 -left-20 w-[500px] h-[500px] bg-rose-700/10 rounded-full blur-3xl" />
-                    <div className="absolute top-1/2 right-0 w-80 h-80 bg-orange-600/8 rounded-full blur-3xl" />
-                    <div className="absolute -bottom-40 left-1/3 w-72 h-72 bg-rose-500/6 rounded-full blur-3xl" />
+                    <div className="absolute -top-40 -left-20 w-[500px] h-[500px] bg-rose-500/5 dark:bg-rose-700/10 rounded-full blur-3xl" />
+                    <div className="absolute top-1/2 right-0 w-80 h-80 bg-orange-500/5 dark:bg-orange-600/8 rounded-full blur-3xl" />
+                    <div className="absolute -bottom-40 left-1/3 w-72 h-72 bg-rose-500/4 dark:bg-rose-500/6 rounded-full blur-3xl" />
                     {/* Subtle grid overlay */}
                     <div
-                        className="absolute inset-0 opacity-[0.03]"
+                        className="absolute inset-0 opacity-[0.04] dark:opacity-[0.03]"
                         style={{
                             backgroundImage:
-                                'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-                            backgroundSize: '32px 32px',
+                                'radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)',
+                            backgroundSize: '28px 28px',
                         }}
                     />
                 </div>

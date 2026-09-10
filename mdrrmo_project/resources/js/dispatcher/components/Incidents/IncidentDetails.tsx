@@ -3,7 +3,7 @@ import Drawer from '@/shared/components/Drawer';
 import StatusBadge from '@/shared/components/StatusBadge';
 import Button from '@/shared/components/Button';
 import { router } from '@inertiajs/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 
 // Haversine distance calculation in meters
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -57,7 +57,7 @@ export default function IncidentDetails({
     onAssignUnit?: (incident: any) => void; 
 }) {
     const [processing, setProcessing] = useState(false);
-    const [address, setAddress] = useState(null);
+    const [address, setAddress] = useState<string | null>(null);
     const [loadingAddress, setLoadingAddress] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -142,7 +142,7 @@ export default function IncidentDetails({
         incident.reporter_longitude
     );
 
-    let locationStatusNode = null;
+    let locationStatusNode: ReactNode = null;
     if (distance !== null) {
         if (distance < 50) {
             locationStatusNode = (

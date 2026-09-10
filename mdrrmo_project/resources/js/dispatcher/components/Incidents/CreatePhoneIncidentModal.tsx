@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import Modal from '@/shared/components/Modal';
 import Button from '@/shared/components/Button';
+import { useAppearance } from '@/shared/contexts/ThemeContext';
 import { OPOL_BARANGAYS, searchOpolLandmarks } from '@/dispatcher/data/opolLandmarks';
 
 export interface CallerData {
@@ -101,6 +102,7 @@ export default function CreatePhoneIncidentModal({
     incidentTypes = [],
     chiefComplaints = DEFAULT_COMPLAINTS,
 }: CreatePhoneIncidentModalProps) {
+    const { theme } = useAppearance();
     // Load initial draft if any
     const initialDraft = useMemo(() => loadDraft(), []);
 
@@ -1493,7 +1495,7 @@ export default function CreatePhoneIncidentModal({
                                         {...mapViewState}
                                         onMove={(evt) => setMapViewState(evt.viewState)}
                                         onClick={handleMapClick}
-                                        mapStyle="mapbox://styles/mapbox/dark-v11"
+                                        mapStyle={theme === 'dark' ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/light-v11"}
                                         attributionControl={false}
                                         cursor="crosshair"
                                     >

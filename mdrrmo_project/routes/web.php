@@ -9,16 +9,34 @@ use App\Http\Controllers\Dispatcher\PatientCareRecordController;
 use App\Http\Controllers\Dispatcher\PatientController;
 use App\Http\Controllers\Dispatcher\ResidentController;
 use App\Http\Controllers\Dispatcher\ResponderController;
+use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::get('/dashboard', function () {
+        $user = auth()->user();
+        if ($user?->role === 'admin') {
+            return redirect()->route('admin.dashboard');
+        }
+        if ($user?->role === 'dispatcher') {
+            return redirect()->route('dispatcher.dashboard');
+        }
+        return Inertia::render('dashboard');
+    })->name('dashboard');
+});
+
+// Profile Routes (Restricted strictly to Admin and Dispatcher only)
+Route::middleware(['auth', 'role:admin,dispatcher'])->group(function () {
+    Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 });
 
 // Admin Routes
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->group(function () {
+    Route::get('/', fn () => redirect()->route('admin.dashboard'));
     Route::inertia('/dashboard', 'admin/Dashboard')->name('dashboard');
     Route::get('/users', [UserController::class, 'index'])->name('users');
     Route::get('/residents', [UserController::class, 'residents'])->name('residents');
@@ -36,6 +54,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
 
 // Dispatcher Routes
 Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:dispatcher'])->group(function () {
+    Route::get('/', fn () => redirect()->route('dispatcher.dashboard'));
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // Incidents

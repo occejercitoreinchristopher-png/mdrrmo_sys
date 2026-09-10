@@ -47,7 +47,7 @@ export default function BarangayTable({ barangays = [] }) {
 
     const columns = [
         { key: 'id', header: '#', render: (v) => <span className="font-mono text-xs text-slate-400">#{v}</span> },
-        { key: 'name', header: 'Barangay Name', sortable: true, render: (v) => <span className="font-medium text-white">{v}</span> },
+        { key: 'name', header: 'Barangay Name', sortable: true, render: (v) => <span className="font-medium text-slate-900 dark:text-white">{v}</span> },
         { key: 'municipality', header: 'Municipality' },
         { key: 'province', header: 'Province' },
         {
@@ -66,7 +66,7 @@ export default function BarangayTable({ barangays = [] }) {
             <PageHeader
                 title="Barangay Management"
                 subtitle="Manage barangays covered by MDRRMO."
-                actions={<Button onClick={openCreate}><Plus className="w-4 h-4" />Add Barangay</Button>}
+                actions={<Button onClick={openCreate} variant="admin"><Plus className="w-4 h-4" />Add Barangay</Button>}
             />
             <Card padding={false}>
                 <div className="flex items-center gap-3 p-4 border-b border-white/10">

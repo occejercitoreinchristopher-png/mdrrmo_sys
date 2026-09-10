@@ -15,6 +15,7 @@ import {
     BarChart3,
     ChevronDown,
     ChevronRight,
+    User,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -38,6 +39,12 @@ const navigation = [
         items: [
             { label: 'Residents', icon: Users, href: '/dispatcher/residents' },
             { label: 'Patients', icon: Heart, href: '/dispatcher/patients' },
+        ],
+    },
+    {
+        group: 'Account',
+        items: [
+            { label: 'Profile', icon: User, href: '/profile' },
         ],
     },
 ];

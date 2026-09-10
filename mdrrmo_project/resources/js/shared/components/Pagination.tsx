@@ -62,7 +62,7 @@ export default function Pagination({
                     disabled={currentPage === 1}
                     className={clsx(
                         btnBase,
-                        'text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed',
+                        'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed',
                     )}
                 >
                     <ChevronLeft className="w-4 h-4" />
@@ -83,8 +83,8 @@ export default function Pagination({
                             className={clsx(
                                 btnBase,
                                 page === currentPage
-                                    ? 'bg-blue-600 text-white'
-                                    : 'text-slate-400 hover:bg-white/10 hover:text-white',
+                                    ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white',
                             )}
                         >
                             {page}
@@ -97,7 +97,7 @@ export default function Pagination({
                     disabled={currentPage === lastPage}
                     className={clsx(
                         btnBase,
-                        'text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed',
+                        'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed',
                     )}
                 >
                     <ChevronRight className="w-4 h-4" />

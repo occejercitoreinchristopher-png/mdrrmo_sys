@@ -2,8 +2,11 @@ import { useState, useRef, useEffect } from 'react';
 import Map, { Marker, Popup, type MapRef } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { MapPin, AlertCircle } from 'lucide-react';
+import { useAppearance } from '@/shared/contexts/ThemeContext';
 
 export default function IncidentHistoryMap({ incidents = [], selectedIncident = null }: { incidents?: any[], selectedIncident?: any }) {
+    const { theme } = useAppearance();
+    const isDark = theme === 'dark';
     const mapRef = useRef<MapRef>(null);
     const [viewState, setViewState] = useState({
         longitude: 124.577, // near opol region
@@ -45,12 +48,12 @@ export default function IncidentHistoryMap({ incidents = [], selectedIncident = 
     }, [selectedIncident]);
 
     return (
-        <div className="w-full h-[500px] overflow-hidden bg-slate-900 rounded-2xl relative mb-6 border border-slate-700/50 shadow-lg">
+        <div className="w-full h-[500px] overflow-hidden bg-slate-100 dark:bg-slate-900 rounded-2xl relative mb-6 border border-slate-200 dark:border-slate-700/50 shadow-sm dark:shadow-lg">
             <style>{`
                 .mapboxgl-ctrl-logo { display: none !important; }
                 .mapboxgl-ctrl-attrib { display: none !important; }
-                .mapboxgl-popup-content { background: #1E293B !important; color: white !important; border: 1px solid #334155; border-radius: 8px; padding: 12px; }
-                .mapboxgl-popup-tip { border-top-color: #1E293B !important; }
+                .mapboxgl-popup-content { background: ${isDark ? '#1E293B' : '#FFFFFF'} !important; color: ${isDark ? '#ffffff' : '#0f172a'} !important; border: 1px solid ${isDark ? '#334155' : '#e2e8f0'}; border-radius: 8px; padding: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+                .mapboxgl-popup-tip { border-top-color: ${isDark ? '#1E293B' : '#FFFFFF'} !important; }
             `}</style>
             {import.meta.env.VITE_MAPBOX_TOKEN ? (
                 <Map
@@ -58,7 +61,7 @@ export default function IncidentHistoryMap({ incidents = [], selectedIncident = 
                     mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
                     {...viewState}
                     onMove={evt => setViewState(evt.viewState)}
-                    mapStyle="mapbox://styles/mapbox/dark-v11"
+                    mapStyle={isDark ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/light-v11"}
                     attributionControl={false}
                 >
                     {incidents.map(inc => {

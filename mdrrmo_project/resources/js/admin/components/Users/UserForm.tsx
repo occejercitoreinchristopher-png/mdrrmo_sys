@@ -221,7 +221,7 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
             )}
 
             <div className="flex gap-3 pt-2">
-                <Button type="submit" loading={loading} className="flex-1">
+                <Button type="submit" loading={loading} variant="admin" className="flex-1">
                     {user ? 'Update User' : 'Create User'}
                 </Button>
                 {onCancel && (
