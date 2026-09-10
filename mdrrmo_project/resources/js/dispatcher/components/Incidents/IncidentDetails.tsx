@@ -1,4 +1,4 @@
-import { MapPin, Clock, CheckCircle, XCircle, ShieldAlert, Truck, Send, CheckCircle2, PhoneCall, Smartphone, UserCheck, Image as ImageIcon, ExternalLink } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, XCircle, ShieldAlert, Truck, Send, CheckCircle2, PhoneCall, Smartphone, UserCheck, Image as ImageIcon, ExternalLink, X } from 'lucide-react';
 import Drawer from '@/shared/components/Drawer';
 import StatusBadge from '@/shared/components/StatusBadge';
 import Button from '@/shared/components/Button';
@@ -59,6 +59,17 @@ export default function IncidentDetails({
     const [processing, setProcessing] = useState(false);
     const [address, setAddress] = useState(null);
     const [loadingAddress, setLoadingAddress] = useState(false);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && previewImage) {
+                setPreviewImage(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [previewImage]);
 
     useEffect(() => {
         if (!incident || !incident.reporter_latitude || !incident.reporter_longitude) {
@@ -321,11 +332,11 @@ export default function IncidentDetails({
                                             src={`/storage/${incident.images[0].image_path}`} 
                                             alt="Incident Photo Evidence" 
                                             className="w-full h-52 object-cover transition-transform duration-300 group-hover:scale-105 cursor-pointer"
-                                            onClick={() => window.open(`/storage/${incident.images[0].image_path}`, '_blank')}
+                                            onClick={() => setPreviewImage(`/storage/${incident.images[0].image_path}`)}
                                         />
                                         <div className="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-[11px] text-white flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                             <ExternalLink className="w-3 h-3" />
-                                            Click to open full photo
+                                            Click to enlarge
                                         </div>
                                     </div>
                                     {incident.images.length > 1 && (
@@ -336,7 +347,7 @@ export default function IncidentDetails({
                                                     src={`/storage/${img.image_path}`}
                                                     alt={`Incident Evidence ${idx + 2}`}
                                                     className="w-full h-16 object-cover rounded-lg border border-white/10 cursor-pointer hover:opacity-80 transition-opacity"
-                                                    onClick={() => window.open(`/storage/${img.image_path}`, '_blank')}
+                                                    onClick={() => setPreviewImage(`/storage/${img.image_path}`)}
                                                 />
                                             ))}
                                         </div>
@@ -467,6 +478,60 @@ export default function IncidentDetails({
                     )}
                 </div>
             </div>
+
+            {/* High-Resolution Photo Lightbox Preview Modal with Clear Close Button */}
+            {previewImage && (
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-black/90 backdrop-blur-md"
+                    onClick={() => setPreviewImage(null)}
+                >
+                    {/* Top Right Close Button */}
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewImage(null);
+                        }}
+                        className="absolute top-4 right-4 sm:top-6 sm:right-6 z-20 flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-white/20 shadow-2xl transition-all hover:scale-105 cursor-pointer"
+                        title="Close preview (Esc)"
+                    >
+                        <X className="w-5 h-5 text-rose-400" />
+                        <span className="text-sm font-semibold">Close</span>
+                    </button>
+
+                    {/* Image Box */}
+                    <div
+                        className="relative max-w-5xl max-h-[90vh] w-full flex flex-col items-center justify-center"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <img
+                            src={previewImage}
+                            alt="Incident Full Evidence"
+                            className="max-w-full max-h-[80vh] object-contain rounded-2xl border border-white/10 shadow-2xl"
+                        />
+                        <div className="mt-4 flex items-center gap-3">
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setPreviewImage(null)}
+                                className="bg-slate-900/80 hover:bg-slate-800 border-white/20 text-white"
+                            >
+                                <X className="w-4 h-4 mr-1.5 text-rose-400" />
+                                Close Preview
+                            </Button>
+                            <a
+                                href={previewImage}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/10 hover:bg-white/15 text-slate-200 hover:text-white transition-colors border border-white/10"
+                            >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                Open in New Window
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            )}
         </Drawer>
     );
 }
