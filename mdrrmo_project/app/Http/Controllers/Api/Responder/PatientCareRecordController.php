@@ -60,6 +60,17 @@ class PatientCareRecordController extends Controller
 
         $pcrData = collect($validated)->except(['age', 'incident_address'])->all();
 
+        // Automatically fill operational response times from dispatch timeline if not explicitly provided
+        if (empty($pcrData['dispatch_time']) && $dispatch->created_at) {
+            $pcrData['dispatch_time'] = $dispatch->created_at->format('H:i');
+        }
+        if (empty($pcrData['en_route_time']) && $dispatch->en_route_at) {
+            $pcrData['en_route_time'] = $dispatch->en_route_at->format('H:i');
+        }
+        if (empty($pcrData['on_scene_time']) && ($dispatch->arrived_on_scene_at || $dispatch->arrived_at)) {
+            $pcrData['on_scene_time'] = ($dispatch->arrived_on_scene_at ?: $dispatch->arrived_at)->format('H:i');
+        }
+
         // Cross-sync patient_signature and waiver_signature if either is populated
         if (!empty($validated['waiver_signature']) && empty($pcrData['patient_signature'])) {
             $pcrData['patient_signature'] = $validated['waiver_signature'];
