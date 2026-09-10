@@ -131,9 +131,36 @@ export default function ResidentsPage({ residents, barangays = [], filters = {} 
     const handleCopyPhone = (e: React.MouseEvent, id: number, phone: string) => {
         e.stopPropagation();
         if (!phone) return;
-        navigator.clipboard.writeText(phone);
-        setCopiedId(id);
-        setTimeout(() => setCopiedId(null), 2000);
+        try {
+            if (navigator?.clipboard?.writeText) {
+                navigator.clipboard.writeText(phone).then(() => {
+                    setCopiedId(id);
+                    setTimeout(() => setCopiedId(null), 2000);
+                }).catch(() => {
+                    fallbackCopy(phone, id);
+                });
+            } else {
+                fallbackCopy(phone, id);
+            }
+        } catch {
+            fallbackCopy(phone, id);
+        }
+    };
+
+    const fallbackCopy = (text: string, id: number) => {
+        try {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            setCopiedId(id);
+            setTimeout(() => setCopiedId(null), 2000);
+        } catch {}
     };
 
     const renderSortHeader = (label: string, sortKey: string) => {

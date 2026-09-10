@@ -159,9 +159,36 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
 
     const handleCopyPhone = () => {
         if (!resident.phone_number) return;
-        navigator.clipboard.writeText(resident.phone_number);
-        setCopiedPhone(true);
-        setTimeout(() => setCopiedPhone(false), 2000);
+        try {
+            if (navigator?.clipboard?.writeText) {
+                navigator.clipboard.writeText(resident.phone_number).then(() => {
+                    setCopiedPhone(true);
+                    setTimeout(() => setCopiedPhone(false), 2000);
+                }).catch(() => {
+                    fallbackCopy(resident.phone_number!);
+                });
+            } else {
+                fallbackCopy(resident.phone_number);
+            }
+        } catch {
+            fallbackCopy(resident.phone_number);
+        }
+    };
+
+    const fallbackCopy = (text: string) => {
+        try {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            setCopiedPhone(true);
+            setTimeout(() => setCopiedPhone(false), 2000);
+        } catch {}
     };
 
     // Quick calculations
