@@ -89,6 +89,7 @@ class ResidentController extends Controller
         // Strictly fetch incidents associated with this resident
         $incidents = $resident->reportedIncidents()
             ->with([
+                'resident',
                 'incidentType',
                 'images',
                 'dispatches' => function ($q) {

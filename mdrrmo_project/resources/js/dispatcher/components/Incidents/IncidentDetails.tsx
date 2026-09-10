@@ -1,4 +1,4 @@
-import { MapPin, Clock, CheckCircle, XCircle, ShieldAlert, Truck, Send, CheckCircle2, PhoneCall, Smartphone, UserCheck } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, XCircle, ShieldAlert, Truck, Send, CheckCircle2, PhoneCall, Smartphone, UserCheck, Image as ImageIcon, ExternalLink } from 'lucide-react';
 import Drawer from '@/shared/components/Drawer';
 import StatusBadge from '@/shared/components/StatusBadge';
 import Button from '@/shared/components/Button';
@@ -310,20 +310,69 @@ export default function IncidentDetails({
                             </div>
                         </div>
 
-                        {incident.images && incident.images.length > 0 && (
-                            <div>
-                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                                    Photo Evidence
-                                </p>
-                                <div className="mt-1">
-                                    <img 
-                                        src={`/storage/${incident.images[0].image_path}`} 
-                                        alt="Incident" 
-                                        className="w-full h-48 object-cover rounded-xl border border-slate-200 dark:border-white/10"
-                                    />
+                        <div>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                                Photo Evidence
+                            </p>
+                            {incident.images && incident.images.length > 0 ? (
+                                <div className="mt-1 space-y-2">
+                                    <div className="relative group overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 bg-slate-900/50">
+                                        <img 
+                                            src={`/storage/${incident.images[0].image_path}`} 
+                                            alt="Incident Photo Evidence" 
+                                            className="w-full h-52 object-cover transition-transform duration-300 group-hover:scale-105 cursor-pointer"
+                                            onClick={() => window.open(`/storage/${incident.images[0].image_path}`, '_blank')}
+                                        />
+                                        <div className="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-[11px] text-white flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                            <ExternalLink className="w-3 h-3" />
+                                            Click to open full photo
+                                        </div>
+                                    </div>
+                                    {incident.images.length > 1 && (
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {incident.images.slice(1).map((img, idx) => (
+                                                <img
+                                                    key={idx}
+                                                    src={`/storage/${img.image_path}`}
+                                                    alt={`Incident Evidence ${idx + 2}`}
+                                                    className="w-full h-16 object-cover rounded-lg border border-white/10 cursor-pointer hover:opacity-80 transition-opacity"
+                                                    onClick={() => window.open(`/storage/${img.image_path}`, '_blank')}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                        )}
+                            ) : (
+                                <div className="mt-1 p-3.5 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-white/5 text-xs">
+                                    {incident.report_source === 'dispatcher' || incident.location_source === 'location_code' ? (
+                                        <div className="flex items-start gap-2.5 text-slate-400">
+                                            <PhoneCall className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="font-semibold text-slate-200">Phone / SIM Call Intake (Voice Only)</p>
+                                                <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                                                    Traditional cellular SIM voice calls do not transmit image files. Photos can be captured and uploaded on-scene by the dispatched ambulance crew.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ) : incident.report_source === 'walk_in' ? (
+                                        <div className="flex items-start gap-2.5 text-slate-400">
+                                            <UserCheck className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="font-semibold text-slate-200">Station Walk-In Intake</p>
+                                                <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                                                    Reported directly in-person at the MDRRMO station. No initial mobile photo uploaded.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2 text-slate-400">
+                                            <ImageIcon className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                                            <span>No photo evidence attached to this report.</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
 
                         <div>
                             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
