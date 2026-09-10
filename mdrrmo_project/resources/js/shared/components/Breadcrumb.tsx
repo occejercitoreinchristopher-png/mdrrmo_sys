@@ -14,6 +14,7 @@ const routeLabels = {
     'admin/patient-care-records': 'Patient Care Records',
     'admin/barangays': 'Barangays',
     'admin/reports': 'Reports',
+    'dispatcher/residents': 'Residents',
 };
 
 export default function Breadcrumb({ items }) {

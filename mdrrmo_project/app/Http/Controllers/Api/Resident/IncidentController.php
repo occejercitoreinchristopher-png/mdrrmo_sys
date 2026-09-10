@@ -72,6 +72,7 @@ class IncidentController extends Controller
             'incident_status' => 'pending',
             'priority' => 'Moderate',
             'reported_at' => $validated['reported_at'] ?? now(),
+            'report_source' => 'resident_app',
         ]);
 
         if ($request->hasFile('photo')) {

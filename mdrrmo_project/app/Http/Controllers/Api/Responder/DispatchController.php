@@ -100,6 +100,7 @@ class DispatchController extends Controller
             'incident_status' => 'responding',
             'priority' => 'Moderate',
             'reported_at' => Carbon::now(),
+            'report_source' => 'walk_in',
         ]);
 
         $dispatch = Dispatch::create([

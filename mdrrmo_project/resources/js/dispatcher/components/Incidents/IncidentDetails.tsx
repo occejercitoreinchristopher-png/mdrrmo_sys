@@ -1,4 +1,4 @@
-import { MapPin, Clock, CheckCircle, XCircle, ShieldAlert, Truck, Send, CheckCircle2, PhoneCall } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, XCircle, ShieldAlert, Truck, Send, CheckCircle2, PhoneCall, Smartphone, UserCheck } from 'lucide-react';
 import Drawer from '@/shared/components/Drawer';
 import StatusBadge from '@/shared/components/StatusBadge';
 import Button from '@/shared/components/Button';
@@ -177,10 +177,20 @@ export default function IncidentDetails({
                     <div className="flex flex-wrap gap-2 pb-4 border-b border-slate-200 dark:border-white/10">
                         <StatusBadge status={incident.priority ?? 'Moderate'} />
                         <StatusBadge status={incident.incident_status} />
-                        {incident.location_source === 'location_code' && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                        {incident.report_source === 'walk_in' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                <UserCheck className="w-3 h-3" />
+                                Walk-In
+                            </span>
+                        ) : incident.report_source === 'dispatcher' || incident.location_source === 'location_code' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
                                 <PhoneCall className="w-3 h-3" />
-                                Phone/SIM Call
+                                Dispatcher / Web
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                <Smartphone className="w-3 h-3" />
+                                Resident App
                             </span>
                         )}
                     </div>

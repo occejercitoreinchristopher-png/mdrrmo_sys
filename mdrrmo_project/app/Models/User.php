@@ -56,4 +56,9 @@ class User extends Authenticatable
     {
         return $this->hasOne(ResidentProfile::class);
     }
+
+    public function reportedIncidents()
+    {
+        return $this->hasMany(Incident::class, 'resident_id');
+    }
 }

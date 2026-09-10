@@ -8,6 +8,7 @@ import {
     ClipboardList,
     Siren,
     ChevronRight,
+    Users,
 } from 'lucide-react';
 import { useState } from 'react';
 import { clsx } from 'clsx';
@@ -149,10 +150,10 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
             ],
         },
         {
-            group: 'Medical',
+            group: 'Community & Medical',
             items: [
+                { label: 'Residents', icon: Users, href: '/dispatcher/residents' },
                 { label: 'Patients', icon: Heart, href: '/dispatcher/patients' },
-                { label: 'Care Records', icon: ClipboardList, href: '/dispatcher/patient-care-records' },
             ],
         },
     ];

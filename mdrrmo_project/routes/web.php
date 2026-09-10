@@ -7,6 +7,7 @@ use App\Http\Controllers\Dispatcher\DispatchController;
 use App\Http\Controllers\Dispatcher\IncidentController;
 use App\Http\Controllers\Dispatcher\PatientCareRecordController;
 use App\Http\Controllers\Dispatcher\PatientController;
+use App\Http\Controllers\Dispatcher\ResidentController;
 use App\Http\Controllers\Dispatcher\ResponderController;
 use Illuminate\Support\Facades\Route;
 
@@ -62,6 +63,10 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
     Route::get('/patients', [PatientController::class, 'index'])->name('patients');
     Route::get('/patients/search', [PatientController::class, 'search'])->name('patients.search');
     Route::get('/patients/{patient}', [PatientController::class, 'show'])->name('patients.show');
+
+    // Residents
+    Route::get('/residents', [ResidentController::class, 'index'])->name('residents');
+    Route::get('/residents/{resident}', [ResidentController::class, 'show'])->name('residents.show');
 
     // PCRs
     Route::get('/patient-care-records', [PatientCareRecordController::class, 'index'])->name('patient-care-records');

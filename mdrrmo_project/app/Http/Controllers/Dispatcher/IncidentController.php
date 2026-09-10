@@ -479,6 +479,7 @@ class IncidentController extends Controller
             'incident_status' => 'pending',
             'priority' => 'Moderate',
             'reported_at' => now(),
+            'report_source' => 'dispatcher',
         ]);
 
         $incident->load(['incidentType', 'resident']);
