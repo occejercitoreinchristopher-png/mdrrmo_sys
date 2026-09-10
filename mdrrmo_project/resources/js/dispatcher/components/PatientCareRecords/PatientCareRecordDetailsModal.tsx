@@ -19,7 +19,9 @@ import {
     Truck,
     User,
     Users,
+    Printer,
 } from 'lucide-react';
+import { printPatientCareRecord } from '@/dispatcher/utils/printPatientCareRecord';
 
 interface VitalSignTake {
     take?: number;
@@ -99,9 +101,19 @@ export default function PatientCareRecordDetailsModal({
                               })}`
                             : ''}
                     </span>
-                    <Button variant="secondary" onClick={onClose}>
-                        Close
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="primary"
+                            onClick={() => printPatientCareRecord(record)}
+                            className="inline-flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-semibold text-xs px-3.5 py-2 rounded-xl shadow-lg shadow-rose-900/40 border border-rose-500/40 transition-all cursor-pointer"
+                        >
+                            <Printer className="w-4 h-4" />
+                            <span>Print PCR</span>
+                        </Button>
+                        <Button variant="secondary" onClick={onClose}>
+                            Close
+                        </Button>
+                    </div>
                 </div>
             }
         >
@@ -133,17 +145,29 @@ export default function PatientCareRecordDetailsModal({
                             </div>
                         </div>
 
-                        {dispatch?.ambulance && (
-                            <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-right">
-                                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                                    Assigned Unit
-                                </p>
-                                <p className="text-sm font-bold text-white flex items-center gap-1.5 justify-end">
-                                    <Truck className="w-4 h-4 text-orange-400" />
-                                    {dispatch.ambulance.vehicle_name || dispatch.ambulance.plate_number}
-                                </p>
-                            </div>
-                        )}
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => printPatientCareRecord(record)}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-200 hover:text-white font-semibold text-xs border border-rose-500/30 hover:border-rose-400 transition-all shadow-sm group cursor-pointer"
+                                title="Print Official Patient Care Record (A4)"
+                            >
+                                <Printer className="w-4 h-4 text-rose-400 group-hover:scale-110 transition-transform" />
+                                <span>Print PCR</span>
+                            </button>
+
+                            {dispatch?.ambulance && (
+                                <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-right">
+                                    <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                                        Assigned Unit
+                                    </p>
+                                    <p className="text-sm font-bold text-white flex items-center gap-1.5 justify-end">
+                                        <Truck className="w-4 h-4 text-orange-400" />
+                                        {dispatch.ambulance.vehicle_name || dispatch.ambulance.plate_number}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 

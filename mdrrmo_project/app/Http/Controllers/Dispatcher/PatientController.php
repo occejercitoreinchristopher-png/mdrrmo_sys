@@ -247,12 +247,13 @@ class PatientController extends Controller
             ] : null,
         ];
 
-        $careRecords = $patient->careRecords->map(function ($pcr) {
+        $careRecords = $patient->careRecords->map(function ($pcr) use ($patientData) {
             $dispatch = $pcr->dispatch;
             $incident = $dispatch?->incident;
 
             return [
                 'id' => $pcr->id,
+                'patient' => $patientData,
                 'dispatch_id' => $pcr->dispatch_id,
                 'incident_id' => $incident?->id,
                 'incident_type' => $incident?->incidentType?->name ?? 'Medical Emergency',
