@@ -5,7 +5,6 @@ import {
     Eye,
     MapPin,
     Phone,
-    PhoneCall,
     User,
     Calendar,
     FileText,
@@ -100,32 +99,32 @@ export default function PatientTable({ patients = [], pagination = null }: Patie
         },
         {
             key: 'contact_number',
-            header: 'Contact & Quick Call',
+            header: 'Contact Number',
             render: (v, row) => (
                 v ? (
-                    <div className="flex items-center gap-2">
-                        {/* Quick Direct Call Button */}
-                        <a
-                            href={`tel:${v}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 transition-all text-xs font-mono font-semibold group/call"
-                            title={`Call ${v} directly`}
-                        >
-                            <PhoneCall className="w-3.5 h-3.5 group-hover/call:scale-110 transition-transform" />
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-200 text-xs font-mono font-medium">
+                            <Phone className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
                             <span>{v}</span>
-                        </a>
+                        </span>
 
-                        {/* Copy Phone Icon */}
+                        {/* Copy Phone Button */}
                         <button
                             type="button"
                             onClick={(e) => handleCopyPhone(e, row.id, v)}
-                            className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10 transition-colors text-xs font-medium"
                             title="Copy phone number"
                         >
                             {copiedId === row.id ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                <>
+                                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span className="text-emerald-400 text-[11px]">Copied</span>
+                                </>
                             ) : (
-                                <Copy className="w-3.5 h-3.5" />
+                                <>
+                                    <Copy className="w-3.5 h-3.5 text-slate-400" />
+                                    <span className="text-[11px]">Copy</span>
+                                </>
                             )}
                         </button>
                     </div>
@@ -174,15 +173,6 @@ export default function PatientTable({ patients = [], pagination = null }: Patie
             header: 'Actions',
             render: (_, row) => (
                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    {row.contact_number && (
-                        <a
-                            href={`tel:${row.contact_number}`}
-                            className="inline-flex items-center justify-center p-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition-colors"
-                            title="Call Patient"
-                        >
-                            <PhoneCall className="w-3.5 h-3.5" />
-                        </a>
-                    )}
                     <Button
                         size="xs"
                         variant="secondary"

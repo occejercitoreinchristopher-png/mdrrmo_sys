@@ -19,6 +19,8 @@ import {
     Sparkles,
     User,
     UserCheck,
+    Copy,
+    Check,
 } from 'lucide-react';
 
 interface PatientDetailsProps {
@@ -73,6 +75,15 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
               year: 'numeric',
           })
         : 'None';
+
+    const [copied, setCopied] = useState(false);
+
+    const handleCopyPhone = () => {
+        if (!patient.contact_number) return;
+        navigator.clipboard.writeText(patient.contact_number);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
 
     return (
         <DispatcherLayout title={`Patient: ${patient.full_name}`}>
@@ -153,13 +164,24 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                         {/* Quick Actions & Stats Badges */}
                         <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
                             {patient.contact_number && (
-                                <a
-                                    href={`tel:${patient.contact_number}`}
-                                    className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs transition-all shadow-lg shadow-emerald-600/30 border border-emerald-400/30"
+                                <button
+                                    type="button"
+                                    onClick={handleCopyPhone}
+                                    className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-slate-800/90 hover:bg-slate-700/90 text-white font-semibold text-xs transition-all border border-white/10 hover:border-white/20 shadow-md group"
+                                    title="Copy phone number"
                                 >
-                                    <Phone className="w-4 h-4" />
-                                    <span>Call Patient ({patient.contact_number})</span>
-                                </a>
+                                    {copied ? (
+                                        <>
+                                            <Check className="w-4 h-4 text-emerald-400" />
+                                            <span className="text-emerald-300 font-medium">Copied {patient.contact_number}!</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Copy className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+                                            <span>Copy Phone ({patient.contact_number})</span>
+                                        </>
+                                    )}
+                                </button>
                             )}
                             <div className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-center min-w-[110px]">
                                 <span className="text-[10px] uppercase font-bold text-rose-300 tracking-wider block">
@@ -223,13 +245,30 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                                         Contact Number
                                     </span>
                                     {patient.contact_number ? (
-                                        <a
-                                            href={`tel:${patient.contact_number}`}
-                                            className="font-mono text-sm text-rose-400 hover:text-rose-300 font-semibold flex items-center gap-1.5 transition-colors"
-                                        >
-                                            <Phone className="w-3.5 h-3.5" />
-                                            {patient.contact_number}
-                                        </a>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-mono text-sm text-slate-200 font-semibold flex items-center gap-1.5">
+                                                <Phone className="w-3.5 h-3.5 text-rose-400" />
+                                                {patient.contact_number}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={handleCopyPhone}
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-colors text-xs"
+                                                title="Copy phone number"
+                                            >
+                                                {copied ? (
+                                                    <>
+                                                        <Check className="w-3 h-3 text-emerald-400" />
+                                                        <span className="text-emerald-400 text-[11px]">Copied</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Copy className="w-3 h-3 text-slate-400" />
+                                                        <span className="text-[11px]">Copy</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
                                     ) : (
                                         <span className="text-slate-500 italic">No contact number on record</span>
                                     )}
