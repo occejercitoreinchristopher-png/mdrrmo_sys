@@ -22,6 +22,8 @@ trait ProfileValidationRules
             'position' => ['nullable', 'string', 'max:255'],
             'phone_number' => $this->phoneNumberRules($userId),
             'email' => $this->emailRules($userId),
+            'age' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'birthdate' => ['nullable', 'date', 'before:today'],
         ];
     }
 

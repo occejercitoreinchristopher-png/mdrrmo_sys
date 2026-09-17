@@ -6,7 +6,6 @@ import InputError from '@/components/input-error';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
-import { edit } from '@/routes/profile';
 import type { Auth } from '@/types';
 
 type PageProps = {
@@ -122,7 +121,7 @@ Profile.layout = {
     breadcrumbs: [
         {
             title: 'Profile settings',
-            href: edit(),
+            href: '/profile',
         },
     ],
 };

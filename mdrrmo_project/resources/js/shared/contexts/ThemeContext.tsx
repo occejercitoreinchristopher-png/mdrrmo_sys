@@ -48,7 +48,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 export function useAppearance() {
     const context = useContext(ThemeContext);
     if (context === undefined) {
-        throw new Error('useAppearance must be used within a ThemeProvider');
+        return {
+            theme: (typeof document !== 'undefined' && document.documentElement.classList.contains('light') ? 'light' : 'dark') as Theme,
+            toggleTheme: () => {}
+        };
     }
     return context;
 }

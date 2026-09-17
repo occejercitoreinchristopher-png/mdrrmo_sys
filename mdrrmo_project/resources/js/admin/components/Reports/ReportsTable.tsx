@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react';
 import DataTable, { Column } from '@/shared/components/DataTable';
 import StatusBadge from '@/shared/components/StatusBadge';
 import Card from '@/shared/components/Card';
+import Pagination from '@/shared/components/Pagination';
 import { BarChart3 } from 'lucide-react';
 import { ReportFiltersState } from './ReportFilters';
 
@@ -20,6 +22,9 @@ export interface ReportsTableProps {
 }
 
 export default function ReportsTable({ incidents = [], filters = {} }: ReportsTableProps) {
+    const [page, setPage] = useState(1);
+    const perPage = 10;
+
     const filtered = incidents.filter((inc) => {
         const matchStatus = !filters.status || inc.incident_status === filters.status;
         const matchType = !filters.type || String(inc.incident_type_id) === String(filters.type);
@@ -27,6 +32,14 @@ export default function ReportsTable({ incidents = [], filters = {} }: ReportsTa
         const matchTo = !filters.dateTo || new Date(inc.reported_at) <= new Date(filters.dateTo);
         return matchStatus && matchType && matchFrom && matchTo;
     });
+
+    useEffect(() => {
+        setPage(1);
+    }, [filters]);
+
+    const total = filtered.length;
+    const lastPage = Math.ceil(total / perPage) || 1;
+    const paginated = filtered.slice((page - 1) * perPage, page * perPage);
 
     const columns: Column<Incident>[] = [
         { key: 'id', header: '#', render: (v: any) => <span className="font-mono text-xs">#{v}</span> },
@@ -43,7 +56,16 @@ export default function ReportsTable({ incidents = [], filters = {} }: ReportsTa
                 <p className="text-xs text-slate-400 mt-0.5">{filtered.length} records matching current filters</p>
             </div>
             <div className="p-4">
-                <DataTable columns={columns} data={filtered} keyField="id" emptyTitle="No records match filters" emptyIcon={BarChart3} />
+                <DataTable columns={columns} data={paginated} keyField="id" emptyTitle="No records match filters" emptyIcon={BarChart3} />
+                {total > perPage && (
+                    <Pagination
+                        currentPage={page}
+                        lastPage={lastPage}
+                        total={total}
+                        perPage={perPage}
+                        onPageChange={setPage}
+                    />
+                )}
             </div>
         </Card>
     );

@@ -4,8 +4,10 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -40,6 +42,21 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
+
+        ResetPassword::toMailUsing(function ($notifiable, string $token) {
+            $resetUrl = url(route('password.reset', [
+                'token' => $token,
+                'email' => $notifiable->getEmailForPasswordReset(),
+            ], false));
+
+            return (new MailMessage)
+                ->subject('MDRRMO Opol - Password Reset Request')
+                ->greeting('Hello ' . ($notifiable->first_name ?? 'User') . ',')
+                ->line('You are receiving this email because a password reset request was received for your MDRRMO Opol account.')
+                ->action('Reset Password', $resetUrl)
+                ->line('This password reset link will expire in 60 minutes.')
+                ->line('If you did not request a password reset, no further action is required and your account remains secure.');
+        });
     }
 
     /**

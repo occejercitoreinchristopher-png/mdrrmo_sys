@@ -2417,3 +2417,52 @@ export function searchOpolLandmarks(
     };
 }
 
+/**
+ * Haversine formula to compute distance between two GPS points in meters.
+ */
+export function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371000; // Earth radius in meters
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) *
+        Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+/**
+ * Finds the nearest surveyed landmark in Opol within maxMeters (default 80 meters).
+ */
+export function findNearestOpolLandmark(
+    lat: number,
+    lng: number,
+    maxMeters: number = 80
+): { landmark: OpolLandmark; distance: number } | null {
+    let bestMatch: OpolLandmark | null = null;
+    let minDistance = Infinity;
+
+    for (const lm of OPOL_LANDMARKS) {
+        // Fast bounding box check (~200m) to skip heavy trigonometry
+        if (Math.abs(lm.latitude - lat) > 0.002 || Math.abs(lm.longitude - lng) > 0.002) {
+            continue;
+        }
+        const dist = getHaversineDistanceMeters(lat, lng, lm.latitude, lm.longitude);
+        if (dist < minDistance) {
+            minDistance = dist;
+            bestMatch = lm;
+        }
+    }
+
+    if (bestMatch && minDistance <= maxMeters) {
+        return {
+            landmark: bestMatch,
+            distance: minDistance,
+        };
+    }
+
+    return null;
+}
+

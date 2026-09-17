@@ -8,7 +8,7 @@ export interface Column<T> {
     key: string;
     header: string | ReactNode;
     sortable?: boolean;
-    render?: (value: any, row: T) => ReactNode;
+    render?: (value: any, row: T, index: number) => ReactNode;
 }
 
 interface DataTableProps<T> {
@@ -123,7 +123,7 @@ export default function DataTable<T extends Record<string, any>>({
                                             className="px-4 py-3 text-slate-800 dark:text-slate-300 whitespace-nowrap"
                                         >
                                             {col.render
-                                                ? col.render(row[col.key], row)
+                                                ? col.render(row[col.key], row, i)
                                                 : (row[col.key] as ReactNode ?? '—')}
                                         </td>
                                     ))}

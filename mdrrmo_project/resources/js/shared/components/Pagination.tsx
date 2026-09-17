@@ -2,23 +2,26 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 
 export interface PaginationProps {
-    currentPage: number;
-    lastPage: number;
+    currentPage?: number;
+    current_page?: number;
+    lastPage?: number;
+    last_page?: number;
     total: number;
-    perPage: number;
+    perPage?: number;
+    per_page?: number;
     onPageChange: (page: number) => void;
 }
 
-export default function Pagination({
-    currentPage,
-    lastPage,
-    total,
-    perPage,
-    onPageChange,
-}: PaginationProps) {
+export default function Pagination(props: PaginationProps) {
+    const currentPage = props.currentPage ?? props.current_page ?? 1;
+    const lastPage = props.lastPage ?? props.last_page ?? 1;
+    const perPage = props.perPage ?? props.per_page ?? 15;
+    const total = props.total ?? 0;
+    const onPageChange = props.onPageChange;
+
     if (lastPage <= 1) return null;
 
-    const from = (currentPage - 1) * perPage + 1;
+    const from = Math.max(1, (currentPage - 1) * perPage + 1);
     const to = Math.min(currentPage * perPage, total);
 
     const getPages = () => {

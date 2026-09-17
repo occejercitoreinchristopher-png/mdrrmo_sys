@@ -3,63 +3,145 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\TemporaryPasswordMail;
 use App\Models\Dispatch;
 use App\Models\ResponderProfile;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class UserController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $users = User::where('role', '!=', 'resident')
+            ->with(['responderProfile'])
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
+
         return Inertia::render('admin/Users', [
-            'users' => User::where('role', '!=', 'resident')->get(),
-            'pagination' => null, // Add pagination later if needed
+            'users' => $users->items(),
+            'pagination' => [
+                'currentPage' => $users->currentPage(),
+                'lastPage' => $users->lastPage(),
+                'perPage' => $users->perPage(),
+                'total' => $users->total(),
+            ],
         ]);
     }
 
-    public function residents()
+    public function residents(Request $request)
     {
+        $users = User::where('role', 'resident')
+            ->with(['residentProfile.barangay'])
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
+
         return Inertia::render('admin/Residents', [
-            'users' => User::where('role', 'resident')->get(),
-            'pagination' => null,
+            'users' => $users->items(),
+            'pagination' => [
+                'currentPage' => $users->currentPage(),
+                'lastPage' => $users->lastPage(),
+                'perPage' => $users->perPage(),
+                'total' => $users->total(),
+            ],
         ]);
     }
 
     public function store(Request $request)
     {
+        $isDispatcher = auth()->user()?->role === 'dispatcher';
+        $allowedRoles = $isDispatcher ? ['responder'] : ['dispatcher', 'responder'];
+
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'last_name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->whereNull('deleted_at')],
             'phone_number' => ['required', 'string', 'max:255', Rule::unique('users')->whereNull('deleted_at')],
-            'password' => 'required|string|min:8|confirmed',
-            'role' => ['required', Rule::in(['dispatcher', 'responder'])],
-            'status' => ['required', Rule::in(['active', 'inactive', 'suspended'])],
-            'position' => ['required_if:role,responder', Rule::in(['driver', 'emt'])],
-            'team' => 'required_if:role,responder|nullable|string|max:255',
+            'birthdate' => ['nullable', 'date', 'before:today'],
+            'birthday' => ['nullable', 'date', 'before:today'],
+            'age' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'role' => ['required', Rule::in($allowedRoles)],
+            'status' => ['nullable', Rule::in(['active', 'inactive', 'suspended'])],
+            'position' => ['nullable', Rule::in(['driver', 'emt'])],
+            'team' => 'nullable|string|max:255',
+            'password' => 'nullable|string|min:8|confirmed',
         ]);
 
-        $validatedUser = collect($validated)->except(['position', 'team'])->toArray();
-        $validatedUser['password'] = Hash::make($validatedUser['password']);
+        $validatedUser = collect($validated)->except(['position', 'team', 'password', 'password_confirmation', 'birthday'])->toArray();
+
+        $birthdate = $request->birthdate ?? $request->birthday;
+        $age = $request->filled('age') ? (int) $request->age : null;
+        if ($birthdate && empty($age)) {
+            $age = Carbon::parse($birthdate)->age;
+        }
+
+        $validatedUser['birthdate'] = $birthdate;
+        $validatedUser['age'] = $age;
+        $validatedUser['status'] = $validated['status'] ?? 'active';
+
+        $sentTempPassword = false;
+        $tempPassword = null;
+        if ($request->filled('password')) {
+            $validatedUser['password'] = Hash::make($request->password);
+            $validatedUser['password_change_required'] = false;
+        } else {
+            $tempPassword = Str::password(12);
+            $validatedUser['password'] = Hash::make($tempPassword);
+            $validatedUser['password_change_required'] = true;
+            $validatedUser['temporary_password_expires_at'] = now()->addHours(24);
+            $sentTempPassword = true;
+        }
 
         $user = User::create($validatedUser);
+        $user->email_verified_at = now();
+        $user->save();
 
         if ($user->role === 'responder') {
             ResponderProfile::create([
                 'user_id' => $user->id,
                 'badge_number' => 'RSP-'.strtoupper(substr(uniqid(), -6)), // Auto-generate simple badge
                 'team' => $request->team ?? 'Alpha',
-                'position' => $request->position,
+                'position' => $request->position ?? 'emt',
                 'availability' => 'available',
             ]);
         }
 
-        return back()->with('success', 'User created successfully.');
+        if ($sentTempPassword && $tempPassword) {
+            Mail::to($user->email)->send(new TemporaryPasswordMail($user, $tempPassword, false));
+        }
+
+        $message = $sentTempPassword
+            ? "User account created successfully. A temporary password has been sent to the user's email address. The user must change their password on their first login."
+            : "User account created successfully.";
+
+        return back()->with('success', $message);
+    }
+
+    public function resetPassword(Request $request, User $user)
+    {
+        DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+
+        $tempPassword = Str::password(12);
+
+        $user->update([
+            'password' => Hash::make($tempPassword),
+            'password_change_required' => true,
+            'temporary_password_expires_at' => now()->addHours(24),
+        ]);
+
+        Mail::to($user->email)->send(new TemporaryPasswordMail($user, $tempPassword, true));
+
+        return back()->with('success', "Password reset successfully. A temporary password has been sent to the user's registered email address. The user must change their password after logging in.");
     }
 
     public function update(Request $request, User $user)
@@ -72,10 +154,13 @@ class UserController extends Controller
             'last_name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)->whereNull('deleted_at')],
             'phone_number' => ['required', 'string', 'max:255', Rule::unique('users')->ignore($user->id)->whereNull('deleted_at')],
+            'birthdate' => ['nullable', 'date', 'before:today'],
+            'birthday' => ['nullable', 'date', 'before:today'],
+            'age' => ['nullable', 'integer', 'min:1', 'max:120'],
             'role' => ['required', Rule::in(['dispatcher', 'responder', 'admin', 'resident'])], // Allow resident if they are already one
             'status' => ['required', Rule::in(['active', 'inactive', 'suspended'])],
             'password' => 'nullable|string|min:8|confirmed',
-            'position' => ['required_if:role,responder', Rule::in(['driver', 'emt'])],
+            'position' => ['required_if:role,responder', 'nullable', Rule::in(['driver', 'emt'])],
             'team' => 'required_if:role,responder|nullable|string|max:255',
         ]);
 
@@ -89,7 +174,16 @@ class UserController extends Controller
             abort(403, 'Cannot change a resident to another role.');
         }
 
-        $validatedUser = collect($validated)->except(['position', 'team'])->toArray();
+        $validatedUser = collect($validated)->except(['position', 'team', 'birthday'])->toArray();
+
+        $birthdate = $request->birthdate ?? $request->birthday;
+        $age = $request->filled('age') ? (int) $request->age : null;
+        if ($birthdate && empty($age)) {
+            $age = Carbon::parse($birthdate)->age;
+        }
+
+        $validatedUser['birthdate'] = $birthdate;
+        $validatedUser['age'] = $age;
 
         if (! empty($validatedUser['password'])) {
             $validatedUser['password'] = Hash::make($validatedUser['password']);

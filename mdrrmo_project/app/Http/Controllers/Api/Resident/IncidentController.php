@@ -17,6 +17,7 @@ class IncidentController extends Controller
         $incidents = Incident::where('resident_id', Auth::id())
             ->with([
                 'incidentType',
+                'images',
                 'dispatches' => fn ($q) => $q->with(['ambulance', 'teamLeader', 'driver', 'emt'])->latest(),
             ])
             ->orderBy('created_at', 'desc')

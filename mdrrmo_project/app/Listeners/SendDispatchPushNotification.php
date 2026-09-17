@@ -58,6 +58,23 @@ class SendDispatchPushNotification
             ];
         }
 
+        // Also notify the resident that a responder has been assigned
+        $resident = $dispatch->incident?->resident;
+        if ($resident && ! empty($resident->expo_push_token)) {
+            $messages[] = [
+                'to' => $resident->expo_push_token,
+                'sound' => 'default',
+                'title' => '🚑 Responder Assigned',
+                'body' => 'A responder has been assigned to your emergency report.',
+                'data' => [
+                    'dispatch_id' => $dispatch->id,
+                    'incident_id' => $dispatch->incident_id,
+                    'type' => 'responder_assigned',
+                ],
+                'priority' => 'high',
+            ];
+        }
+
         try {
             Http::withHeaders([
                 'Accept' => 'application/json',

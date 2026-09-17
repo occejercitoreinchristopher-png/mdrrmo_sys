@@ -8,12 +8,30 @@ use App\Http\Controllers\Controller;
 use App\Models\Ambulance;
 use App\Models\Dispatch;
 use App\Models\ResponderProfile;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class PatientCareRecordController extends Controller
 {
     public function update(Request $request, Dispatch $dispatch)
     {
+        $timeFields = ['dispatch_time', 'en_route_time', 'on_scene_time', 'transport_time', 'arrived_hf_time', 'departed_hf_time'];
+        foreach ($timeFields as $field) {
+            if ($request->has($field)) {
+                $raw = $request->input($field);
+                if (empty($raw) || trim($raw) === '') {
+                    $request->merge([$field => null]);
+                } else {
+                    try {
+                        $parsed = Carbon::parse(trim($raw))->format('H:i');
+                        $request->merge([$field => $parsed]);
+                    } catch (\Throwable $e) {
+                        // Keep raw if unparseable so validation rules handle it
+                    }
+                }
+            }
+        }
+
         $validated = $request->validate([
             'patient_id' => 'required|exists:patients,id',
             'contact_number' => 'nullable|string',
@@ -41,6 +59,7 @@ class PatientCareRecordController extends Controller
             'on_scene_time' => 'nullable|date_format:H:i',
             'transport_time' => 'nullable|date_format:H:i',
             'arrived_hf_time' => 'nullable|date_format:H:i',
+            'departed_hf_time' => 'nullable|date_format:H:i',
 
             // Step 6: Transport
             'transported' => 'nullable|boolean',

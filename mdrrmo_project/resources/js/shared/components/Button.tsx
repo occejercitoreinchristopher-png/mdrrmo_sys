@@ -50,7 +50,8 @@ export default function Button({
     let resolvedVariant = variant;
     try {
         const page = usePage();
-        const isAdmin = page?.url ? (page.url.startsWith('/admin') || page.url.includes('/admin/')) : false;
+        const user = (page?.props as any)?.auth?.user;
+        const isAdmin = (page?.url ? (page.url.startsWith('/admin') || page.url.includes('/admin/')) : false) || user?.role === 'admin';
         if (variant === 'primary' && isAdmin) {
             resolvedVariant = 'admin';
         }

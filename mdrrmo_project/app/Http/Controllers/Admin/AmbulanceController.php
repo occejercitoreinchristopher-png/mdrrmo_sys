@@ -11,12 +11,18 @@ use Inertia\Inertia;
 
 class AmbulanceController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $ambulances = Ambulance::latest()->get();
+        $ambulances = Ambulance::latest()->paginate(10)->withQueryString();
 
         return Inertia::render('admin/Ambulances', [
-            'ambulances' => $ambulances,
+            'ambulances' => $ambulances->items(),
+            'pagination' => [
+                'currentPage' => $ambulances->currentPage(),
+                'lastPage' => $ambulances->lastPage(),
+                'perPage' => $ambulances->perPage(),
+                'total' => $ambulances->total(),
+            ],
         ]);
     }
 

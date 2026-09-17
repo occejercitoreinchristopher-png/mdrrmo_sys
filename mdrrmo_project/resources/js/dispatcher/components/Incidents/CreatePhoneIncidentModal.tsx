@@ -24,7 +24,7 @@ import {
 import Modal from '@/shared/components/Modal';
 import Button from '@/shared/components/Button';
 import { useAppearance } from '@/shared/contexts/ThemeContext';
-import { OPOL_BARANGAYS, searchOpolLandmarks } from '@/dispatcher/data/opolLandmarks';
+import { OPOL_BARANGAYS, searchOpolLandmarks, findNearestOpolLandmark } from '@/dispatcher/data/opolLandmarks';
 
 export interface CallerData {
     phone_number: string;
@@ -131,6 +131,15 @@ export default function CreatePhoneIncidentModal({
     const [customPlaceName, setCustomPlaceName] = useState(initialDraft?.customPlaceName ?? '');
     const [placeSearchQuery, setPlaceSearchQuery] = useState(initialDraft?.placeSearchQuery ?? '');
     const [selectedBarangayFilter, setSelectedBarangayFilter] = useState<string>(initialDraft?.selectedBarangayFilter ?? '');
+    const [selectedLocationCodeDetails, setSelectedLocationCodeDetails] = useState<{
+        code: string;
+        location_type: string;
+        barangay: string;
+        location_name: string;
+        description?: string | null;
+        latitude: number;
+        longitude: number;
+    } | null>(null);
     const [isSearchingPlace, setIsSearchingPlace] = useState(false);
     const [placeSuggestions, setPlaceSuggestions] = useState<any[]>([]);
     const [placeSuggestionsOpen, setPlaceSuggestionsOpen] = useState(false);
@@ -457,15 +466,59 @@ export default function CreatePhoneIncidentModal({
 
     // Reverse geocode lat/lng to get address or place name
     const reverseGeocode = async (lng: number, lat: number) => {
+        // 1. Highest Priority: Surveyed local Opol landmarks (Barangay Halls, Schools, Churches, Courts, etc.)
+        const nearest = findNearestOpolLandmark(lat, lng, 80);
+        if (nearest) {
+            const { landmark, distance } = nearest;
+            if (distance <= 40) {
+                return `${landmark.name}, Barangay ${landmark.barangay}, Opol, Misamis Oriental`;
+            }
+            return `Near ${landmark.name}, Barangay ${landmark.barangay}, Opol, Misamis Oriental`;
+        }
+
+        // 2. Second Priority: Rendered features from the Mapbox canvas (POIs, buildings, labels under the pin)
+        if (mapRef.current) {
+            try {
+                const mapInstance = (mapRef.current as any).getMap ? (mapRef.current as any).getMap() : mapRef.current;
+                if (mapInstance && typeof mapInstance.project === 'function') {
+                    const pt = mapInstance.project([lng, lat]);
+                    const rendered = mapInstance.queryRenderedFeatures([
+                        [pt.x - 30, pt.y - 30],
+                        [pt.x + 30, pt.y + 30],
+                    ]);
+                    const namedPoi = rendered.find((f: any) =>
+                        f.properties?.name &&
+                        (f.layer?.id?.includes('poi') ||
+                         f.layer?.id?.includes('label') ||
+                         f.layer?.['source-layer']?.includes('poi'))
+                    );
+                    if (namedPoi?.properties?.name) {
+                        return `${namedPoi.properties.name}, Opol, Misamis Oriental`;
+                    }
+                }
+            } catch {
+                // Ignore and proceed to API
+            }
+        }
+
+        // 3. Fallback: Mapbox Geocoding API with POI priority over generic road names
         const token = import.meta.env.VITE_MAPBOX_TOKEN;
         if (!token) return '';
         try {
             const res = await fetch(
-                `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&country=PH&types=address,poi,neighborhood,locality`
+                `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&country=PH&types=poi,address,neighborhood,locality`
             );
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data.features) && data.features.length > 0) {
+                    const poi = data.features.find((f: any) => f.place_type?.includes('poi'));
+                    if (poi) {
+                        return poi.place_name || poi.text;
+                    }
+                    const address = data.features.find((f: any) => f.place_type?.includes('address'));
+                    if (address) {
+                        return address.place_name || address.text;
+                    }
                     return data.features[0].place_name || data.features[0].text || '';
                 }
             }
@@ -475,7 +528,7 @@ export default function CreatePhoneIncidentModal({
         return '';
     };
 
-    // Location-aware Search (Opol Barangays & Landmarks + Mapbox Geocoding)
+    // Location-aware Search (Admin-managed Location Codes + Opol Barangays & Landmarks + Mapbox Geocoding)
     useEffect(() => {
         const q = placeSearchQuery.trim();
         if (!q && !selectedBarangayFilter) {
@@ -489,7 +542,37 @@ export default function CreatePhoneIncidentModal({
 
         const timer = setTimeout(async () => {
             try {
-                // 1. First run the location-aware Opol barangay & landmark search engine
+                // 1. Fetch official Admin-managed Location Codes from the database
+                let dbLocationCodeMatches: any[] = [];
+                try {
+                    const lcRes = await fetch(
+                        `/dispatcher/location-codes/search?q=${encodeURIComponent(q)}&barangay=${encodeURIComponent(selectedBarangayFilter || '')}`
+                    );
+                    if (lcRes.ok) {
+                        const lcData = await lcRes.json();
+                        if (Array.isArray(lcData.data)) {
+                            dbLocationCodeMatches = lcData.data.map((item: any) => ({
+                                id: `db-lc-${item.id}`,
+                                isDbLocationCode: true,
+                                location_code: item.location_code,
+                                location_type: item.location_type,
+                                location_name: item.location_name,
+                                barangay: item.barangay,
+                                description: item.description,
+                                text: item.location_name,
+                                place_name: `${item.location_name} (${item.location_type}) — Brgy. ${item.barangay}`,
+                                full_address: `${item.location_name}, Barangay ${item.barangay}, Opol, Misamis Oriental`,
+                                center: [item.longitude, item.latitude] as [number, number],
+                                category: item.location_type,
+                                isLandmark: true,
+                            }));
+                        }
+                    }
+                } catch {
+                    // ignore network error
+                }
+
+                // 2. First run the location-aware Opol barangay & landmark search engine
                 const searchRes: any = searchOpolLandmarks(
                     q,
                     selectedBarangayFilter || null
@@ -512,7 +595,7 @@ export default function CreatePhoneIncidentModal({
                     isLandmark: true,
                 }));
 
-                // 2. Also run Mapbox geocoding biased to Opol, Misamis Oriental
+                // 3. Also run Mapbox geocoding biased to Opol, Misamis Oriental
                 let mapboxMatches: any[] = [];
                 const token = import.meta.env.VITE_MAPBOX_TOKEN;
                 if (token && q.length >= 2) {
@@ -546,8 +629,8 @@ export default function CreatePhoneIncidentModal({
 
                 if (!active) return;
 
-                // Priority: Local barangay landmarks first, then street/address matches
-                const combined = [...formattedLocal, ...mapboxMatches];
+                // Priority: Admin-managed Location Codes FIRST, then local landmarks, then street/address matches
+                const combined = [...dbLocationCodeMatches, ...formattedLocal, ...mapboxMatches];
                 if (combined.length > 0) {
                     setPlaceSuggestions(combined);
                     setPlaceSuggestionsOpen(true);
@@ -590,10 +673,25 @@ export default function CreatePhoneIncidentModal({
         setLocationError(null);
         setLocationConfirmed(false); // keep pending confirmation as requested
 
+        if (place.isDbLocationCode) {
+            setSelectedLocationCodeDetails({
+                code: place.location_code,
+                location_type: place.location_type,
+                barangay: place.barangay,
+                location_name: place.location_name,
+                description: place.description,
+                latitude: roundedLat,
+                longitude: roundedLng,
+            });
+            setLocationCode(place.location_code);
+        } else {
+            setSelectedLocationCodeDetails(null);
+        }
+
         if (mapRef.current) {
             mapRef.current.flyTo({
                 center: [roundedLng, roundedLat],
-                zoom: 16,
+                zoom: 17,
                 duration: 1000,
             });
         }
@@ -604,22 +702,36 @@ export default function CreatePhoneIncidentModal({
         const lat = parseFloat(e.lngLat.lat.toFixed(6));
         const lng = parseFloat(e.lngLat.lng.toFixed(6));
 
-        setPinLocation(prev => ({
+        // Instant local landmark detection
+        const instantMatch = findNearestOpolLandmark(lat, lng, 80);
+        const instantName = instantMatch
+            ? (instantMatch.distance <= 40
+                ? `${instantMatch.landmark.name}, Barangay ${instantMatch.landmark.barangay}, Opol, Misamis Oriental`
+                : `Near ${instantMatch.landmark.name}, Barangay ${instantMatch.landmark.barangay}, Opol, Misamis Oriental`)
+            : '';
+
+        if (instantName) {
+            setCustomPlaceName(instantName);
+        }
+
+        setPinLocation({
             latitude: lat,
             longitude: lng,
-            placeName: prev?.placeName || customPlaceName,
-        }));
+            placeName: instantName || customPlaceName,
+        });
         setLocationError(null);
         setLocationConfirmed(false); // stays pending confirmation until confirmed
 
-        const resolved = await reverseGeocode(lng, lat);
-        if (resolved) {
-            setCustomPlaceName(resolved);
-            setPinLocation({
-                latitude: lat,
-                longitude: lng,
-                placeName: resolved,
-            });
+        if (!instantName) {
+            const resolved = await reverseGeocode(lng, lat);
+            if (resolved) {
+                setCustomPlaceName(resolved);
+                setPinLocation({
+                    latitude: lat,
+                    longitude: lng,
+                    placeName: resolved,
+                });
+            }
         }
     };
 
@@ -628,22 +740,36 @@ export default function CreatePhoneIncidentModal({
         const lat = parseFloat(e.lngLat.lat.toFixed(6));
         const lng = parseFloat(e.lngLat.lng.toFixed(6));
 
-        setPinLocation(prev => ({
+        // Instant local landmark detection
+        const instantMatch = findNearestOpolLandmark(lat, lng, 80);
+        const instantName = instantMatch
+            ? (instantMatch.distance <= 40
+                ? `${instantMatch.landmark.name}, Barangay ${instantMatch.landmark.barangay}, Opol, Misamis Oriental`
+                : `Near ${instantMatch.landmark.name}, Barangay ${instantMatch.landmark.barangay}, Opol, Misamis Oriental`)
+            : '';
+
+        if (instantName) {
+            setCustomPlaceName(instantName);
+        }
+
+        setPinLocation({
             latitude: lat,
             longitude: lng,
-            placeName: prev?.placeName || customPlaceName,
-        }));
+            placeName: instantName || customPlaceName,
+        });
         setLocationError(null);
         setLocationConfirmed(false); // stays pending confirmation until confirmed
 
-        const resolved = await reverseGeocode(lng, lat);
-        if (resolved) {
-            setCustomPlaceName(resolved);
-            setPinLocation({
-                latitude: lat,
-                longitude: lng,
-                placeName: resolved,
-            });
+        if (!instantName) {
+            const resolved = await reverseGeocode(lng, lat);
+            if (resolved) {
+                setCustomPlaceName(resolved);
+                setPinLocation({
+                    latitude: lat,
+                    longitude: lng,
+                    placeName: resolved,
+                });
+            }
         }
     };
 
@@ -682,8 +808,10 @@ export default function CreatePhoneIncidentModal({
     }, [isValidPhilippinePhone, incidentTypeId, isLocationValid, submitting]);
 
     // Handle Submit
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = (e?: React.FormEvent | React.MouseEvent) => {
+        if (e && typeof e.preventDefault === 'function') {
+            e.preventDefault();
+        }
 
         if (!isValidPhilippinePhone) {
             setServerErrors({ caller_phone_number: 'Please enter a valid Philippine mobile number.' });
@@ -712,17 +840,28 @@ export default function CreatePhoneIncidentModal({
             caller_phone_number: phoneNumber,
             incident_type_id: incidentTypeId,
             chief_complaint: chiefComplaint || null,
-            location_method: locationMethod,
+            location_method: locationMethod === 'code' ? 'location_code' : 'pinpoint',
             location_confirmed: locationConfirmed,
             description: description || null,
         };
 
         if (locationMethod === 'code') {
-            payload.location_code = locationResult.code;
+            payload.location_code = locationResult?.code || locationResult?.location_code;
+            if (locationResult?.latitude && locationResult?.longitude) {
+                payload.latitude = locationResult.latitude;
+                payload.longitude = locationResult.longitude;
+            }
+            if (locationResult?.marker_name || locationResult?.location_name) {
+                const bName = locationResult?.barangay ? `Barangay ${locationResult.barangay}` : '';
+                payload.place_of_incident = `${locationResult.marker_name || locationResult.location_name}${bName ? ', ' + bName : ''}`;
+            }
         } else {
             payload.latitude = pinLocation!.latitude;
             payload.longitude = pinLocation!.longitude;
             payload.place_of_incident = customPlaceName.trim() || `Pinpointed Location (${pinLocation!.latitude}, ${pinLocation!.longitude})`;
+            if (selectedLocationCodeDetails?.code) {
+                payload.location_code = selectedLocationCodeDetails.code;
+            }
         }
 
         router.post(
@@ -741,6 +880,10 @@ export default function CreatePhoneIncidentModal({
                 onError: (errors) => {
                     setSubmitting(false);
                     setServerErrors(errors);
+                    console.error('Failed to create phone incident:', errors);
+                },
+                onFinish: () => {
+                    setSubmitting(false);
                 },
             }
         );
@@ -779,6 +922,10 @@ export default function CreatePhoneIncidentModal({
                         <Button
                             form="create-phone-incident-form"
                             type="submit"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleSubmit(e);
+                            }}
                             variant="primary"
                             loading={submitting}
                             disabled={!isFormValid}
@@ -1447,13 +1594,22 @@ export default function CreatePhoneIncidentModal({
                                                     key={place.id}
                                                     type="button"
                                                     onClick={() => handleSelectPlace(place)}
-                                                    className="w-full text-left p-3 hover:bg-slate-800/80 transition-colors flex items-start gap-3 cursor-pointer group"
+                                                    className={`w-full text-left p-3 hover:bg-slate-800/80 transition-colors flex items-start gap-3 cursor-pointer group ${
+                                                        place.isDbLocationCode ? 'bg-rose-500/[0.04] border-l-2 border-rose-500' : ''
+                                                    }`}
                                                 >
-                                                    <div className="w-7 h-7 rounded-lg bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-110 transition-transform ${
+                                                        place.isDbLocationCode ? 'bg-rose-500/20 text-rose-400' : 'bg-slate-800 text-slate-300'
+                                                    }`}>
                                                         <MapPin className="w-4 h-4" />
                                                     </div>
                                                     <div className="min-w-0 flex-1">
                                                         <div className="flex items-center gap-2 flex-wrap">
+                                                            {place.isDbLocationCode && (
+                                                                <span className="font-mono text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 px-1.5 py-0.5 rounded">
+                                                                    {place.location_code}
+                                                                </span>
+                                                            )}
                                                             <span className="text-xs font-bold text-slate-100 group-hover:text-rose-400 transition-colors truncate">
                                                                 {place.text}
                                                             </span>
@@ -1471,6 +1627,11 @@ export default function CreatePhoneIncidentModal({
                                                         <div className="text-[11px] text-slate-400 truncate mt-0.5">
                                                             {place.place_name}
                                                         </div>
+                                                        {place.description && (
+                                                            <div className="text-[10px] text-slate-400 truncate mt-0.5 italic">
+                                                                {place.description}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <span className="text-[10px] font-semibold text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 self-center">
                                                         Select ↵
@@ -1508,9 +1669,9 @@ export default function CreatePhoneIncidentModal({
                                                 onDragEnd={handleMarkerDragEnd}
                                             >
                                                 <div className="flex flex-col items-center cursor-grab active:cursor-grabbing group">
-                                                    <div className="bg-slate-900/95 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xl border border-rose-500/40 mb-1 flex items-center gap-1 backdrop-blur-sm whitespace-nowrap">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
-                                                        Drag to fine-tune pin
+                                                    <div className="bg-slate-900/95 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-md shadow-xl border border-rose-500/40 mb-1 flex items-center gap-1.5 backdrop-blur-sm whitespace-nowrap max-w-[220px] truncate">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping shrink-0" />
+                                                        <span className="truncate">{customPlaceName || 'Drag to fine-tune pin'}</span>
                                                     </div>
                                                     <div className="relative">
                                                         <div className="w-9 h-9 rounded-full bg-rose-600 flex items-center justify-center text-white shadow-xl shadow-rose-600/50 ring-4 ring-rose-500/30">
@@ -1579,6 +1740,33 @@ export default function CreatePhoneIncidentModal({
                                         </span>
                                     </div>
 
+                                    {/* Official Emergency Reference Location Box (Requirement #13) */}
+                                    {selectedLocationCodeDetails && (
+                                        <div className="p-3 bg-slate-900/90 border border-rose-500/40 rounded-xl space-y-1.5 text-xs">
+                                            <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono text-xs font-bold text-rose-400 bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 rounded">
+                                                        {selectedLocationCodeDetails.code}
+                                                    </span>
+                                                    <span className="text-[11px] font-semibold bg-slate-800 text-slate-200 px-2 py-0.5 rounded border border-slate-700">
+                                                        {selectedLocationCodeDetails.location_type}
+                                                    </span>
+                                                </div>
+                                                <span className="text-xs font-semibold text-slate-300">
+                                                    📍 Brgy. {selectedLocationCodeDetails.barangay}
+                                                </span>
+                                            </div>
+                                            <div className="text-slate-100 font-bold text-sm">
+                                                {selectedLocationCodeDetails.location_name}
+                                            </div>
+                                            {selectedLocationCodeDetails.description && (
+                                                <div className="text-slate-400 text-xs italic">
+                                                    "{selectedLocationCodeDetails.description}"
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     {/* Landmark / Place / Address Description input */}
                                     <div>
                                         <label className="text-xs font-semibold text-slate-300 block mb-1.5">
@@ -1638,10 +1826,17 @@ export default function CreatePhoneIncidentModal({
                             <span>⚠️ {locationError}</span>
                         </div>
                     )}
-                    {serverErrors.location_pinpoint && (
-                        <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
-                            <AlertCircle className="w-4 h-4 shrink-0" />
-                            <span>⚠️ {serverErrors.location_pinpoint}</span>
+                    {Object.keys(serverErrors).length > 0 && (
+                        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs space-y-1">
+                            <div className="font-bold flex items-center gap-1.5">
+                                <AlertCircle className="w-4 h-4 shrink-0" />
+                                <span>Cannot create incident. Please check the following:</span>
+                            </div>
+                            <ul className="list-disc pl-5 space-y-0.5">
+                                {Object.entries(serverErrors).map(([key, val]) => (
+                                    <li key={key}>{String(val)}</li>
+                                ))}
+                            </ul>
                         </div>
                     )}
                 </div>

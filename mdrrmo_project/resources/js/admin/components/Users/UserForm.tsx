@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { AlertCircle, KeyRound } from 'lucide-react';
 import Button from '@/shared/components/Button';
 import Input from '@/shared/components/Input';
 import Select from '@/shared/components/Select';
@@ -8,25 +9,11 @@ import type { User } from './UserManagement';
 const ALL_ROLES = ['admin', 'dispatcher', 'responder', 'resident'];
 const STATUSES = ['active', 'inactive', 'suspended'];
 
-const defaultForm = {
-    first_name: '',
-    middle_name: '',
-    last_name: '',
-    email: '',
-    phone_number: '',
-    role: 'responder',
-    position: 'driver',
-    team: '',
-    status: 'active',
-    password: '',
-    password_confirmation: '',
-};
-
 const ROLE_FIELDS = {
-    admin: ['first_name', 'middle_name', 'last_name', 'email', 'phone_number', 'status', 'password'],
-    dispatcher: ['first_name', 'middle_name', 'last_name', 'email', 'phone_number', 'status', 'password'],
-    responder: ['first_name', 'middle_name', 'last_name', 'email', 'phone_number', 'team', 'position', 'status', 'password'],
-    resident: ['first_name', 'middle_name', 'last_name', 'email', 'phone_number', 'status', 'password']
+    admin: ['first_name', 'middle_name', 'last_name', 'birthdate', 'age', 'email', 'phone_number', 'status'],
+    dispatcher: ['first_name', 'middle_name', 'last_name', 'birthdate', 'age', 'email', 'phone_number', 'status'],
+    responder: ['first_name', 'middle_name', 'last_name', 'birthdate', 'age', 'email', 'phone_number', 'team', 'position', 'status'],
+    resident: ['first_name', 'middle_name', 'last_name', 'birthdate', 'age', 'email', 'phone_number', 'status']
 };
 
 const POSITIONS = ['driver', 'emt'];
@@ -47,46 +34,138 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
         : allowedRoles;
 
     const availableRoles = ALL_ROLES.filter(r => rolesToDisplay.includes(r));
+    const initialRole = userRole || allowedRoles[0] || 'dispatcher';
 
-    const [form, setForm] = useState(user ? {
-        first_name: user.first_name ?? '',
-        middle_name: user.middle_name ?? '',
-        last_name: user.last_name ?? '',
-        email: user.email ?? '',
-        phone_number: user.phone_number ?? '',
-        role: user.role ?? allowedRoles[0] ?? 'responder',
-        position: user.responder_profile?.position ?? 'driver',
-        team: user.responder_profile?.team ?? '',
-        status: user.status ?? 'active',
-        password: '',
-        password_confirmation: '',
-    } : defaultForm);
+    const getInitialForm = (targetUser?: User | null) => ({
+        first_name: targetUser?.first_name ?? '',
+        middle_name: targetUser?.middle_name ?? '',
+        last_name: targetUser?.last_name ?? '',
+        birthdate: targetUser?.birthdate ? String(targetUser.birthdate).substring(0, 10) : (targetUser?.birthday ? String(targetUser.birthday).substring(0, 10) : ''),
+        age: targetUser?.age !== undefined && targetUser?.age !== null ? String(targetUser.age) : '',
+        email: targetUser?.email ?? '',
+        phone_number: targetUser?.phone_number ?? '',
+        role: targetUser?.role ?? initialRole,
+        position: targetUser?.responder_profile?.position ?? (initialRole === 'responder' ? 'driver' : ''),
+        team: targetUser?.responder_profile?.team ?? '',
+        status: targetUser?.status ?? 'active',
+    });
 
-    const set = (field) => (e) =>
-        setForm((f) => ({ ...f, [field]: e.target ? e.target.value : e }));
+    const [form, setForm] = useState(() => getInitialForm(user));
+    const [ageError, setAgeError] = useState('');
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onSubmit?.(form);
+    useEffect(() => {
+        setForm(getInitialForm(user));
+        setAgeError('');
+    }, [user]);
+
+    const set = (field: string) => (e: any) =>
+        setForm((f) => ({ ...f, [field]: e?.target ? e.target.value : e }));
+
+    // Auto-calculate age when birthdate changes
+    const handleBirthdateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        let calculatedAge = form.age;
+        if (val) {
+            const birthDate = new Date(val);
+            const today = new Date();
+            let ageDiff = today.getFullYear() - birthDate.getFullYear();
+            const monthDiff = today.getMonth() - birthDate.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                ageDiff--;
+            }
+            if (!isNaN(ageDiff) && ageDiff >= 0 && ageDiff <= 120) {
+                calculatedAge = String(ageDiff);
+                setAgeError('');
+            }
+        }
+        setForm(f => ({ ...f, birthdate: val, age: calculatedAge }));
     };
 
-    const handleRoleChange = (value) => {
-        const newRole = value.target ? value.target.value : value;
+    // Strictly enforce numbers only for Age (no letters or special characters)
+    const handleAgeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const rawVal = e.target.value;
+        // Strip out any non-numeric characters
+        const cleanVal = rawVal.replace(/[^0-9]/g, '');
+
+        if (cleanVal !== '') {
+            const num = parseInt(cleanVal, 10);
+            if (num < 1 || num > 120) {
+                setAgeError('Age must be between 1 and 120.');
+            } else {
+                setAgeError('');
+            }
+        } else {
+            setAgeError('');
+        }
+
+        setForm(f => ({ ...f, age: cleanVal }));
+    };
+
+    const maxDate = new Date().toISOString().split('T')[0];
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (form.age !== '') {
+            const num = parseInt(form.age, 10);
+            if (isNaN(num) || num < 1 || num > 120) {
+                setAgeError('Please enter a valid age between 1 and 120.');
+                return;
+            }
+        }
+        const payload: Record<string, any> = { ...form };
+        if (payload.role !== 'responder') {
+            delete payload.position;
+            delete payload.team;
+        }
+        // Format payload: send integer age or null
+        if (payload.age !== '') {
+            payload.age = parseInt(payload.age, 10);
+        } else {
+            payload.age = null;
+        }
+        if (!payload.birthdate) {
+            payload.birthdate = null;
+        }
+        // When creating a new user, status is automatically active
+        payload.status = user ? (form.status || 'active') : 'active';
+        onSubmit?.(payload);
+    };
+
+    const handleRoleChange = (value: any) => {
+        const newRole = value?.target ? value.target.value : value;
         setForm(f => ({
             ...f,
             role: newRole,
             // Reset role-specific fields
-            position: newRole === 'responder' ? 'driver' : '',
-            team: newRole === 'responder' ? '' : ''
+            position: newRole === 'responder' ? (f.position || 'driver') : '',
+            team: newRole === 'responder' ? f.team : ''
         }));
     };
 
     const activeFields = ROLE_FIELDS[form.role] || [];
-    const showField = (field) => activeFields.includes(field);
+    const showField = (field: string) => activeFields.includes(field);
+
+    const hasErrors = (errors && Object.keys(errors).length > 0) || Boolean(ageError);
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            
+            {hasErrors && (
+                <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-sm flex items-start gap-2.5">
+                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                    <div>
+                        <p className="font-semibold mb-1">Please fix the following errors:</p>
+                        <ul className="list-disc list-inside space-y-0.5 text-xs">
+                            {ageError && <li><span className="capitalize font-medium">Age:</span> {ageError}</li>}
+                            {errors && Object.entries(errors).map(([field, err]) => (
+                                <li key={field}>
+                                    <span className="capitalize font-medium">{field.replace(/_/g, ' ')}:</span> {String(err)}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            )}
+
             {/* Top-Level Role Selection */}
             <div className="grid grid-cols-1 mb-6">
                 <Select
@@ -130,6 +209,41 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
                         error={errors.last_name}
                         required
                         placeholder="Dela Cruz"
+                    />
+                )}
+            </div>
+
+            {/* Birthday and Age Fields */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {showField('birthdate') && (
+                    <Input
+                        label="Birthday"
+                        id="birthdate"
+                        type="date"
+                        max={maxDate}
+                        value={form.birthdate}
+                        onChange={handleBirthdateChange}
+                        error={errors.birthdate || errors.birthday}
+                        placeholder="YYYY-MM-DD"
+                    />
+                )}
+                {showField('age') && (
+                    <Input
+                        label="Age"
+                        id="age"
+                        type="text"
+                        inputMode="numeric"
+                        value={form.age}
+                        onChange={handleAgeChange}
+                        onKeyDown={(e) => {
+                            // Block any non-numeric keys, except navigation and editing keys
+                            const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'];
+                            if (!allowedKeys.includes(e.key) && !/^[0-9]$/.test(e.key)) {
+                                e.preventDefault();
+                            }
+                        }}
+                        error={ageError || errors.age}
+                        placeholder="e.g. 28 (numbers only)"
                     />
                 )}
             </div>
@@ -184,8 +298,8 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
                 )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {showField('status') && (
+            {Boolean(user) && showField('status') && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Select
                         label="Status"
                         id="status"
@@ -194,29 +308,18 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
                         options={STATUSES.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
                         error={errors.status}
                     />
-                )}
-            </div>
+                </div>
+            )}
 
-            {!user && showField('password') && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                        label="Password"
-                        id="password"
-                        type="password"
-                        value={form.password}
-                        onChange={set('password')}
-                        error={errors.password}
-                        required={!user}
-                        placeholder="••••••••"
-                    />
-                    <Input
-                        label="Confirm Password"
-                        id="password_confirmation"
-                        type="password"
-                        value={form.password_confirmation}
-                        onChange={set('password_confirmation')}
-                        placeholder="••••••••"
-                    />
+            {!user && (
+                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm flex items-start gap-3">
+                    <KeyRound className="w-5 h-5 shrink-0 mt-0.5 text-blue-500" />
+                    <div className="space-y-1 text-xs">
+                        <p className="font-semibold text-slate-800 dark:text-slate-200">Temporary Password Generation</p>
+                        <p className="text-slate-600 dark:text-slate-400">
+                            A secure temporary password will be automatically generated and sent to the user's email address upon creation. The user will be required to change their password on their first login.
+                        </p>
+                    </div>
                 </div>
             )}
 

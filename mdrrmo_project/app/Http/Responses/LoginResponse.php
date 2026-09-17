@@ -17,6 +17,10 @@ class LoginResponse implements LoginResponseContract
         $user = $request->user();
 
         if ($user) {
+            if ($user->password_change_required) {
+                return redirect()->route('password.change');
+            }
+
             if ($user->role === 'admin') {
                 return redirect()->intended('/admin/dashboard');
             }

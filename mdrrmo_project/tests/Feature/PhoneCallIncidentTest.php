@@ -85,7 +85,7 @@ test('dispatcher can successfully create phone emergency incident with normalize
 });
 
 test('phone emergency incident automatically links registered resident profile if phone matches', function () {
-    $barangay = Barangay::create(['barangay_name' => 'Poblacion']);
+    $barangay = Barangay::firstOrCreate(['barangay_name' => 'Poblacion']);
     $resident = User::factory()->create([
         'role' => 'resident',
         'phone_number' => '09187654321',
@@ -119,7 +119,7 @@ test('phone emergency incident automatically links registered resident profile i
 });
 
 test('dispatcher can lookup recognized caller when phone matches registered resident', function () {
-    $barangay = Barangay::create(['barangay_name' => 'Poblacion']);
+    $barangay = Barangay::firstOrCreate(['barangay_name' => 'Poblacion']);
     $resident = User::factory()->create([
         'role' => 'resident',
         'phone_number' => '+639936062977',
@@ -184,7 +184,7 @@ test('caller lookup returns 422 for invalid phone format', function () {
 });
 
 test('dispatcher can search caller phone numbers for autocomplete dropdown', function () {
-    $barangay = Barangay::create(['barangay_name' => 'Poblacion']);
+    $barangay = Barangay::firstOrCreate(['barangay_name' => 'Poblacion']);
     $resident = User::factory()->create([
         'role' => 'resident',
         'phone_number' => '09936062977',

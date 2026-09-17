@@ -19,6 +19,8 @@ export default function Register({ passwordRules }: RegisterProps) {
         first_name: '',
         middle_name: '',
         last_name: '',
+        birthdate: '',
+        age: '',
         phone_number: '',
         email: '',
         password: '',
@@ -27,6 +29,30 @@ export default function Register({ passwordRules }: RegisterProps) {
 
     const isPasswordLongEnough = data.password.length >= 8;
     const doPasswordsMatch = data.password.length > 0 && data.password === data.password_confirmation;
+
+    const maxDate = new Date().toISOString().split('T')[0];
+
+    const handleBirthdateChange = (val: string) => {
+        let calculatedAge = data.age;
+        if (val) {
+            const birthDate = new Date(val);
+            const today = new Date();
+            let ageDiff = today.getFullYear() - birthDate.getFullYear();
+            const monthDiff = today.getMonth() - birthDate.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                ageDiff--;
+            }
+            if (!isNaN(ageDiff) && ageDiff >= 0 && ageDiff <= 120) {
+                calculatedAge = String(ageDiff);
+            }
+        }
+        setData((prev) => ({ ...prev, birthdate: val, age: calculatedAge }));
+    };
+
+    const handleAgeChange = (val: string) => {
+        const cleanVal = val.replace(/[^0-9]/g, '');
+        setData('age', cleanVal);
+    };
 
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
@@ -162,6 +188,68 @@ export default function Register({ passwordRules }: RegisterProps) {
                                 />
                                 {errors.last_name && (
                                     <p className="text-[11px] text-rose-500 dark:text-rose-400">{errors.last_name}</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Birthday and Age Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* Birthday */}
+                            <div className="space-y-1.5">
+                                <label
+                                    htmlFor="birthdate"
+                                    className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+                                >
+                                    Birthday <span className="text-[10px] text-slate-400 font-normal">(Optional)</span>
+                                </label>
+                                <input
+                                    id="birthdate"
+                                    type="date"
+                                    max={maxDate}
+                                    name="birthdate"
+                                    value={data.birthdate}
+                                    onChange={(e) => handleBirthdateChange(e.target.value)}
+                                    className={`w-full bg-slate-50 dark:bg-white/5 border rounded-xl px-3.5 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all duration-200 outline-none focus:ring-2 focus:ring-rose-500/40 focus:border-rose-500/50 ${
+                                        errors.birthdate
+                                            ? 'border-rose-500/60'
+                                            : 'border-slate-300/80 dark:border-white/10'
+                                    }`}
+                                />
+                                {errors.birthdate && (
+                                    <p className="text-[11px] text-rose-500 dark:text-rose-400">{errors.birthdate}</p>
+                                )}
+                            </div>
+
+                            {/* Age */}
+                            <div className="space-y-1.5">
+                                <label
+                                    htmlFor="age"
+                                    className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+                                >
+                                    Age <span className="text-[10px] text-slate-400 font-normal">(Numbers only)</span>
+                                </label>
+                                <input
+                                    id="age"
+                                    type="text"
+                                    inputMode="numeric"
+                                    name="age"
+                                    value={data.age}
+                                    onChange={(e) => handleAgeChange(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'];
+                                        if (!allowedKeys.includes(e.key) && !/^[0-9]$/.test(e.key)) {
+                                            e.preventDefault();
+                                        }
+                                    }}
+                                    placeholder="Auto-calculated or enter age"
+                                    className={`w-full bg-slate-50 dark:bg-white/5 border rounded-xl px-3.5 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all duration-200 outline-none focus:ring-2 focus:ring-rose-500/40 focus:border-rose-500/50 ${
+                                        errors.age
+                                            ? 'border-rose-500/60'
+                                            : 'border-slate-300/80 dark:border-white/10'
+                                    }`}
+                                />
+                                {errors.age && (
+                                    <p className="text-[11px] text-rose-500 dark:text-rose-400">{errors.age}</p>
                                 )}
                             </div>
                         </div>

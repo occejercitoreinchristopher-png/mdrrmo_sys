@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Head } from '@inertiajs/react';
 import { ThemeProvider } from '@/shared/contexts/ThemeContext';
+import FlashMessageListener from '@/shared/components/FlashMessageListener';
 
 export default function AppLayout({ children, title = 'App', Sidebar, Navbar }) {
     const [collapsed, setCollapsed] = useState(() => {
@@ -24,6 +25,7 @@ export default function AppLayout({ children, title = 'App', Sidebar, Navbar }) 
     return (
         <ThemeProvider>
             <Head title={title} />
+            <FlashMessageListener />
             <div className="flex h-screen bg-slate-100/70 dark:bg-slate-900 text-slate-900 dark:text-slate-100 overflow-hidden font-sans">
                 {/* Decorative background */}
                 <div className="absolute inset-0 pointer-events-none overflow-hidden">

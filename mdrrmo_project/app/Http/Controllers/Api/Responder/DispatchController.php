@@ -175,8 +175,11 @@ class DispatchController extends Controller
         }
 
         try {
-            $dispatch->load(['incident', 'ambulance']);
+            $dispatch->load(['incident', 'incident.resident', 'ambulance']);
             broadcast(new DispatchStatusUpdated($dispatch));
+            if ($validated['status'] === 'en_route') {
+                \App\Services\PushNotificationService::notifyResponderEnRoute($dispatch);
+            }
             if ($validated['status'] === 'completed') {
                 broadcast(new DispatchCompleted($dispatch));
             }

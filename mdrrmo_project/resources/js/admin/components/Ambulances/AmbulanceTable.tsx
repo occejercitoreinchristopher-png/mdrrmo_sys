@@ -10,12 +10,14 @@ import SearchInput from '@/shared/components/SearchInput';
 import Drawer from '@/shared/components/Drawer';
 import AmbulanceForm, { type Ambulance } from './AmbulanceForm';
 import ConfirmDialog from '@/shared/components/ConfirmDialog';
+import Pagination from '@/shared/components/Pagination';
 
 interface AmbulanceTableProps {
     ambulances?: Ambulance[];
+    pagination?: any;
 }
 
-export default function AmbulanceTable({ ambulances = [] }: AmbulanceTableProps) {
+export default function AmbulanceTable({ ambulances = [], pagination = null }: AmbulanceTableProps) {
     const [search, setSearch] = useState('');
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [editing, setEditing] = useState<Ambulance | null>(null);
@@ -84,6 +86,14 @@ export default function AmbulanceTable({ ambulances = [] }: AmbulanceTableProps)
                 </div>
                 <div className="p-4">
                     <DataTable columns={columns} data={filtered} keyField="id" emptyTitle="No ambulances found" emptyIcon={AmbulanceIcon} />
+                    {pagination && (
+                        <Pagination
+                            {...pagination}
+                            onPageChange={(page) =>
+                                router.get('/admin/ambulances', { page }, { preserveState: true, preserveScroll: true })
+                            }
+                        />
+                    )}
                 </div>
             </Card>
 

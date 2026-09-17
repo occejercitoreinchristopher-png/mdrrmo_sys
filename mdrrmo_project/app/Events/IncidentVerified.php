@@ -30,6 +30,28 @@ class IncidentVerified implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        return is_array(new PrivateChannel('dispatcher')) ? new PrivateChannel('dispatcher') : [new PrivateChannel('dispatcher')];
+        $channels = [new PrivateChannel('dispatcher')];
+
+        if ($this->incident?->id) {
+            $channels[] = new PrivateChannel('incident.'.$this->incident->id);
+        }
+
+        if ($this->incident?->resident_id) {
+            $channels[] = new PrivateChannel('resident.'.$this->incident->resident_id);
+        }
+
+        return $channels;
+    }
+
+    public function broadcastAs(): string
+    {
+        return 'IncidentVerified';
+    }
+
+    public function broadcastWith(): array
+    {
+        return [
+            'incident' => $this->incident->loadMissing(['incidentType', 'resident', 'dispatches']),
+        ];
     }
 }

@@ -27,12 +27,14 @@ use Laravel\Sanctum\HasApiTokens;
  * @property Carbon|null $updated_at
  * @property string|null $expo_push_token
  */
-#[Fillable(['first_name', 'middle_name', 'last_name', 'email', 'phone_number', 'password', 'role', 'position', 'status', 'expo_push_token'])]
+#[Fillable(['first_name', 'middle_name', 'last_name', 'age', 'birthdate', 'email', 'phone_number', 'profile_photo_path', 'password', 'role', 'position', 'status', 'expo_push_token', 'password_change_required', 'temporary_password_expires_at'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
+
+    protected $appends = ['name', 'birthday', 'profile_photo_url'];
 
     /**
      * Get the attributes that should be cast.
@@ -44,7 +46,41 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'birthdate' => 'date:Y-m-d',
+            'age' => 'integer',
+            'password_change_required' => 'boolean',
+            'temporary_password_expires_at' => 'datetime',
         ];
+    }
+
+    public function getBirthdayAttribute(): ?string
+    {
+        return $this->birthdate ? Carbon::parse($this->birthdate)->format('Y-m-d') : null;
+    }
+
+    public function setBirthdayAttribute($value): void
+    {
+        $this->attributes['birthdate'] = $value;
+    }
+
+    public function getProfilePhotoUrlAttribute(): ?string
+    {
+        if (! empty($this->profile_photo_path)) {
+            return asset('storage/' . $this->profile_photo_path);
+        }
+        return null;
+    }
+
+    public function getNameAttribute(): string
+    {
+        return trim("{$this->first_name} {$this->last_name}");
+    }
+
+    public function setNameAttribute($value): void
+    {
+        $parts = explode(' ', trim($value ?? ''), 2);
+        $this->attributes['first_name'] = $parts[0] ?? '';
+        $this->attributes['last_name'] = $parts[1] ?? '';
     }
 
     public function responderProfile()

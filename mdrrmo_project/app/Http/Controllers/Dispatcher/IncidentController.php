@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Dispatcher;
 use App\Constants\EmergencyComplaints;
 use App\Events\DispatchCompleted;
 use App\Events\IncidentCreated;
+use App\Events\IncidentRejected;
 use App\Events\IncidentVerified;
 use App\Http\Controllers\Controller;
 use App\Models\Ambulance;
 use App\Models\Incident;
 use App\Models\IncidentType;
+use App\Models\LocationCode;
 use App\Models\LocationMarker;
 use App\Models\ResponderProfile;
 use App\Models\User;
@@ -93,6 +95,7 @@ class IncidentController extends Controller
         ]);
 
         event(new IncidentVerified($incident));
+        \App\Services\PushNotificationService::notifyIncidentVerified($incident);
 
         return redirect()->route('dispatcher.dispatches', ['incident_id' => $incident->id]);
     }
@@ -113,6 +116,9 @@ class IncidentController extends Controller
             'rejection_reason' => $request->rejection_reason,
             'verified_by' => $request->user()->id,
         ]);
+
+        event(new IncidentRejected($incident));
+        \App\Services\PushNotificationService::notifyIncidentRejected($incident);
 
         return back()->with('success', 'Incident rejected successfully.');
     }
@@ -176,18 +182,115 @@ class IncidentController extends Controller
 
         $code = trim(strtoupper($request->query('code')));
 
+        // 1. Check primary location_codes table
+        $loc = LocationCode::with('barangay')->where('location_code', $code)->first();
+
+        if ($loc) {
+            return response()->json([
+                'data' => [
+                    'id' => $loc->id,
+                    'code' => $loc->location_code,
+                    'location_code' => $loc->location_code,
+                    'marker_name' => $loc->location_name,
+                    'location_name' => $loc->location_name,
+                    'location_type' => $loc->location_type,
+                    'barangay' => $loc->barangay?->barangay_name ?? '',
+                    'latitude' => (float) $loc->latitude,
+                    'longitude' => (float) $loc->longitude,
+                    'description' => $loc->description,
+                ],
+            ]);
+        }
+
+        // 2. Fallback to location_markers for legacy data / tests
         $marker = LocationMarker::where('code', $code)
             ->where('is_active', true)
             ->first();
 
-        if (! $marker) {
+        if ($marker) {
             return response()->json([
-                'message' => 'Location code not found. Please verify the code with the caller.',
-            ], 404);
+                'data' => [
+                    'id' => $marker->id,
+                    'code' => $marker->code,
+                    'location_code' => $marker->code,
+                    'marker_name' => $marker->marker_name,
+                    'location_name' => $marker->marker_name,
+                    'location_type' => 'Landmark',
+                    'barangay' => $marker->barangay,
+                    'latitude' => (float) $marker->latitude,
+                    'longitude' => (float) $marker->longitude,
+                    'description' => $marker->description,
+                ],
+            ]);
         }
 
         return response()->json([
-            'data' => $marker,
+            'message' => 'Location code not found. Please verify the code with the caller.',
+        ], 404);
+    }
+
+    /**
+     * Search location codes across code, name, type, and barangay.
+     */
+    public function searchLocationCodes(Request $request)
+    {
+        $q = trim($request->query('q', ''));
+        $barangay = trim($request->query('barangay', ''));
+
+        $query = LocationCode::with('barangay');
+
+        if ($barangay !== '') {
+            $query->whereHas('barangay', function ($b) use ($barangay) {
+                $b->where('barangay_name', 'like', "%{$barangay}%");
+            });
+        }
+
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->where('location_code', 'like', "%{$q}%")
+                    ->orWhere('location_name', 'like', "%{$q}%")
+                    ->orWhere('location_type', 'like', "%{$q}%")
+                    ->orWhere('description', 'like', "%{$q}%")
+                    ->orWhereHas('barangay', function ($b) use ($q) {
+                        $b->where('barangay_name', 'like', "%{$q}%");
+                    });
+            });
+        }
+
+        $records = $query->get()->map(function ($loc) {
+            return [
+                'id' => $loc->id,
+                'location_code' => $loc->location_code,
+                'code' => $loc->location_code,
+                'location_type' => $loc->location_type,
+                'location_name' => $loc->location_name,
+                'marker_name' => $loc->location_name,
+                'barangay' => $loc->barangay?->barangay_name ?? '',
+                'description' => $loc->description,
+                'latitude' => (float) $loc->latitude,
+                'longitude' => (float) $loc->longitude,
+            ];
+        });
+
+        // If a specific query was entered, rank exact matches or starts-with matches higher
+        if ($q !== '') {
+            $upperQ = strtoupper($q);
+            $records = $records->sortByDesc(function ($item) use ($upperQ) {
+                if (strtoupper($item['location_code']) === $upperQ) {
+                    return 100;
+                }
+                if (str_starts_with(strtoupper($item['location_code']), $upperQ)) {
+                    return 80;
+                }
+                if (str_contains(strtoupper($item['location_name']), $upperQ)) {
+                    return 60;
+                }
+                return 10;
+            })->values();
+        }
+
+        return response()->json([
+            'data' => $records->take(30),
         ]);
     }
 
@@ -254,17 +357,18 @@ class IncidentController extends Controller
         // 4. Build previous location suggestion
         $previousLocation = null;
         if ($previousIncident?->location_code) {
-            $marker = LocationMarker::where('code', $previousIncident->location_code)
+            $loc = LocationCode::with('barangay')->where('location_code', $previousIncident->location_code)->first();
+            $marker = $loc ? null : LocationMarker::where('code', $previousIncident->location_code)
                 ->where('is_active', true)
                 ->first();
 
             $previousLocation = [
                 'code' => $previousIncident->location_code,
-                'marker_name' => $marker?->marker_name ?? $previousIncident->place_of_incident,
-                'barangay' => $marker?->barangay,
-                'description' => $marker?->description,
-                'latitude' => $marker?->latitude ?? (float) $previousIncident->incident_latitude,
-                'longitude' => $marker?->longitude ?? (float) $previousIncident->incident_longitude,
+                'marker_name' => $loc?->location_name ?? $marker?->marker_name ?? $previousIncident->place_of_incident,
+                'barangay' => $loc?->barangay?->barangay_name ?? $marker?->barangay,
+                'description' => $loc?->description ?? $marker?->description,
+                'latitude' => $loc?->latitude ?? $marker?->latitude ?? (float) $previousIncident->incident_latitude,
+                'longitude' => $loc?->longitude ?? $marker?->longitude ?? (float) $previousIncident->incident_longitude,
                 'last_reported_at' => $previousIncident->reported_at?->diffForHumans() ?? $previousIncident->created_at?->diffForHumans(),
             ];
         }
@@ -374,11 +478,15 @@ class IncidentController extends Controller
 
     public function storePhoneCall(Request $request)
     {
+        if ($request->input('location_method') === 'code') {
+            $request->merge(['location_method' => 'location_code']);
+        }
+
         $request->validate([
             'caller_phone_number' => 'required|string',
             'incident_type_id' => 'required|exists:incident_types,id',
             'chief_complaint' => 'nullable|string|max:255',
-            'location_method' => 'nullable|string|in:location_code,pinpoint',
+            'location_method' => 'nullable|string|in:location_code,code,pinpoint',
             'location_code' => 'nullable|string',
             'place_of_incident' => 'nullable|string|max:255',
             'latitude' => 'nullable|numeric|between:-90,90',
@@ -401,6 +509,9 @@ class IncidentController extends Controller
         }
 
         $locationMethod = $request->input('location_method', 'location_code');
+        if ($locationMethod === 'code') {
+            $locationMethod = 'location_code';
+        }
 
         if ($locationMethod === 'pinpoint' || ($request->filled('latitude') && $request->filled('longitude') && ! $request->filled('location_code'))) {
             if (! $request->filled('latitude') || ! $request->filled('longitude')) {
@@ -422,23 +533,45 @@ class IncidentController extends Controller
             }
 
             $code = trim(strtoupper($request->location_code));
-            $marker = LocationMarker::where('code', $code)
-                ->where('is_active', true)
+            $loc = LocationCode::with('barangay')
+                ->where('location_code', $code)
+                ->orWhere('location_code', strtoupper($code))
+                ->orWhere('location_code', strtolower($code))
                 ->first();
 
-            if (! $marker) {
-                throw ValidationException::withMessages([
-                    'location_code' => 'Location code not found. Please verify the code with the caller.',
-                ]);
-            }
+            if ($loc) {
+                $bName = $loc->barangay?->barangay_name ?? '';
+                $placeOfIncident = "{$loc->location_name}, Barangay {$bName}";
+                if ($loc->description) {
+                    $placeOfIncident .= " ({$loc->description})";
+                }
+                $latitude = (float) $loc->latitude;
+                $longitude = (float) $loc->longitude;
+                $locationSource = 'location_code';
+            } else {
+                $marker = LocationMarker::where('code', $code)
+                    ->where('is_active', true)
+                    ->first();
 
-            $placeOfIncident = "{$marker->marker_name}, Barangay {$marker->barangay}";
-            if ($marker->description) {
-                $placeOfIncident .= " ({$marker->description})";
+                if ($marker) {
+                    $placeOfIncident = "{$marker->marker_name}, Barangay {$marker->barangay}";
+                    if ($marker->description) {
+                        $placeOfIncident .= " ({$marker->description})";
+                    }
+                    $latitude = (float) $marker->latitude;
+                    $longitude = (float) $marker->longitude;
+                    $locationSource = 'location_code';
+                } elseif ($request->filled('latitude') && $request->filled('longitude')) {
+                    $latitude = (float) $request->latitude;
+                    $longitude = (float) $request->longitude;
+                    $placeOfIncident = $request->place_of_incident ?: "Location Code {$code}";
+                    $locationSource = 'location_code';
+                } else {
+                    throw ValidationException::withMessages([
+                        'location_code' => 'Location code not found. Please verify the code with the caller.',
+                    ]);
+                }
             }
-            $latitude = (float) $marker->latitude;
-            $longitude = (float) $marker->longitude;
-            $locationSource = 'location_code';
         }
 
         // Check if there is an existing resident account with this phone number
@@ -484,7 +617,11 @@ class IncidentController extends Controller
 
         $incident->load(['incidentType', 'resident']);
 
-        broadcast(new IncidentCreated($incident));
+        try {
+            broadcast(new IncidentCreated($incident));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to broadcast IncidentCreated: ' . $e->getMessage());
+        }
 
         return back()->with('success', 'Phone/SIM emergency call incident created successfully.');
     }

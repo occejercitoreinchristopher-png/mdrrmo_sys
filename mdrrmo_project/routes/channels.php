@@ -23,3 +23,7 @@ Broadcast::channel('incident.{id}', function ($user, $id) {
     // For simplicity in this emergency context, we return true, but normally you'd verify role/assignment.
     return true;
 });
+
+Broadcast::channel('dispatch.{id}', function ($user, $id) {
+    return true;
+});

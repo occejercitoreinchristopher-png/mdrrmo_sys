@@ -621,21 +621,50 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                 {/* RIGHT COLUMN: Security (Change Password) & Account Info Cards */}
                 <div className="lg:col-span-5 space-y-6">
                     {/* 3. CHANGE PASSWORD CARD */}
-                    <Card padding={false} className="overflow-hidden border border-rose-500/20 dark:border-rose-500/20 shadow-md">
+                    <Card
+                        padding={false}
+                        className={`overflow-hidden border shadow-md ${
+                            isAdmin
+                                ? 'border-blue-500/20 dark:border-blue-500/20'
+                                : 'border-rose-500/20 dark:border-rose-500/20'
+                        }`}
+                    >
                         {/* Security Banner Header */}
-                        <div className="p-6 bg-gradient-to-br from-rose-950/20 to-orange-950/10 dark:from-rose-950/40 dark:to-transparent border-b border-rose-500/20">
+                        <div
+                            className={`p-6 border-b ${
+                                isAdmin
+                                    ? 'bg-gradient-to-br from-blue-950/30 to-indigo-950/15 dark:from-blue-950/40 dark:to-transparent border-blue-500/20'
+                                    : 'bg-gradient-to-br from-rose-950/20 to-orange-950/10 dark:from-rose-950/40 dark:to-transparent border-rose-500/20'
+                            }`}
+                        >
                             <div className="flex items-start gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center flex-shrink-0 shadow-md shadow-rose-500/10">
+                                <div
+                                    className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md ${
+                                        isAdmin
+                                            ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30 shadow-blue-500/10'
+                                            : 'bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-rose-500/10'
+                                    }`}
+                                >
                                     <KeyRound className="w-5 h-5" />
                                 </div>
                                 <div className="space-y-1">
                                     <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                         <span>Security</span>
-                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 uppercase tracking-wide">
+                                        <span
+                                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${
+                                                isAdmin
+                                                    ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                                    : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                                            }`}
+                                        >
                                             Password
                                         </span>
                                     </h2>
-                                    <p className="text-xs font-semibold text-rose-400/90">
+                                    <p
+                                        className={`text-xs font-semibold ${
+                                            isAdmin ? 'text-blue-400/90' : 'text-rose-400/90'
+                                        }`}
+                                    >
                                         Keep your account secure
                                     </p>
                                     <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
@@ -661,7 +690,9 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                         className={`w-full bg-white dark:bg-white/5 border rounded-xl pl-4 pr-11 py-2.5 text-sm text-slate-900 dark:text-white outline-none transition-all ${
                                             passwordForm.errors.current_password
                                                 ? 'border-rose-500 focus:ring-2 focus:ring-rose-500/30'
-                                                : 'border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-rose-500/40'
+                                                : isAdmin
+                                                    ? 'border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-blue-500/40'
+                                                    : 'border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-rose-500/40'
                                         }`}
                                         placeholder="••••••••"
                                         required
@@ -703,7 +734,9 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                         className={`w-full bg-white dark:bg-white/5 border rounded-xl pl-4 pr-11 py-2.5 text-sm text-slate-900 dark:text-white outline-none transition-all ${
                                             passwordForm.errors.password
                                                 ? 'border-rose-500 focus:ring-2 focus:ring-rose-500/30'
-                                                : 'border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-rose-500/40'
+                                                : isAdmin
+                                                    ? 'border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-blue-500/40'
+                                                    : 'border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-rose-500/40'
                                         }`}
                                         placeholder="Minimum 8 characters"
                                         required
@@ -745,7 +778,9 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                         className={`w-full bg-white dark:bg-white/5 border rounded-xl pl-4 pr-11 py-2.5 text-sm text-slate-900 dark:text-white outline-none transition-all ${
                                             passwordForm.errors.password_confirmation
                                                 ? 'border-rose-500 focus:ring-2 focus:ring-rose-500/30'
-                                                : 'border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-rose-500/40'
+                                                : isAdmin
+                                                    ? 'border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-blue-500/40'
+                                                    : 'border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-rose-500/40'
                                         }`}
                                         placeholder="Repeat new password"
                                         required
@@ -778,9 +813,11 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                 <Button
                                     id="btn-change-password"
                                     type="submit"
-                                    variant="primary"
+                                    variant={isAdmin ? 'admin' : 'primary'}
                                     loading={passwordForm.processing}
-                                    className="w-full gap-2 shadow-lg shadow-rose-500/20"
+                                    className={`w-full gap-2 shadow-lg ${
+                                        isAdmin ? 'shadow-blue-500/20' : 'shadow-rose-500/20'
+                                    }`}
                                 >
                                     <Lock className="w-4 h-4" />
                                     <span>

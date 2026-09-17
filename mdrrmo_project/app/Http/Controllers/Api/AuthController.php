@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -19,14 +22,25 @@ class AuthController extends Controller
             'last_name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->whereNull('deleted_at')],
             'phone_number' => 'nullable|string|max:20',
+            'birthdate' => 'nullable|date|before:today',
+            'birthday' => 'nullable|date|before:today',
+            'age' => 'nullable|integer|min:1|max:120',
             'password' => 'required|string|min:8|confirmed',
         ]);
+
+        $birthdate = $validated['birthdate'] ?? $validated['birthday'] ?? null;
+        $age = ! empty($validated['age']) ? (int) $validated['age'] : null;
+        if ($birthdate && empty($age)) {
+            $age = \Illuminate\Support\Carbon::parse($birthdate)->age;
+        }
 
         $user = User::create([
             'first_name' => $validated['first_name'],
             'last_name' => $validated['last_name'],
             'email' => $validated['email'],
-            'phone_number' => $validated['phone_number'],
+            'phone_number' => $validated['phone_number'] ?? null,
+            'birthdate' => $birthdate,
+            'age' => $age,
             'password' => Hash::make($validated['password']),
             'role' => 'resident',
             'status' => 'active',
@@ -125,5 +139,54 @@ class AuthController extends Controller
         $user->save();
 
         return response()->json(['message' => 'Push token updated successfully']);
+    }
+
+    public function forgotPassword(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        // Send reset link using default broker (silently handles non-existing users to prevent enumeration)
+        Password::sendResetLink($request->only('email'));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'If the email address is registered, a password reset link has been sent.',
+        ]);
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'token' => 'required|string',
+            'email' => 'required|email',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $status = Password::reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function (User $user, string $password) {
+                $user->forceFill([
+                    'password' => $password,
+                    'password_change_required' => false,
+                    'temporary_password_expires_at' => null,
+                    'remember_token' => Str::random(60),
+                ])->save();
+
+                event(new PasswordReset($user));
+            }
+        );
+
+        if ($status === Password::PASSWORD_RESET) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Your password has been reset successfully.',
+            ]);
+        }
+
+        throw ValidationException::withMessages([
+            'email' => [trans($status)],
+        ]);
     }
 }

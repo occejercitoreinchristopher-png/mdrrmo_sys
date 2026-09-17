@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api\Responder;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class ProfileController extends Controller
 {
@@ -61,5 +63,33 @@ class ProfileController extends Controller
         }
 
         return response()->json(['message' => 'No photo provided'], 400);
+    }
+
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'current_password' => 'required|string',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user = Auth::user();
+
+        if (! Hash::check($request->current_password, $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['The current password you provided is incorrect.'],
+            ]);
+        }
+
+        $user->forceFill([
+            'password' => $request->password,
+            'password_change_required' => false,
+            'temporary_password_expires_at' => null,
+            'remember_token' => Str::random(60),
+        ])->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Your password has been changed successfully.',
+        ]);
     }
 }

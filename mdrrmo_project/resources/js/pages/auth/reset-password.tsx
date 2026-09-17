@@ -169,12 +169,35 @@ export default function ResetPassword({ token, email, passwordRules }: ResetPass
                             )}
                         </div>
 
+                        {/* Password Requirements Checklist */}
+                        <div className="p-3 bg-slate-50 dark:bg-white/[0.02] border border-slate-200/80 dark:border-white/10 rounded-xl space-y-1.5 text-xs">
+                            <p className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] uppercase tracking-wider">
+                                Password Requirements
+                            </p>
+                            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                                <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[10px] ${data.password.length >= 8 ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-400'}`}>
+                                    ✓
+                                </div>
+                                <span className={data.password.length >= 8 ? 'text-emerald-600 dark:text-emerald-400 font-medium' : ''}>
+                                    At least 8 characters
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                                <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[10px] ${data.password.length > 0 && data.password === data.password_confirmation ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-400'}`}>
+                                    ✓
+                                </div>
+                                <span className={data.password.length > 0 && data.password === data.password_confirmation ? 'text-emerald-600 dark:text-emerald-400 font-medium' : ''}>
+                                    Passwords match
+                                </span>
+                            </div>
+                        </div>
+
                         <Button
                             type="submit"
                             variant="primary"
                             size="md"
                             loading={processing}
-                            disabled={processing}
+                            disabled={processing || data.password.length < 8 || data.password !== data.password_confirmation}
                             className="w-full justify-center py-2.5 mt-2 text-sm font-semibold tracking-wide shadow-md shadow-rose-500/20"
                         >
                             {processing ? 'Resetting Password...' : 'Reset Password'}

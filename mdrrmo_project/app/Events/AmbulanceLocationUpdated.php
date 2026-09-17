@@ -71,7 +71,33 @@ class AmbulanceLocationUpdated implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('dispatcher')];
+        $channels = [new PrivateChannel('dispatcher')];
+
+        if ($this->dispatch_id) {
+            $channels[] = new PrivateChannel('dispatch.'.$this->dispatch_id);
+
+            try {
+                $dispatch = \App\Models\Dispatch::with('incident')->find($this->dispatch_id);
+                if ($dispatch) {
+                    if ($dispatch->incident_id) {
+                        $channels[] = new PrivateChannel('incident.'.$dispatch->incident_id);
+                    }
+                    $residentId = $dispatch->incident?->resident_id;
+                    if ($residentId) {
+                        $channels[] = new PrivateChannel('resident.'.$residentId);
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Fail silently on channel resolution
+            }
+        }
+
+        return $channels;
+    }
+
+    public function broadcastAs(): string
+    {
+        return 'AmbulanceLocationUpdated';
     }
 
     /**
