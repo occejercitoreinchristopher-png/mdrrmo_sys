@@ -17,7 +17,7 @@ export default function AlarmManager() {
                 triggerAlarm(incident);
                 
                 // Still reload the router so the new incident appears in the lists
-                router.reload({ preserveScroll: true, preserveState: true });
+                router.reload();
             };
 
             channel.listen('IncidentCreated', handleIncidentCreated);

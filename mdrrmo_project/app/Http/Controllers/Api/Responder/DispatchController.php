@@ -27,7 +27,8 @@ class DispatchController extends Controller
 
         $dispatches = Dispatch::where(function ($query) use ($user) {
             $query->where('driver_id', $user->id)
-                ->orWhere('emt_id', $user->id);
+                ->orWhere('emt_id', $user->id)
+                ->orWhere('team_leader_id', $user->id);
         })
             ->whereIn('dispatch_status', ['assigned', 'accepted', 'en_route', 'arrived_on_scene'])
             ->with(['incident', 'incident.incidentType', 'incident.resident', 'incident.resident.residentProfile', 'ambulance', 'driver', 'emt', 'teamLeader', 'patientCareRecord', 'patientCareRecord.patient'])
@@ -65,6 +66,21 @@ class DispatchController extends Controller
         // Check if user has an active duty profile
         if (! $user->responderProfile || $user->responderProfile->availability !== 'available') {
             return response()->json(['message' => 'You must be available/on duty to create a walk-in.'], 403);
+        }
+
+        // Check if user already has an active emergency mission
+        $hasActiveMission = Dispatch::where(function ($query) use ($user) {
+            $query->where('driver_id', $user->id)
+                ->orWhere('emt_id', $user->id)
+                ->orWhere('team_leader_id', $user->id);
+        })
+            ->whereIn('dispatch_status', ['assigned', 'accepted', 'en_route', 'arrived_on_scene'])
+            ->exists();
+
+        if ($hasActiveMission) {
+            return response()->json([
+                'message' => 'You already have an active emergency mission. Please complete or update your current mission before creating a walk-in.',
+            ], 422);
         }
 
         $incidentType = IncidentType::firstOrCreate(
@@ -116,6 +132,10 @@ class DispatchController extends Controller
             'en_route_at' => Carbon::now(),
             'arrived_at' => Carbon::now(),
         ]);
+
+        if ($user->responderProfile) {
+            $user->responderProfile->update(['availability' => 'busy']);
+        }
 
         // Eager load for frontend
         $dispatch->load([
@@ -217,7 +237,27 @@ class DispatchController extends Controller
             ], 403);
         }
 
+        // 2.1 Driver Priority Logic: The main tracking source is the Driver.
+        // If an assigned driver exists and this user is not the driver,
+        // we prioritize the driver's updates if active within the last 45 seconds.
+        $isDriver = ($dispatch->driver_id && $user->id == $dispatch->driver_id)
+            || ($user->responderProfile && strtolower($user->responderProfile->position) === 'driver');
+
+        if (! $isDriver && $dispatch->driver_id && $dispatch->last_location_updated_at) {
+            $secondsSinceLastUpdate = now()->diffInSeconds($dispatch->last_location_updated_at);
+            if ($secondsSinceLastUpdate < 45) {
+                return response()->json([
+                    'message' => 'Driver is actively transmitting primary vehicle location.',
+                    'status' => 'driver_priority',
+                ], 200);
+            }
+        }
+
         // 3. Validate coordinates
+        if ($request->has('heading') && $request->heading !== null && (float) $request->heading < 0) {
+            $request->merge(['heading' => null]);
+        }
+
         $validated = $request->validate([
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',

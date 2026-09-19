@@ -55,10 +55,16 @@ export default function ActiveDispatchWorkspace({
         return initial;
     });
 
-    // 5-second ticker to increment 'Last updated X seconds ago'
+    // 5-second ticker to increment 'Last updated X seconds ago' and 10-second background sync fallback
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(Date.now()), 5000);
-        return () => clearInterval(timer);
+        const pollTimer = setInterval(() => {
+            router.reload({ only: ['dispatches'] });
+        }, 10000);
+        return () => {
+            clearInterval(timer);
+            clearInterval(pollTimer);
+        };
     }, []);
 
     // Echo listener for real-time responder coordinates
@@ -96,6 +102,35 @@ export default function ActiveDispatchWorkspace({
         }
     }, []);
 
+    // Keep liveLocations synchronized whenever dispatches prop updates with coordinates
+    useEffect(() => {
+        dispatches.forEach(d => {
+            const lat = parseFloat(d.last_latitude);
+            const lng = parseFloat(d.last_longitude);
+            if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                const loc = {
+                    latitude: lat,
+                    longitude: lng,
+                    heading: d.last_heading ? parseFloat(d.last_heading) : null,
+                    accuracy: d.last_accuracy ? parseFloat(d.last_accuracy) : null,
+                    timestamp: d.last_location_updated_at,
+                    updatedAt: d.last_location_updated_at ? new Date(d.last_location_updated_at).getTime() : Date.now(),
+                };
+                setLiveLocations(prev => {
+                    const existing = prev[d.id];
+                    if (!existing || !existing.updatedAt || loc.updatedAt >= existing.updatedAt) {
+                        return {
+                            ...prev,
+                            [d.id]: loc,
+                            ...(d.ambulance_id ? { [d.ambulance_id]: loc } : {})
+                        };
+                    }
+                    return prev;
+                });
+            }
+        });
+    }, [dispatches]);
+
     const handleRouteTelemetryChange = useCallback((dispatchId: number | string, telemetry: RouteTelemetry) => {
         setRouteTelemetry(prev => ({
             ...prev,
@@ -105,7 +140,14 @@ export default function ActiveDispatchWorkspace({
 
     const getConnectionStatus = (dispatch: any) => {
         if (!dispatch) return { status: 'unavailable', label: 'Location update unavailable', color: 'text-slate-400 bg-slate-400/10 border-slate-500/20', isLive: false };
-        const loc = liveLocations[dispatch.id] || liveLocations[dispatch.ambulance_id];
+        let loc = liveLocations[dispatch.id] || liveLocations[dispatch.ambulance_id];
+        if (!loc && dispatch.last_latitude && dispatch.last_longitude) {
+            loc = {
+                latitude: parseFloat(dispatch.last_latitude),
+                longitude: parseFloat(dispatch.last_longitude),
+                updatedAt: dispatch.last_location_updated_at ? new Date(dispatch.last_location_updated_at).getTime() : Date.now(),
+            };
+        }
         if (!loc || !loc.updatedAt) {
             return { status: 'unavailable', label: 'Location update unavailable', color: 'text-slate-400 bg-slate-400/10 border-slate-500/20', isLive: false };
         }
@@ -397,7 +439,14 @@ export default function ActiveDispatchWorkspace({
                                         </span>
                                     </div>
                                     {(() => {
-                                        const loc = liveLocations[selectedDispatch.id] || liveLocations[selectedDispatch.ambulance_id];
+                                        let loc = liveLocations[selectedDispatch.id] || liveLocations[selectedDispatch.ambulance_id];
+                                        if ((!loc || !loc.latitude) && selectedDispatch.last_latitude && selectedDispatch.last_longitude) {
+                                            loc = {
+                                                latitude: parseFloat(selectedDispatch.last_latitude),
+                                                longitude: parseFloat(selectedDispatch.last_longitude),
+                                                heading: selectedDispatch.last_heading ? parseFloat(selectedDispatch.last_heading) : null,
+                                            };
+                                        }
                                         if (loc && loc.latitude && loc.longitude) {
                                             return (
                                                 <div className="text-[10px] font-mono text-emerald-400 flex items-center gap-2">

@@ -16,7 +16,7 @@ class ResponderController extends Controller
         $users = User::whereIn('role', ['responder', 'team_leader', 'emt', 'driver'])
             ->with(['responderProfile'])
             ->orderBy('id', 'asc')
-            ->paginate(15);
+            ->paginate(10);
 
         // Fetch active dispatches for these users
         $userIds = $users->pluck('id')->toArray();

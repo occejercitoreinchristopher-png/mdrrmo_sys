@@ -23,7 +23,7 @@ class UserController extends Controller
         $users = User::where('role', '!=', 'resident')
             ->with(['responderProfile'])
             ->latest()
-            ->paginate(15)
+            ->paginate(10)
             ->withQueryString();
 
         return Inertia::render('admin/Users', [
@@ -42,7 +42,7 @@ class UserController extends Controller
         $users = User::where('role', 'resident')
             ->with(['residentProfile.barangay'])
             ->latest()
-            ->paginate(15)
+            ->paginate(10)
             ->withQueryString();
 
         return Inertia::render('admin/Residents', [

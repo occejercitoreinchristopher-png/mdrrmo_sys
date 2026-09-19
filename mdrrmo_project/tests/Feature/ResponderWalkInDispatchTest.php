@@ -49,3 +49,27 @@ test('responder can successfully create walk-in dispatch with coordinates', func
     $response->assertJsonPath('data.ambulance.plate_number', 'WALK-IN');
     $response->assertJsonPath('data.ambulance.vehicle_type', 'Station');
 });
+
+test('responder cannot create walk-in dispatch if already on an active mission', function () {
+    $incident = \App\Models\Incident::factory()->create();
+    $ambulance = \App\Models\Ambulance::factory()->create();
+
+    \App\Models\Dispatch::create([
+        'incident_id' => $incident->id,
+        'driver_id' => $this->responder->id,
+        'ambulance_id' => $ambulance->id,
+        'dispatch_status' => 'en_route',
+        'assigned_at' => now(),
+    ]);
+
+    Sanctum::actingAs($this->responder);
+
+    $response = $this->postJson('/api/responder/dispatches/walk-in', [
+        'latitude' => 8.5312,
+        'longitude' => 124.5695,
+    ]);
+
+    $response->assertStatus(422);
+    $response->assertJsonPath('message', 'You already have an active emergency mission. Please complete or update your current mission before creating a walk-in.');
+});
+

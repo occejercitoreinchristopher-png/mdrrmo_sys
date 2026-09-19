@@ -3,7 +3,27 @@ import Select from '@/shared/components/Select';
 import Button from '@/shared/components/Button';
 import { useState } from 'react';
 
-export default function AssignAmbulanceModal({ open, onClose, onAssign, ambulances = [], loading = false }) {
+interface AmbulanceItem {
+    id: string | number;
+    plate_number: string;
+    [key: string]: any;
+}
+
+interface AssignAmbulanceModalProps {
+    open: boolean;
+    onClose: () => void;
+    onAssign: (id: string) => void;
+    ambulances?: AmbulanceItem[];
+    loading?: boolean;
+}
+
+export default function AssignAmbulanceModal({
+    open,
+    onClose,
+    onAssign,
+    ambulances = [],
+    loading = false,
+}: AssignAmbulanceModalProps) {
     const [ambulanceId, setAmbulanceId] = useState('');
 
     return (
@@ -16,6 +36,7 @@ export default function AssignAmbulanceModal({ open, onClose, onAssign, ambulanc
             }
         >
             <Select
+                id="assign_ambulance_select"
                 label="Select Ambulance"
                 value={ambulanceId}
                 onChange={setAmbulanceId}

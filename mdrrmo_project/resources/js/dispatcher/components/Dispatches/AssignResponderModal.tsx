@@ -3,7 +3,28 @@ import Select from '@/shared/components/Select';
 import Button from '@/shared/components/Button';
 import { useState } from 'react';
 
-export default function AssignResponderModal({ open, onClose, onAssign, responders = [], loading = false }) {
+interface ResponderItem {
+    id: string | number;
+    first_name: string;
+    last_name: string;
+    [key: string]: any;
+}
+
+interface AssignResponderModalProps {
+    open: boolean;
+    onClose: () => void;
+    onAssign: (id: string) => void;
+    responders?: ResponderItem[];
+    loading?: boolean;
+}
+
+export default function AssignResponderModal({
+    open,
+    onClose,
+    onAssign,
+    responders = [],
+    loading = false,
+}: AssignResponderModalProps) {
     const [responderId, setResponderId] = useState('');
 
     return (
@@ -16,6 +37,7 @@ export default function AssignResponderModal({ open, onClose, onAssign, responde
             }
         >
             <Select
+                id="assign_responder_select"
                 label="Select Responder"
                 value={responderId}
                 onChange={setResponderId}
