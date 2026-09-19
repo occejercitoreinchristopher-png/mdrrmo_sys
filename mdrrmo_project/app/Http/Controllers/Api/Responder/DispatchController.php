@@ -30,8 +30,21 @@ class DispatchController extends Controller
                 ->orWhere('emt_id', $user->id)
                 ->orWhere('team_leader_id', $user->id);
         })
-            ->whereIn('dispatch_status', ['assigned', 'accepted', 'en_route', 'arrived_on_scene'])
-            ->with(['incident', 'incident.incidentType', 'incident.resident', 'incident.resident.residentProfile', 'ambulance', 'driver', 'emt', 'teamLeader', 'patientCareRecord', 'patientCareRecord.patient'])
+            ->whereNotIn('dispatch_status', ['completed', 'cancelled'])
+            ->latest('id')
+            ->with([
+                'incident',
+                'incident.incidentType',
+                'incident.resident',
+                'incident.resident.residentProfile',
+                'incident.resident.residentProfile.barangay',
+                'ambulance',
+                'driver',
+                'emt',
+                'teamLeader',
+                'patientCareRecord',
+                'patientCareRecord.patient'
+            ])
             ->get();
 
         return response()->json(['data' => $dispatches]);

@@ -8,6 +8,23 @@ class Incident extends Model
 {
     protected $guarded = [];
 
+    protected $appends = ['location', 'barangay'];
+
+    public function getLocationAttribute(): ?string
+    {
+        return $this->place_of_incident
+            ?: $this->incident_address
+            ?: ($this->location_code ? "Marker {$this->location_code}" : null)
+            ?: $this->resident?->residentProfile?->barangay?->barangay_name
+            ?: 'Opol, Misamis Oriental';
+    }
+
+    public function getBarangayAttribute(): ?string
+    {
+        return $this->resident?->residentProfile?->barangay?->barangay_name
+            ?: null;
+    }
+
     protected function casts(): array
     {
         return [

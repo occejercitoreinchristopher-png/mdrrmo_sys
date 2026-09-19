@@ -69,6 +69,8 @@ class IncidentController extends Controller
             'incident_longitude' => $validated['longitude'],
             'reporter_latitude' => $validated['reporter_latitude'],
             'reporter_longitude' => $validated['reporter_longitude'],
+            'place_of_incident' => $validated['address'] ?? null,
+            'incident_address' => $validated['address'] ?? null,
             'description' => $validated['description'] ?? '',
             'incident_status' => 'pending',
             'priority' => 'Moderate',
