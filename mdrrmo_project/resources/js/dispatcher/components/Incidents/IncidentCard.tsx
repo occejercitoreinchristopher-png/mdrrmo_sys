@@ -1,20 +1,65 @@
 import { Clock, MapPin, AlertTriangle, Activity, User, Truck, ShieldAlert } from 'lucide-react';
 import Card from '@/shared/components/Card';
 import StatusBadge from '@/shared/components/StatusBadge';
-import { useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 export default function IncidentCard({ incident, onClick, selected = false }) {
-    // Format elapsed time
-    const elapsedTime = useMemo(() => {
-        if (!incident.reported_at) return '—';
+    // 10-second live tick so elapsed times update in real-time
+    const [currentTime, setCurrentTime] = useState(Date.now());
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(Date.now()), 10000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // Format both exact reported hour & relative elapsed time
+    const timeInfo = useMemo(() => {
+        if (!incident.reported_at) {
+            return { display: '—', elapsed: '—', full: '—' };
+        }
         const start = new Date(incident.reported_at);
-        const end = incident.resolved_at ? new Date(incident.resolved_at) : new Date();
-        const diffMs = end - start;
+        const end = incident.resolved_at ? new Date(incident.resolved_at) : new Date(currentTime);
+
+        const hourTime = start.toLocaleTimeString('en-PH', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+        });
+
+        const isToday = start.toDateString() === new Date(currentTime).toDateString();
+        const datePrefix = isToday
+            ? 'Today'
+            : start.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+
+        const diffMs = Math.max(0, end.getTime() - start.getTime());
         const diffMins = Math.floor(diffMs / 60000);
-        if (diffMins < 60) return `${diffMins}m ago`;
-        const diffHours = Math.floor(diffMins / 60);
-        return `${diffHours}h ${diffMins % 60}m ago`;
-    }, [incident.reported_at, incident.resolved_at]);
+        let elapsed = '';
+        if (diffMins < 1) {
+            elapsed = 'Just now';
+        } else if (diffMins < 60) {
+            elapsed = `${diffMins}m ago`;
+        } else {
+            const diffHours = Math.floor(diffMins / 60);
+            const remMins = diffMins % 60;
+            elapsed = remMins > 0 ? `${diffHours}h ${remMins}m ago` : `${diffHours}h ago`;
+        }
+
+        return {
+            display: `${datePrefix} • ${hourTime}`,
+            hourTime,
+            elapsed,
+            full: start.toLocaleString('en-PH', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true,
+            }),
+        };
+    }, [incident.reported_at, incident.resolved_at, currentTime]);
 
     // Priority color mapping for left border glow
     const borderGlow = {
@@ -33,14 +78,19 @@ export default function IncidentCard({ incident, onClick, selected = false }) {
             `}
         >
             <div className="p-3">
-                {/* Header: ID & Time */}
-                <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300 tracking-wider">
+                {/* Header: ID & Accurate Report Hour */}
+                <div className="flex justify-between items-start mb-2 gap-2">
+                    <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-white/10 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-white/10 tracking-wider">
                         #{incident.id}
                     </span>
-                    <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                        <Clock className="w-3 h-3" />
-                        {elapsedTime}
+                    <div className="flex flex-col items-end text-right" title={`Reported: ${timeInfo.full}`}>
+                        <span className="text-[11px] font-bold text-slate-900 dark:text-white leading-tight">
+                            {timeInfo.display}
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1 mt-0.5">
+                            <Clock className="w-3 h-3 text-[#F61509]" />
+                            {timeInfo.elapsed}
+                        </span>
                     </div>
                 </div>
 

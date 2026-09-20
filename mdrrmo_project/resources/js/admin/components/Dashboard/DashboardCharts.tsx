@@ -93,6 +93,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                 </div>
                 <div className="p-4">
                     <ReactApexChart
+                        key={`trend-${theme}`}
                         options={trendOptions}
                         series={trendSeries}
                         type="area"
@@ -110,6 +111,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                 </div>
                 <div className="p-4">
                     <ReactApexChart
+                        key={`donut-${theme}`}
                         options={donutOptions}
                         series={typeSeries}
                         type="donut"

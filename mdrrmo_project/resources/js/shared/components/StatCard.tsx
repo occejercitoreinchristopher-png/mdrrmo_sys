@@ -55,46 +55,46 @@ export default function StatCard({
             className="relative overflow-hidden group hover:border-slate-300 dark:hover:border-white/20 transition-all duration-300"
             padding={false}
         >
-            {/* Background glow */}
+            {/* Background luxury diffused glow */}
             <div
                 className={clsx(
-                    'absolute -top-4 -right-4 w-24 h-24 rounded-full blur-2xl opacity-15 dark:opacity-20 transition-opacity duration-300 group-hover:opacity-25 dark:group-hover:opacity-30',
+                    'absolute -top-6 -right-6 w-28 h-28 rounded-full blur-3xl opacity-10 dark:opacity-20 transition-opacity duration-300 group-hover:opacity-25 dark:group-hover:opacity-30 pointer-events-none',
                     `bg-gradient-to-br ${c.bg}`,
                 )}
             />
 
-            <div className="p-6">
+            <div className="p-5 sm:p-6 relative z-10">
                 <div className="flex items-start justify-between">
                     <div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{title}</p>
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium tracking-tight">{title}</p>
                         {loading ? (
-                            <div className="h-8 w-20 bg-slate-200 dark:bg-white/10 rounded-lg animate-pulse mt-1" />
+                            <div className="h-8 w-20 bg-slate-200 dark:bg-white/10 rounded-lg animate-pulse mt-2" />
                         ) : (
-                            <p className="text-3xl font-bold text-slate-900 dark:text-white mt-1 tabular-nums">
-                                {value ?? '—'}
+                            <p className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-1.5 tabular-nums tracking-tight">
+                                {value ?? '0'}
                             </p>
                         )}
                     </div>
                     {Icon && (
                         <div
                             className={clsx(
-                                'w-12 h-12 rounded-xl flex items-center justify-center',
+                                'w-11 h-11 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0',
                                 c.ring,
                             )}
                         >
-                            <Icon className="w-6 h-6" />
+                            <Icon className="w-5 h-5" />
                         </div>
                     )}
                 </div>
 
                 {trendLabel !== undefined && (
-                    <div className="flex items-center gap-1.5 mt-4 pt-4 border-t border-slate-100 dark:border-white/5">
-                        <TrendIcon className={clsx('w-3.5 h-3.5', trendColor)} />
-                        <span className={clsx('text-xs font-semibold', trendColor)}>
+                    <div className="flex items-center gap-1.5 mt-4 pt-3.5 border-t border-slate-100 dark:border-white/5">
+                        <span className={clsx('inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-bold', trendColor, trend > 0 ? 'bg-emerald-500/10' : trend < 0 ? 'bg-red-500/10' : 'bg-slate-500/10')}>
+                            <TrendIcon className="w-3 h-3" />
                             {trend > 0 ? '+' : ''}
                             {trend}%
                         </span>
-                        <span className="text-xs text-slate-500">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                             {trendLabel}
                         </span>
                     </div>

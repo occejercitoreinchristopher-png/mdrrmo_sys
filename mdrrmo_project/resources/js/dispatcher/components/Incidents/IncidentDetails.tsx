@@ -72,7 +72,20 @@ export default function IncidentDetails({
     }, [previewImage]);
 
     useEffect(() => {
-        if (!incident || !incident.reporter_latitude || !incident.reporter_longitude) {
+        if (!incident) {
+            setAddress(null);
+            return;
+        }
+
+        const existingPlace = incident.place_of_incident || incident.incident_address;
+        if (existingPlace) {
+            setAddress(existingPlace);
+            return;
+        }
+
+        const lat = incident.incident_latitude || incident.reporter_latitude;
+        const lng = incident.incident_longitude || incident.reporter_longitude;
+        if (!lat || !lng) {
             setAddress(null);
             return;
         }
@@ -85,16 +98,16 @@ export default function IncidentDetails({
                     setAddress(null);
                     return;
                 }
-                const response = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${incident.reporter_longitude},${incident.reporter_latitude}.json?access_token=${token}`);
+                const response = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&country=PH&types=poi,address,neighborhood,locality`);
                 const data = await response.json();
                 if (data.features && data.features.length > 0) {
                     setAddress(data.features[0].place_name);
                 } else {
-                    setAddress('Address not found');
+                    setAddress(null);
                 }
             } catch (error) {
                 console.error("Error fetching address:", error);
-                setAddress('Error fetching address');
+                setAddress(null);
             } finally {
                 setLoadingAddress(false);
             }
@@ -303,16 +316,19 @@ export default function IncidentDetails({
                             </p>
                             <div className="text-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none">
                                 <div className="flex items-start gap-2">
-                                    <MapPin className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+                                    <MapPin className="w-4 h-4 text-[#F61509] flex-shrink-0 mt-0.5" />
                                     <div className="flex flex-col">
-                                        <span className="font-medium">
-                                            {incident.incident_latitude && incident.incident_longitude
-                                                ? (loadingAddress ? 'Fetching address...' : (address || `${incident.incident_latitude}, ${incident.incident_longitude}`))
-                                                : 'Location not available'}
+                                        <span className="font-semibold text-slate-900 dark:text-white capitalize">
+                                            {incident.place_of_incident 
+                                                || incident.incident_address 
+                                                || (incident.location_code ? `Location Marker: ${incident.location_code}` : null) 
+                                                || (loadingAddress ? 'Fetching location name...' : address) 
+                                                || (incident.resident?.resident_profile?.barangay?.barangay_name ? `Brgy. ${incident.resident.resident_profile.barangay.barangay_name}, Opol` : null)
+                                                || 'Opol, Misamis Oriental'}
                                         </span>
                                         {incident.incident_latitude && incident.incident_longitude && (
-                                            <span className="text-xs font-mono text-slate-500 mt-0.5">
-                                                {incident.incident_latitude}, {incident.incident_longitude}
+                                            <span className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+                                                GPS: {parseFloat(String(incident.incident_latitude)).toFixed(5)}, {parseFloat(String(incident.incident_longitude)).toFixed(5)}
                                             </span>
                                         )}
                                     </div>

@@ -71,7 +71,7 @@ export default function DataTable<T extends Record<string, any>>({
                                             : undefined
                                     }
                                     className={clsx(
-                                        'text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap',
+                                        'text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 capitalize tracking-wide whitespace-nowrap',
                                         col.sortable &&
                                             'cursor-pointer select-none hover:text-slate-900 dark:hover:text-white transition-colors',
                                     )}

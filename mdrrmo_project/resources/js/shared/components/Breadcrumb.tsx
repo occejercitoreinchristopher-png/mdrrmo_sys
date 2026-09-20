@@ -49,22 +49,22 @@ export default function Breadcrumb({ items }: { items?: any[] } = {}) {
                 return (
                     <span key={i} className="flex items-center gap-1.5">
                         {i === 0 && (
-                            <Home className="w-3 h-3 text-slate-500" />
+                            <Home className="w-3.5 h-3.5 text-slate-400 dark:text-slate-400" />
                         )}
                         {isLast ? (
-                            <span className="text-slate-800 dark:text-slate-300 font-semibold">
+                            <span className="text-slate-900 dark:text-white font-semibold">
                                 {crumb.label}
                             </span>
                         ) : (
                             <Link
                                 href={crumb.href}
-                                className="text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                                className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors font-medium"
                             >
                                 {crumb.label}
                             </Link>
                         )}
                         {!isLast && (
-                            <ChevronRight className="w-3 h-3 text-slate-400 dark:text-slate-600" />
+                            <ChevronRight className="w-3 h-3 text-slate-300 dark:text-slate-600" />
                         )}
                     </span>
                 );

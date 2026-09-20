@@ -10,3 +10,15 @@ export function cn(...inputs: ClassValue[]) {
 export function toUrl(url: NonNullable<InertiaLinkProps['href']>): string {
     return typeof url === 'string' ? url : url.url;
 }
+
+export function toTitleCase(str?: string | null): string {
+    if (!str) return '';
+    return str
+        .toLowerCase()
+        .replace(/(?:^|\s|-|\/)\S/g, (match) => match.toUpperCase());
+}
+
+export function toPascalCase(str?: string | null): string {
+    return toTitleCase(str);
+}
+

@@ -1,8 +1,11 @@
-import { KeyRound, Pencil, Trash2, User as UserIcon } from 'lucide-react';
+import { KeyRound, Pencil, Trash2, User as UserIcon, Shield, Radio, Ambulance, Users } from 'lucide-react';
 import Button from '@/shared/components/Button';
 import DataTable, { Column } from '@/shared/components/DataTable';
 import StatusBadge from '@/shared/components/StatusBadge';
 import type { User } from './UserManagement';
+import { clsx } from 'clsx';
+
+import { toPascalCase } from '@/shared/utils/utils';
 
 interface UserTableProps {
     users?: User[];
@@ -13,6 +16,13 @@ interface UserTableProps {
     roleFilter?: string | null;
 }
 
+const roleConfig: Record<string, { label: string; icon: any; style: string }> = {
+    admin: { label: 'Admin', icon: Shield, style: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200/80 dark:border-indigo-500/20' },
+    dispatcher: { label: 'Dispatcher', icon: Radio, style: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200/80 dark:border-rose-500/20' },
+    responder: { label: 'Responder', icon: Ambulance, style: 'bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-200/80 dark:border-sky-500/20' },
+    resident: { label: 'Resident', icon: Users, style: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-500/20' },
+};
+
 export default function UserTable({ users = [], loading = false, onEdit, onResetPassword, onDelete, roleFilter = null }: UserTableProps) {
     const filtered = roleFilter
         ? users.filter((u) => u.role === roleFilter)
@@ -21,18 +31,18 @@ export default function UserTable({ users = [], loading = false, onEdit, onReset
     const columns: Column<User>[] = [
         {
             key: 'name',
-            header: 'User',
+            header: 'User Details',
             sortable: true,
             render: (_, row) => (
                 <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/30 to-indigo-500/30 flex items-center justify-center text-blue-600 dark:text-blue-400 text-xs font-semibold flex-shrink-0">
-                        {(row.first_name?.[0] ?? '') + (row.last_name?.[0] ?? '')}
+                    <div className="w-9 h-9 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm ring-1 ring-slate-900/10 dark:ring-white/20">
+                        {((row.first_name?.[0] ?? '') + (row.last_name?.[0] ?? '')).toUpperCase()}
                     </div>
                     <div>
-                        <p className="font-medium text-slate-900 dark:text-white flex items-center gap-1.5">
-                            <span>{row.first_name} {row.last_name}</span>
+                        <p className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5 capitalize">
+                            <span>{toPascalCase(`${row.first_name} ${row.last_name}`)}</span>
                             {row.age ? (
-                                <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 font-normal">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 font-normal">
                                     {row.age} yrs
                                 </span>
                             ) : null}
@@ -44,40 +54,66 @@ export default function UserTable({ users = [], loading = false, onEdit, onReset
         },
         {
             key: 'phone_number',
-            header: 'Phone',
+            header: 'Contact Phone',
             sortable: false,
-            render: (v) => <span className="font-mono text-xs">{v ?? '—'}</span>,
+            render: (v) => <span className="font-mono text-xs text-slate-700 dark:text-slate-300">{v ?? '—'}</span>,
         },
         {
             key: 'role',
-            header: 'Role',
+            header: 'Account Role',
             sortable: true,
-            render: (v) => <StatusBadge status={v} />,
+            render: (v) => {
+                const conf = roleConfig[v] || { label: v, icon: UserIcon, style: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-white/10 dark:text-slate-300' };
+                const Icon = conf.icon;
+                return (
+                    <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border backdrop-blur-sm', conf.style)}>
+                        <Icon className="w-3.5 h-3.5" />
+                        <span>{conf.label}</span>
+                    </span>
+                );
+            },
         },
         {
             key: 'status',
-            header: 'Status',
+            header: 'Account Status',
             sortable: true,
-            render: (v) => <StatusBadge status={v} />,
+            render: (v) => {
+                const isAct = v === 'active';
+                return (
+                    <span className={clsx(
+                        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border backdrop-blur-sm capitalize',
+                        isAct
+                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200/80 dark:border-rose-500/20'
+                    )}>
+                        <span className={clsx('w-1.5 h-1.5 rounded-full', isAct ? 'bg-emerald-500' : 'bg-rose-500')} />
+                        {v || 'Active'}
+                    </span>
+                );
+            },
         },
         {
             key: 'created_at',
-            header: 'Joined',
+            header: 'Registration',
             sortable: true,
             render: (v) =>
-                v
-                    ? new Date(v).toLocaleDateString('en-PH', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                      })
-                    : '—',
+                v ? (
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        {new Date(v).toLocaleDateString('en-PH', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                        })}
+                    </span>
+                ) : (
+                    '—'
+                ),
         },
         {
             key: 'actions',
-            header: 'Actions',
+            header: 'Manage',
             render: (_, row) => (
-                <div className="flex gap-2">
+                <div className="flex items-center gap-1.5">
                     <Button
                         size="xs"
                         variant="secondary"
@@ -85,20 +121,23 @@ export default function UserTable({ users = [], loading = false, onEdit, onReset
                             e.stopPropagation();
                             onEdit?.(row);
                         }}
+                        className="hover:bg-slate-200 dark:hover:bg-white/15"
                     >
-                        <Pencil className="w-3 h-3" /> Edit
+                        <Pencil className="w-3 h-3" />
+                        <span>Edit</span>
                     </Button>
                     <Button
                         size="xs"
                         variant="secondary"
-                        className="text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                        className="text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 border-amber-200/60 dark:border-amber-500/20"
                         title="Reset Password"
                         onClick={(e) => {
                             e.stopPropagation();
                             onResetPassword?.(row);
                         }}
                     >
-                        <KeyRound className="w-3 h-3" /> Reset
+                        <KeyRound className="w-3 h-3" />
+                        <span>Reset</span>
                     </Button>
                     <Button
                         size="xs"
@@ -122,7 +161,7 @@ export default function UserTable({ users = [], loading = false, onEdit, onReset
             loading={loading}
             keyField="id"
             emptyTitle="No users found"
-            emptyDescription="Try adjusting your search or filters."
+            emptyDescription="Try adjusting your search query or role filter tab."
             emptyIcon={UserIcon}
         />
     );

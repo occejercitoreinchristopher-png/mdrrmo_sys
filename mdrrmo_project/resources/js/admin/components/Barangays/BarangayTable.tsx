@@ -23,20 +23,7 @@ import Pagination from '@/shared/components/Pagination';
 import LocationCodeFormModal, { LOCATION_TYPES } from './LocationCodeFormModal';
 import ViewLocationModal from './ViewLocationModal';
 import { useBarangayLocationCodesQuery, LocationCode } from './useBarangayLocationCodesQuery';
-
-interface LocationCode {
-    id: number;
-    barangay_id: number;
-    barangay_name: string;
-    location_code: string;
-    location_type: string;
-    location_name: string;
-    description?: string | null;
-    latitude: number;
-    longitude: number;
-    created_at?: string;
-    updated_at?: string;
-}
+import { toPascalCase } from '@/shared/utils/utils';
 
 interface Barangay {
     id: number;
@@ -191,8 +178,8 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
                     onClick={() => setSelectedBarangayId(row.id)}
                     className="cursor-pointer group flex items-center gap-2"
                 >
-                    <span className="font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors">
-                        {v}
+                    <span className="font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors capitalize">
+                        {toPascalCase(v)}
                     </span>
                 </div>
             ),
@@ -200,12 +187,12 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
         {
             key: 'municipality',
             header: 'Municipality',
-            render: (v: string) => <span className="text-slate-600 dark:text-slate-300">{v}</span>,
+            render: (v: string) => <span className="text-slate-600 dark:text-slate-300 capitalize">{toPascalCase(v)}</span>,
         },
         {
             key: 'province',
             header: 'Province',
-            render: (v: string) => <span className="text-slate-600 dark:text-slate-300">{v}</span>,
+            render: (v: string) => <span className="text-slate-600 dark:text-slate-300 capitalize">{toPascalCase(v)}</span>,
         },
         {
             key: 'location_codes_count',
@@ -284,8 +271,8 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
             header: 'Type',
             sortable: true,
             render: (type: string) => (
-                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${getTypeBadgeClass(type)}`}>
-                    {type}
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${getTypeBadgeClass(type)} capitalize`}>
+                    {toPascalCase(type)}
                 </span>
             ),
         },
@@ -295,8 +282,8 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
             sortable: true,
             render: (name: string, row: LocationCode) => (
                 <div>
-                    <div className="font-bold text-slate-900 dark:text-white text-xs">
-                        {name}
+                    <div className="font-bold text-slate-900 dark:text-white text-xs capitalize">
+                        {toPascalCase(name)}
                     </div>
                     {row.description && (
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-xs mt-0.5">
@@ -383,33 +370,33 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
 
                 {/* Top Metrics Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <Card className="p-4 flex items-center gap-3.5 bg-gradient-to-br from-slate-900 to-slate-800 text-white border-white/10">
-                        <div className="w-10 h-10 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                    <Card className="p-4 flex items-center gap-3.5 bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 shadow-sm">
+                        <div className="w-10 h-10 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center shrink-0 shadow-sm">
                             <Building2 className="w-5 h-5" />
                         </div>
                         <div>
-                            <div className="text-2xl font-black">{barangays.length || 14}</div>
-                            <div className="text-xs text-slate-400 font-medium">Official Opol Barangays (Fixed)</div>
+                            <div className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">{barangays.length || 14}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Official Opol Barangays (Fixed)</div>
                         </div>
                     </Card>
 
-                    <Card className="p-4 flex items-center gap-3.5 bg-gradient-to-br from-slate-900 to-slate-800 text-white border-white/10">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                    <Card className="p-4 flex items-center gap-3.5 bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 shadow-sm">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
                             <MapPin className="w-5 h-5" />
                         </div>
                         <div>
-                            <div className="text-2xl font-black">{totalLocationCodesCount}</div>
-                            <div className="text-xs text-slate-400 font-medium">Registered Location Codes</div>
+                            <div className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">{totalLocationCodesCount}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Registered Location Codes</div>
                         </div>
                     </Card>
 
-                    <Card className="p-4 flex items-center gap-3.5 bg-gradient-to-br from-slate-900 to-slate-800 text-white border-white/10 sm:col-span-2 lg:col-span-1">
-                        <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center">
+                    <Card className="p-4 flex items-center gap-3.5 bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 shadow-sm sm:col-span-2 lg:col-span-1">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
                             <Compass className="w-5 h-5" />
                         </div>
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-sky-400">Dispatcher Ready</div>
-                            <div className="text-xs text-slate-400 mt-0.5">Admin codes instantly sync to Search & Pinpoint</div>
+                            <div className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Dispatcher Ready</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">Admin codes instantly sync to Search & Pinpoint</div>
                         </div>
                     </Card>
                 </div>

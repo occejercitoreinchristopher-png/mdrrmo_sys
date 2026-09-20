@@ -162,19 +162,6 @@ export default function ActiveDispatchWorkspace({
         return { status: 'stale', label: `Last updated ${minutes}m ago`, color: 'text-slate-400 bg-slate-500/10 border-slate-500/30', isLive: false };
     };
 
-    const handleForceResolve = (dispatch: any) => {
-        if (!dispatch) return;
-        if (confirm(`Force resolve mission #${dispatch.id}? This will complete the dispatch, resolve the incident, and release the deployed unit.`)) {
-            setActionLoading(true);
-            router.post(`/dispatcher/dispatches/${dispatch.id}/resolve`, {}, {
-                onFinish: () => {
-                    setActionLoading(false);
-                    setSelectedDispatch(null);
-                }
-            });
-        }
-    };
-
     const handleCancelDispatch = (dispatch: any) => {
         if (!dispatch) return;
         if (confirm(`Cancel mission #${dispatch.id}? This will release the crew/ambulance and cancel this emergency request.`)) {
@@ -258,25 +245,21 @@ export default function ActiveDispatchWorkspace({
     ] : [];
 
     return (
-        <div className="h-screen max-h-screen flex flex-col pb-6 max-w-[1800px] mx-auto overflow-hidden">
-            <div className="shrink-0 mb-4">
-                <PageHeader 
-                    title="Operations Workspace" 
-                    subtitle="Live command center for active emergency response tracking." 
-                />
-            </div>
-
+        <div className="h-full flex-1 flex flex-col min-h-0 max-w-[1800px] mx-auto w-full overflow-hidden">
             {/* Main Workspace Area */}
-            <div className="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-6 min-h-0">
+            <div className="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-5 min-h-0 h-full">
                 
-                {/* LEFT COLUMN: Dispatch List (3/12 width) - Compacted slightly to give map more room */}
-                <div className="xl:col-span-3 flex flex-col h-full bg-white/50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-white/5 backdrop-blur-xl shadow-sm dark:shadow-2xl overflow-hidden relative z-10">
+                {/* LEFT COLUMN: Dispatch List (3/12 width) */}
+                <div className="xl:col-span-3 flex flex-col h-full bg-white/90 dark:bg-[#090e1a]/90 rounded-2xl border border-slate-200/80 dark:border-white/10 backdrop-blur-2xl shadow-sm dark:shadow-2xl overflow-hidden relative z-10 transition-colors duration-300">
                     {/* Header & Search */}
-                    <div className="p-5 border-b border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-slate-950/40 shrink-0">
-                        <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
-                            <Activity className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
+                    <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] shrink-0">
+                        <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-3">
+                            <span className="relative flex h-2.5 w-2.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F61509] opacity-75" />
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#F61509]" />
+                            </span>
                             Active Responses
-                            <span className="ml-auto bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs py-1 px-2.5 rounded-full border border-emerald-200 dark:border-emerald-500/20">
+                            <span className="ml-auto bg-[#F61509]/10 text-[#F61509] text-xs font-bold py-0.5 px-2.5 rounded-full border border-[#F61509]/20">
                                 {dispatches.length} Live
                             </span>
                         </h2>
@@ -287,7 +270,7 @@ export default function ActiveDispatchWorkspace({
                                 placeholder="Search unit or location..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                className="w-full bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 shadow-sm dark:shadow-none rounded-xl pl-9 pr-4 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                                className="w-full bg-white dark:bg-[#070b14]/70 border border-slate-200/80 dark:border-white/10 shadow-sm dark:shadow-none rounded-xl pl-9 pr-4 py-2 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F61509]/30 focus:border-[#F61509] transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
                             />
                         </div>
                     </div>
@@ -298,7 +281,7 @@ export default function ActiveDispatchWorkspace({
                         {/* Pending Assignments Section */}
                         {verifiedIncidents.length > 0 && (
                             <div className="space-y-3 mb-6">
-                                <h3 className="text-xs font-semibold text-amber-500 uppercase tracking-wider flex items-center gap-2">
+                                <h3 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
                                     <AlertCircle className="w-3.5 h-3.5" /> Pending Assignment ({verifiedIncidents.length})
                                 </h3>
                                 {verifiedIncidents.map(incident => {
@@ -348,10 +331,10 @@ export default function ActiveDispatchWorkspace({
                         )}
 
                         <div className="flex items-center justify-between">
-                            <h3 className="text-xs font-semibold text-emerald-500 uppercase tracking-wider">
+                            <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-widest">
                                 Active Dispatches
                             </h3>
-                            <span className="text-[11px] text-slate-400">
+                            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                                 {filtered.length} active
                             </span>
                         </div>
@@ -363,25 +346,25 @@ export default function ActiveDispatchWorkspace({
 
                         {/* Selected Dispatch Live Mission Tracker in Sidebar */}
                         {selectedDispatch && (
-                            <div className="bg-slate-900 rounded-2xl border border-primary/40 p-4 space-y-3.5 shadow-xl relative overflow-hidden">
-                                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-primary to-emerald-400" />
+                            <div className="bg-white dark:bg-[#070b14] rounded-2xl border border-[#F61509]/30 dark:border-[#F61509]/30 p-4 space-y-3.5 shadow-md dark:shadow-2xl relative overflow-hidden ring-1 ring-[#F61509]/20 transition-colors duration-300">
+                                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#F61509] via-orange-500 to-amber-500" />
                                 
                                 {/* Header with Close and Connection Status */}
                                 <div className="flex items-start justify-between gap-2 pt-1">
                                     <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-mono text-xs font-bold text-primary bg-primary/15 px-2 py-0.5 rounded border border-primary/30">
+                                        <div className="flex items-center gap-2 mb-1.5">
+                                            <span className="font-mono text-xs font-bold text-[#F61509] bg-[#F61509]/10 px-2 py-0.5 rounded-md border border-[#F61509]/20">
                                                 MISSION #{selectedDispatch.id}
                                             </span>
                                             <StatusBadge status={selectedDispatch.dispatch_status} />
                                         </div>
-                                        <div className="text-sm font-semibold text-white truncate max-w-[200px]">
+                                        <div className="text-sm font-bold text-slate-900 dark:text-white truncate max-w-[200px]">
                                             {selectedDispatch.incident?.incident_type?.name}
                                         </div>
                                     </div>
                                     <button 
                                         onClick={() => setSelectedDispatch(null)}
-                                        className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                                        className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                                         title="Deselect Mission"
                                     >
                                         <X className="w-4 h-4" />
@@ -389,8 +372,8 @@ export default function ActiveDispatchWorkspace({
                                 </div>
 
                                 {/* Live GPS Link Status */}
-                                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
-                                    <span className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold">GPS Telemetry</span>
+                                <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100 dark:border-white/5">
+                                    <span className="text-slate-500 dark:text-slate-400 text-[10px] uppercase tracking-wider font-bold">GPS Telemetry</span>
                                     {(() => {
                                         const conn = getConnectionStatus(selectedDispatch);
                                         return (
@@ -403,10 +386,10 @@ export default function ActiveDispatchWorkspace({
                                 </div>
 
                                 {/* Q1: Where is the incident? */}
-                                <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 space-y-1.5">
+                                <div className="bg-slate-50/80 dark:bg-white/[0.03] rounded-xl p-3 border border-slate-200/80 dark:border-white/10 space-y-1.5">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1">
-                                            <MapPin className="w-3.5 h-3.5 text-rose-400" /> 1. Incident Location
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#F61509] flex items-center gap-1">
+                                            <MapPin className="w-3.5 h-3.5 text-[#F61509]" /> 1. Incident Location
                                         </span>
                                         {selectedDispatch.incident?.priority && (
                                             <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${getPriorityColor(selectedDispatch.incident.priority)}`}>
@@ -414,25 +397,25 @@ export default function ActiveDispatchWorkspace({
                                             </span>
                                         )}
                                     </div>
-                                    <div className="text-xs text-slate-200 font-medium">
+                                    <div className="text-xs text-slate-900 dark:text-slate-200 font-semibold line-clamp-2">
                                         {selectedDispatch.incident?.barangay || selectedDispatch.incident?.place_of_incident || 'Reported Location'}
                                     </div>
-                                    <div className="text-[10px] font-mono text-slate-400">
+                                    <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                                         GPS: {parseFloat(selectedDispatch.incident?.incident_latitude)?.toFixed(5) || '--'}, {parseFloat(selectedDispatch.incident?.incident_longitude)?.toFixed(5) || '--'}
                                     </div>
                                 </div>
 
                                 {/* Q2: Where is the responder now? */}
-                                <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 space-y-1.5">
+                                <div className="bg-slate-50/80 dark:bg-white/[0.03] rounded-xl p-3 border border-slate-200/80 dark:border-white/10 space-y-1.5">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1">
-                                            <Truck className="w-3.5 h-3.5 text-blue-400" /> 2. Responder Location
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                            <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> 2. Responder Location
                                         </span>
-                                        <span className="text-[10px] font-mono font-medium text-slate-300">
+                                        <span className="text-[10px] font-mono font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-white/10 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-white/10">
                                             {selectedDispatch.ambulance?.plate_number}
                                         </span>
                                     </div>
-                                    <div className="text-xs text-slate-200 font-medium flex items-center gap-1.5">
+                                    <div className="text-xs text-slate-800 dark:text-slate-200 font-medium flex items-center gap-1.5">
                                         <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                         <span className="truncate">
                                             {selectedDispatch.driver ? `${selectedDispatch.driver.first_name} ${selectedDispatch.driver.last_name} (Driver)` : (selectedDispatch.teamLeader ? `${selectedDispatch.teamLeader.first_name} ${selectedDispatch.teamLeader.last_name} (TL)` : 'Assigned Crew')}
@@ -465,47 +448,47 @@ export default function ActiveDispatchWorkspace({
 
                                 {/* Q3 & Q4: Route & How close are they (Distance & ETA)? */}
                                 {selectedDispatch.dispatch_status === 'arrived_on_scene' ? (
-                                    <div className="bg-emerald-950/70 border border-emerald-500/30 rounded-xl p-3 space-y-1.5">
+                                    <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 rounded-xl p-3 space-y-1.5">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
-                                                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> 3 & 4. Mission Status
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> Mission Status
                                             </span>
-                                            <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border border-emerald-500/40 text-emerald-300 bg-emerald-500/10">
+                                            <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10">
                                                 Arrived
                                             </span>
                                         </div>
-                                        <div className="text-xs text-slate-200 font-medium">
+                                        <div className="text-xs text-emerald-900 dark:text-slate-200 font-medium">
                                             Responder is currently on scene at the incident.
                                         </div>
-                                        <div className="text-[10px] text-emerald-400/80 flex items-center gap-1 pt-0.5">
+                                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400/80 flex items-center gap-1 pt-0.5 font-medium">
                                             <CheckCircle className="w-3 h-3" /> Navigation completed
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 space-y-2">
+                                    <div className="bg-slate-50/80 dark:bg-white/[0.03] rounded-xl p-3 border border-slate-200/80 dark:border-white/10 space-y-2">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
-                                                <Navigation className="w-3.5 h-3.5 text-amber-400" /> 3 & 4. Route & Proximity
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                                <Navigation className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Route & Proximity
                                             </span>
                                             {routeTelemetry[selectedDispatch.id]?.isOffRoute && (
-                                                <span className="text-[9px] text-amber-300 font-bold bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-0.5">
+                                                <span className="text-[9px] text-amber-700 dark:text-amber-300 font-bold bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-0.5">
                                                     <AlertTriangle className="w-2.5 h-2.5" /> Off-Route
                                                 </span>
                                             )}
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-2 pt-1">
-                                            <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800/80">
-                                                <div className="text-[10px] text-slate-400 font-medium">Est. Arrival</div>
-                                                <div className="text-base font-bold font-mono text-amber-400 flex items-center gap-1 mt-0.5 truncate">
-                                                    <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                            <div className="bg-white dark:bg-white/[0.04] p-2.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-xs">
+                                                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Est. Arrival</div>
+                                                <div className="text-sm font-bold font-mono text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5 truncate">
+                                                    <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                                                     <span>{routeTelemetry[selectedDispatch.id]?.formattedEta || 'Calculating...'}</span>
                                                 </div>
                                             </div>
-                                            <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800/80">
-                                                <div className="text-[10px] text-slate-400 font-medium">Road Distance</div>
-                                                <div className="text-base font-bold font-mono text-blue-400 flex items-center gap-1 mt-0.5 truncate">
-                                                    <Compass className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                            <div className="bg-white dark:bg-white/[0.04] p-2.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-xs">
+                                                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Road Distance</div>
+                                                <div className="text-sm font-bold font-mono text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5 truncate">
+                                                    <Compass className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                                                     <span>{routeTelemetry[selectedDispatch.id]?.formattedDistance || '--'}</span>
                                                 </div>
                                             </div>
@@ -516,9 +499,9 @@ export default function ActiveDispatchWorkspace({
                         )}
                         
                         {filtered.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-500 py-12">
+                            <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
                                 <ShieldAlert className="w-12 h-12 mb-3 opacity-20" />
-                                <p>No active dispatches.</p>
+                                <p className="text-sm">No active dispatches.</p>
                             </div>
                         ) : (
                             filtered.map((dispatch) => {
@@ -530,14 +513,14 @@ export default function ActiveDispatchWorkspace({
                                     <div 
                                         key={dispatch.id}
                                         onClick={() => handleSelectDispatch(dispatch)}
-                                        className={`group cursor-pointer relative overflow-hidden rounded-xl border transition-all duration-300 ${
+                                        className={`group cursor-pointer relative overflow-hidden rounded-xl border transition-all duration-200 ${
                                             isSelected 
-                                                ? 'bg-slate-50 dark:bg-slate-800/80 border-primary shadow-sm dark:shadow-lg shadow-primary/20 scale-[1.02] z-10' 
-                                                : 'bg-white/50 dark:bg-slate-900/40 border-slate-200 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-300 dark:hover:border-white/10'
+                                                ? 'bg-slate-50 dark:bg-white/[0.06] border-[#F61509] shadow-sm ring-1 ring-[#F61509]/30 scale-[1.01] z-10' 
+                                                : 'bg-white dark:bg-white/[0.02] border-slate-200/80 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 hover:bg-slate-50/70 dark:hover:bg-white/[0.04]'
                                         }`}
                                     >
                                         {/* Highlight Accent */}
-                                        {isSelected && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary shadow-[0_0_12px_rgba(var(--color-primary),1)]" />}
+                                        {isSelected && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#F61509]" />}
 
                                         <div className="p-4 pl-5">
                                             <div className="flex items-start justify-between mb-2">
@@ -551,29 +534,29 @@ export default function ActiveDispatchWorkspace({
 
                                             <div className="mb-3">
                                                 <h3 className="text-slate-900 dark:text-white text-sm font-medium flex items-center gap-2 line-clamp-1">
-                                                    <AlertCircle className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+                                                    <AlertCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                                     {incident?.incident_type?.name}
                                                 </h3>
-                                                <div className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-1.5 mt-1">
-                                                    <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-500" />
+                                                <div className="text-xs text-slate-500 dark:text-slate-400 flex items-start gap-1.5 mt-1">
+                                                    <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
                                                     <span className="line-clamp-1">{incident?.barangay}</span>
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-white/5">
-                                                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950/50 px-2 py-1 rounded-md border border-slate-200 dark:border-white/5">
+                                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/5">
+                                                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-white/5 px-2 py-1 rounded-md border border-slate-200/60 dark:border-white/5">
                                                     <Truck className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                                                     <span className="text-xs font-mono font-medium text-slate-700 dark:text-slate-300">{dispatch.ambulance?.plate_number}</span>
                                                 </div>
                                                 {dispatch.dispatch_status === 'arrived_on_scene' ? (
-                                                    <div className="flex items-center gap-1 text-emerald-500 dark:text-emerald-400">
+                                                    <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
                                                         <CheckCircle className="w-3 h-3" />
                                                         <span className="text-[10px] font-bold tracking-wider uppercase">
-                                                            On Scene
+                                                             On Scene
                                                         </span>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center gap-1 text-amber-500 dark:text-amber-400">
+                                                    <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
                                                         <Clock className="w-3 h-3" />
                                                         <span className="text-[10px] font-bold tracking-wider uppercase">
                                                             {etaStr ? `ETA ${etaStr}` : 'ETA Live'}
@@ -590,7 +573,7 @@ export default function ActiveDispatchWorkspace({
                 </div>
 
                 {/* RIGHT COLUMN: Full-Height Live Map (9/12 width) */}
-                <div className="xl:col-span-9 flex flex-col h-full relative rounded-2xl overflow-hidden shadow-sm dark:shadow-2xl border border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-900 z-0">
+                <div className="xl:col-span-9 flex flex-col h-full relative rounded-2xl overflow-hidden shadow-sm dark:shadow-2xl border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-[#070b14] z-0 transition-colors duration-300">
                     
                     {/* The Map itself takes up the entire container */}
                     <div className="absolute inset-0">
@@ -605,29 +588,31 @@ export default function ActiveDispatchWorkspace({
 
                     {/* Floating Dispatch Overlay (Bottom Right) */}
                     {selectedDispatch && (
-                        <div className={`absolute bottom-6 right-6 z-20 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] flex flex-col bg-white/95 dark:bg-slate-950/85 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl dark:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] overflow-hidden pointer-events-auto ${
-                            isExpanded ? 'w-[550px] h-[650px]' : 'w-[420px] h-[200px]'
+                        <div className={`absolute bottom-5 right-5 z-20 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] flex flex-col bg-white/95 dark:bg-[#090e1a]/95 backdrop-blur-2xl border border-slate-200/80 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden pointer-events-auto ${
+                            isExpanded ? 'w-[540px] h-[620px]' : 'w-[420px] h-[210px]'
                         }`}>
                             
                             {/* Compact Summary Header (Always visible) */}
-                            <div className="p-5 border-b border-slate-200 dark:border-white/5 shrink-0 bg-gradient-to-b from-slate-50 dark:from-slate-900/50 to-transparent">
-                                <div className="flex items-start justify-between mb-3">
+                            <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-white/10 shrink-0 bg-slate-50/70 dark:bg-white/[0.02]">
+                                <div className="flex items-start justify-between mb-2.5">
                                     <div>
-                                        <div className="flex items-center gap-2 mb-1.5">
-                                            <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">#{selectedDispatch.id}</span>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-mono text-xs font-bold text-[#F61509] bg-[#F61509]/10 px-2 py-0.5 rounded-md border border-[#F61509]/20">
+                                                #{selectedDispatch.id}
+                                            </span>
                                             {selectedDispatch.incident?.priority && (
                                                 <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${getPriorityColor(selectedDispatch.incident.priority)}`}>
                                                     {selectedDispatch.incident.priority}
                                                 </span>
                                             )}
                                         </div>
-                                        <h3 className="text-slate-900 dark:text-white font-medium flex items-center gap-2 text-lg">
-                                            <AlertCircle className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                                        <h3 className="text-slate-900 dark:text-white font-bold flex items-center gap-2 text-base">
+                                            <AlertCircle className="w-4 h-4 text-[#F61509]" />
                                             {selectedDispatch.incident?.incident_type?.name}
                                         </h3>
                                     </div>
-                                    <div className="flex flex-col items-end gap-2">
-                                        <div className="flex items-center gap-2">
+                                    <div className="flex flex-col items-end gap-1.5">
+                                        <div className="flex items-center gap-1.5">
                                             {(() => {
                                                 const conn = getConnectionStatus(selectedDispatch);
                                                 return (
@@ -641,39 +626,40 @@ export default function ActiveDispatchWorkspace({
                                         </div>
                                         <button 
                                             onClick={() => setSelectedDispatch(null)}
-                                            className="text-slate-500 hover:text-white transition-colors"
+                                            className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                                            title="Close popup"
                                         >
                                             <X className="w-4 h-4" />
                                         </button>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center justify-between text-sm mb-4">
-                                    <div className="flex items-center gap-4">
+                                <div className="flex items-center justify-between text-xs mb-3.5">
+                                    <div className="flex items-center gap-3">
                                         <div className="flex items-center gap-1.5">
-                                            <Truck className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                                            <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{selectedDispatch.ambulance?.plate_number}</span>
+                                            <Truck className="w-4 h-4 text-slate-400" />
+                                            <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{selectedDispatch.ambulance?.plate_number}</span>
                                         </div>
                                         <div className="flex items-center gap-1.5">
-                                            <UserIcon className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                                            <span className="font-medium text-slate-700 dark:text-slate-200">{selectedDispatch.teamLeader?.first_name || 'N/A'}</span>
+                                            <UserIcon className="w-4 h-4 text-slate-400" />
+                                            <span className="font-medium text-slate-700 dark:text-slate-300">{selectedDispatch.teamLeader?.first_name || 'N/A'}</span>
                                         </div>
                                     </div>
                                     {selectedDispatch.dispatch_status === 'arrived_on_scene' ? (
-                                        <div className="flex items-center gap-1.5 text-emerald-400 font-medium bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md">
-                                            <CheckCircle className="w-4 h-4 text-emerald-400" />
+                                        <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+                                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                                             <span>Arrived on Scene</span>
                                         </div>
                                     ) : (
-                                        <div className="flex items-center gap-1.5 text-amber-500 dark:text-amber-400 font-medium bg-amber-500/10 px-2.5 py-1 rounded-md">
-                                            <Clock className="w-4 h-4" />
+                                        <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
+                                            <Clock className="w-3.5 h-3.5" />
                                             <span>
                                                 {routeTelemetry[selectedDispatch.id]?.formattedEta 
                                                     ? `ETA ${routeTelemetry[selectedDispatch.id].formattedEta}` 
                                                     : 'ETA Live'}
                                             </span>
                                             {routeTelemetry[selectedDispatch.id]?.formattedDistance && (
-                                                <span className="text-xs text-amber-400/70 border-l border-amber-400/30 pl-1.5">
+                                                <span className="text-xs text-amber-500/80 border-l border-amber-500/30 pl-1.5">
                                                     {routeTelemetry[selectedDispatch.id].formattedDistance}
                                                 </span>
                                             )}
@@ -684,28 +670,19 @@ export default function ActiveDispatchWorkspace({
                                 <div className="flex gap-2">
                                     <button 
                                         onClick={() => setIsExpanded(!isExpanded)}
-                                        className="flex-1 py-2 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200 dark:border-white/5 rounded-lg text-sm text-slate-700 dark:text-slate-300 font-medium transition-colors flex items-center justify-center gap-2"
+                                        className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200/80 dark:border-white/10 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                                     >
-                                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                                        {isExpanded ? 'Collapse' : 'Details'}
-                                    </button>
-                                    <button
-                                        onClick={() => handleForceResolve(selectedDispatch)}
-                                        disabled={actionLoading}
-                                        className="px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                                        title="Mark Mission as Resolved"
-                                    >
-                                        <CheckCircle className="w-3.5 h-3.5" />
-                                        Resolve
+                                        {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                                        {isExpanded ? 'Collapse Mission Details' : 'View Full Mission Details'}
                                     </button>
                                     <button
                                         onClick={() => handleCancelDispatch(selectedDispatch)}
                                         disabled={actionLoading}
-                                        className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                                        className="px-4 py-2 bg-[#F61509]/10 hover:bg-[#F61509]/20 text-[#F61509] border border-[#F61509]/20 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
                                         title="Cancel Mission and Revert Incident"
                                     >
                                         <XCircle className="w-3.5 h-3.5" />
-                                        Cancel
+                                        Cancel Mission
                                     </button>
                                 </div>
                             </div>
@@ -713,7 +690,7 @@ export default function ActiveDispatchWorkspace({
                             {/* Expanded Tabbed Content */}
                             <div className={`flex-1 flex flex-col overflow-hidden transition-opacity duration-300 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
                                 {/* Tab Navigation */}
-                                <div className="flex overflow-x-auto border-b border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-950/40 hide-scrollbar pt-1 px-2 shrink-0">
+                                <div className="flex overflow-x-auto border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] hide-scrollbar pt-1 px-2 shrink-0">
                                     {[
                                         { id: 'incident', icon: AlertCircle, label: 'Incident' },
                                         { id: 'crew', icon: Truck, label: 'Crew' },
@@ -724,9 +701,9 @@ export default function ActiveDispatchWorkspace({
                                         <button 
                                             key={tab.id}
                                             onClick={() => setActiveTab(tab.id)} 
-                                            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-medium border-b-2 transition-all whitespace-nowrap ${
+                                            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer ${
                                                 activeTab === tab.id 
-                                                    ? 'border-primary text-primary bg-primary/5 rounded-t-lg' 
+                                                    ? 'border-[#F61509] text-[#F61509] bg-[#F61509]/5 rounded-t-lg' 
                                                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-t-lg'
                                             }`}
                                         >

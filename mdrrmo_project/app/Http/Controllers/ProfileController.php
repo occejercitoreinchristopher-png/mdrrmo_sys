@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Concerns\PasswordValidationRules;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -28,6 +29,11 @@ class ProfileController extends Controller
                 'first_name' => $user->first_name,
                 'middle_name' => $user->middle_name,
                 'last_name' => $user->last_name,
+                'birthdate' => $user->birthdate ? Carbon::parse($user->birthdate)->format('Y-m-d') : null,
+                'age' => $user->age,
+                'gender' => $user->gender,
+                'address' => $user->address,
+                'zip_code' => $user->zip_code,
                 'email' => $user->email,
                 'phone_number' => $user->phone_number,
                 'role' => $user->role,
@@ -51,7 +57,12 @@ class ProfileController extends Controller
             'first_name' => ['required', 'string', 'max:255'],
             'middle_name' => ['nullable', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
+            'gender' => ['nullable', 'string', 'max:50'],
+            'birthdate' => ['nullable', 'date', 'before_or_equal:today'],
+            'age' => ['nullable', 'integer', 'min:1', 'max:120'],
             'position' => ['nullable', 'string', 'max:255'],
+            'address' => ['nullable', 'string', 'max:500'],
+            'zip_code' => ['nullable', 'string', 'max:20'],
             'phone_number' => [
                 'required',
                 'string',
@@ -70,7 +81,12 @@ class ProfileController extends Controller
             'first_name' => $validated['first_name'],
             'middle_name' => $validated['middle_name'] ?? null,
             'last_name' => $validated['last_name'],
+            'gender' => $validated['gender'] ?? null,
+            'birthdate' => $validated['birthdate'] ?? null,
+            'age' => $validated['age'] ?? null,
             'position' => $validated['position'] ?? null,
+            'address' => $validated['address'] ?? null,
+            'zip_code' => $validated['zip_code'] ?? null,
             'phone_number' => $validated['phone_number'],
         ]);
 

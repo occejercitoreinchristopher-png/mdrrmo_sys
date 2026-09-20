@@ -13,10 +13,10 @@ export default function UserCard({ user, onEdit, onDelete }) {
                         {initials || <User className="w-5 h-5" />}
                     </div>
                     <div className="min-w-0">
-                        <p className="font-semibold text-white truncate">
+                        <p className="font-semibold text-slate-900 dark:text-white truncate">
                             {user.first_name} {user.middle_name ? `${user.middle_name[0]}.` : ''} {user.last_name}
                         </p>
-                        <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
                     </div>
                 </div>
 
@@ -27,16 +27,16 @@ export default function UserCard({ user, onEdit, onDelete }) {
                     </div>
                 </div>
 
-                <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
+                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200/80 dark:border-white/5">
                     <button
                         onClick={() => onEdit?.(user)}
-                        className="flex-1 text-xs py-1.5 rounded-lg bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                        className="flex-1 text-xs py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white font-medium transition-colors"
                     >
                         Edit
                     </button>
                     <button
                         onClick={() => onDelete?.(user)}
-                        className="flex-1 text-xs py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                        className="flex-1 text-xs py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 font-medium transition-colors"
                     >
                         Delete
                     </button>

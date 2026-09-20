@@ -74,7 +74,7 @@ class IncidentController extends Controller
             'description' => $validated['description'] ?? '',
             'incident_status' => 'pending',
             'priority' => 'Moderate',
-            'reported_at' => $validated['reported_at'] ?? now(),
+            'reported_at' => now(),
             'report_source' => 'resident_app',
         ]);
 

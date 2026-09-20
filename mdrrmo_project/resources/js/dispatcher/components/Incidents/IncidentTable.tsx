@@ -119,14 +119,28 @@ export default function IncidentTable({
         },
         {
             key: 'reported_at',
-            header: 'Reported',
+            header: 'Reported At',
             sortable: true,
-            render: (v) =>
-                v
-                    ? new Date(v).toLocaleDateString('en-PH', {
-                          month: 'short', day: 'numeric', year: 'numeric',
-                      })
-                    : '—',
+            render: (v) => {
+                if (!v) return '—';
+                const date = new Date(v);
+                const dateStr = date.toLocaleDateString('en-PH', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                });
+                const timeStr = date.toLocaleTimeString('en-PH', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                });
+                return (
+                    <div className="flex flex-col whitespace-nowrap">
+                        <span className="font-semibold text-slate-900 dark:text-slate-200 text-xs">{dateStr}</span>
+                        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{timeStr}</span>
+                    </div>
+                );
+            },
         },
         {
             key: 'actions',
@@ -187,18 +201,20 @@ export default function IncidentTable({
                     className="flex-1 min-w-[200px]"
                 />
                 <Select
+                    id="incident-priority-filter"
                     value={localPriorityFilter}
                     onChange={setLocalPriorityFilter}
                     options={PRIORITY_OPTIONS}
-                    placeholder={null}
+                    placeholder=""
                     className="w-40"
                 />
                 {statusFilter !== 'history' && (
                     <Select
+                        id="incident-status-filter"
                         value={localStatusFilter}
                         onChange={setLocalStatusFilter}
                         options={STATUS_OPTIONS}
-                        placeholder={null}
+                        placeholder=""
                         className="w-40"
                     />
                 )}

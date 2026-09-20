@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AmbulanceController;
 use App\Http\Controllers\Admin\BarangayController;
+use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\LocationCodeController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\UserController;
@@ -55,7 +56,7 @@ Route::middleware(['auth', 'role:admin,dispatcher'])->group(function () {
 // Admin Routes
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->group(function () {
     Route::get('/', fn () => redirect()->route('admin.dashboard'));
-    Route::inertia('/dashboard', 'admin/Dashboard')->name('dashboard');
+    Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
     Route::get('/users', [UserController::class, 'index'])->name('users');
     Route::get('/residents', [UserController::class, 'residents'])->name('residents');
 

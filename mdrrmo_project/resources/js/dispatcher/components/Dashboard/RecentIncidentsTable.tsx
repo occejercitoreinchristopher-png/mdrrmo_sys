@@ -75,12 +75,26 @@ export default function RecentIncidentsTable({ incidents = [] }: { incidents?: a
                                             status={incident.incident_status}
                                         />
                                     </td>
-                                    <td className="px-5 py-3 text-slate-500 dark:text-slate-400 text-xs">
-                                        {incident.reported_at
-                                            ? new Date(
-                                                  incident.reported_at,
-                                              ).toLocaleDateString('en-PH')
-                                            : '—'}
+                                    <td className="px-5 py-3 text-xs whitespace-nowrap">
+                                        {incident.reported_at ? (
+                                            <div className="flex flex-col">
+                                                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                    {new Date(incident.reported_at).toLocaleDateString('en-PH', {
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                    })}
+                                                </span>
+                                                <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                                                    {new Date(incident.reported_at).toLocaleTimeString('en-PH', {
+                                                        hour: 'numeric',
+                                                        minute: '2-digit',
+                                                        hour12: true,
+                                                    })}
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-slate-400">—</span>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

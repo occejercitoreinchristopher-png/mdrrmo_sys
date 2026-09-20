@@ -10,13 +10,13 @@ interface SelectOption {
 
 interface SelectProps extends Omit<ComponentProps<'select'>, 'value' | 'onChange'> {
     label?: string;
-    id: string;
+    id?: string;
     value?: string | number;
     onChange?: (value: string) => void;
     options?: SelectOption[];
     error?: string;
     required?: boolean;
-    placeholder?: string;
+    placeholder?: string | null;
     className?: string;
 }
 
@@ -50,15 +50,15 @@ export default function Select({
                     value={value}
                     onChange={handleChange}
                     className={clsx(
-                        'w-full appearance-none bg-white dark:bg-white/5 border rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white transition-all duration-200 outline-none cursor-pointer shadow-sm dark:shadow-none',
-                        'focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50',
-                        error ? 'border-red-500/50' : 'border-slate-300 dark:border-white/10',
+                        'w-full appearance-none bg-white dark:bg-[#0f172a] border rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white transition-all duration-200 outline-none cursor-pointer shadow-sm dark:shadow-none [color-scheme:light] dark:[color-scheme:dark]',
+                        'focus:ring-2 focus:ring-blue-500/30 dark:focus:ring-blue-500/20 focus:border-blue-500/60 dark:focus:border-blue-500/50',
+                        error ? 'border-red-500/50' : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20',
                         className,
                     )}
                     {...props}
                 >
                     {placeholder && (
-                        <option value="" disabled className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                        <option value="" disabled className="bg-white text-slate-900 dark:bg-slate-900 dark:text-white">
                             {placeholder}
                         </option>
                     )}
@@ -66,7 +66,7 @@ export default function Select({
                         <option
                             key={opt.value}
                             value={opt.value}
-                            className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                            className="bg-white text-slate-900 dark:bg-slate-900 dark:text-white"
                             disabled={opt.disabled}
                         >
                             {opt.label}
