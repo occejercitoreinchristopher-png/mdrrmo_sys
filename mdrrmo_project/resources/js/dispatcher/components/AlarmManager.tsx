@@ -1,6 +1,6 @@
 import React, { useContext, useEffect } from 'react';
 import { AlarmContext } from '../contexts/AlarmContext';
-import { AlertTriangle, MapPin, Clock, X } from 'lucide-react';
+import { AlertTriangle, MapPin, Clock, Volume2 } from 'lucide-react';
 import { router } from '@inertiajs/react';
 
 export default function AlarmManager() {
@@ -33,6 +33,8 @@ export default function AlarmManager() {
     // Formatting date and priority
     const priorityColor = activeAlarm.priority?.toLowerCase() === 'high' ? 'text-red-500' : 'text-orange-500';
     const reportedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); // Fallback if no created_at
+    const prankHistory = activeAlarm.reporter_prank_history;
+    const hasPrankHistory = Boolean(prankHistory?.has_prank_history && (prankHistory?.prank_count ?? 0) > 0);
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-20 px-4 pointer-events-none">
@@ -42,13 +44,38 @@ export default function AlarmManager() {
             {/* Alarm Modal */}
             <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl border-2 border-red-500 overflow-hidden pointer-events-auto transform transition-all animate-in slide-in-from-top-10 fade-in duration-300">
                 {/* Header (Pulsing Red) */}
-                <div className="bg-red-500 text-white p-4 flex items-center justify-center gap-3 relative overflow-hidden">
+                <div className="bg-red-500 text-white p-4 flex items-center justify-between relative overflow-hidden">
                     <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
-                    <AlertTriangle className="w-8 h-8 relative z-10" />
-                    <h2 className="text-xl font-black uppercase tracking-widest relative z-10">New Emergency Incident</h2>
+                    <div className="flex items-center gap-3 relative z-10">
+                        <AlertTriangle className="w-8 h-8 shrink-0 animate-bounce" />
+                        <div>
+                            <h2 className="text-xl font-black uppercase tracking-widest leading-tight">New Emergency Incident</h2>
+                            <p className="text-xs text-red-100 font-semibold tracking-wide flex items-center gap-1.5 mt-0.5">
+                                <Volume2 className="w-3.5 h-3.5 animate-pulse text-yellow-300" /> High-Priority Siren Active
+                            </p>
+                        </div>
+                    </div>
                 </div>
                 
                 <div className="p-6">
+                    {/* Prank History Reference Alert */}
+                    {hasPrankHistory && (
+                        <div className="mb-5 p-3.5 bg-amber-50/95 dark:bg-amber-950/40 border-2 border-amber-500/80 rounded-xl text-xs space-y-1.5 shadow-sm">
+                            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold uppercase tracking-wide">
+                                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                                <span>Reference Flag: Reporter Has {prankHistory.prank_count} Prior Prank Report{prankHistory.prank_count === 1 ? '' : 's'}</span>
+                            </div>
+                            {prankHistory.latest_prank && (
+                                <p className="text-[11px] text-amber-900/90 dark:text-amber-200/90">
+                                    <strong>Latest ({prankHistory.latest_prank.formatted_date}):</strong> "{prankHistory.latest_prank.rejection_reason}"
+                                </p>
+                            )}
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 italic">
+                                Note: Evaluate this incident independently. Verify caller responsiveness before dispatch.
+                            </p>
+                        </div>
+                    )}
+
                     <div className="space-y-4 mb-8">
                         <div className="flex flex-col">
                             <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1">Incident Type</span>
@@ -87,9 +114,9 @@ export default function AlarmManager() {
                     
                     <button 
                         onClick={acknowledgeAlarm}
-                        className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl text-lg uppercase tracking-wide transition-colors shadow-lg shadow-red-500/30 flex items-center justify-center gap-2"
+                        className="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] text-white font-bold py-4 rounded-xl text-lg uppercase tracking-wide transition-all shadow-lg shadow-red-500/30 flex items-center justify-center gap-2 cursor-pointer"
                     >
-                        Acknowledge Incident
+                        Acknowledge & Silence Alarm
                     </button>
                 </div>
             </div>

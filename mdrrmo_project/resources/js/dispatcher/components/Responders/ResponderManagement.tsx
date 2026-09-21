@@ -156,14 +156,24 @@ export default function ResponderManagement({ users = [], pagination = null }: R
         },
         {
             key: 'permanent_crew',
-            header: 'Permanent Crew',
+            header: 'Team / Pool',
             render: (_: any, row: any) => (
                 <div className="flex flex-col">
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-900 dark:text-slate-200 capitalize">
-                        <Shield className="w-3.5 h-3.5 text-[#F61509] shrink-0" />
-                        {toPascalCase(row.permanent_crew || 'Unassigned')}
+                        {row.is_reliever ? (
+                            <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                Reliever Pool
+                            </span>
+                        ) : (
+                            <>
+                                <Shield className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                {toPascalCase(row.permanent_crew || 'Unassigned')}
+                            </>
+                        )}
                     </span>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400">Official Crew</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        {row.is_reliever ? 'Standby Fill-in' : 'Permanent Crew'}
+                    </span>
                 </div>
             )
         },
@@ -190,15 +200,15 @@ export default function ResponderManagement({ users = [], pagination = null }: R
                     return <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">— Standby</span>;
                 }
 
-                if (mission.is_borrowed) {
+                if (mission.is_reliever) {
                     return (
                         <div className="flex flex-col gap-1 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/25 max-w-[280px]">
                             <div className="flex items-center gap-1.5">
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40">
-                                    Borrowed
+                                    Reliever Mission
                                 </span>
                                 <span className="text-xs font-bold text-amber-800 dark:text-amber-200 capitalize">
-                                    Borrowed to: {toPascalCase(mission.borrowed_to || mission.dispatch_team || 'Other Team')}
+                                    Assigned to: {toPascalCase(mission.dispatch_team || 'Emergency Mission')}
                                 </span>
                             </div>
                             <div className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-1">
@@ -245,7 +255,7 @@ export default function ResponderManagement({ users = [], pagination = null }: R
         <div className="space-y-4">
             <PageHeader 
                 title="Responder Availability & Crew Roster" 
-                subtitle="Track permanent crew assignments, live status, and temporary borrowed missions across teams." 
+                subtitle="Track permanent team assignments, standby relievers, and live emergency mission deployments." 
             />
 
             <Card padding={false}>

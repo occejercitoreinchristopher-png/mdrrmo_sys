@@ -106,6 +106,105 @@ function distanceToPolylineInMeters(lon: number, lat: number, coordinates: [numb
     return minDistance;
 }
 
+/**
+ * Snap point [lon, lat] to nearest point on a polyline if within maxDistanceMeters.
+ * Also computes the forward segment bearing (angle in degrees) along the route!
+ */
+/**
+ * Snap point [lon, lat] to nearest point on a polyline if within maxDistanceMeters.
+ * Also computes the forward segment bearing (angle in degrees) along the route and segment index.
+ */
+export function snapToPolyline(
+    lon: number, 
+    lat: number, 
+    coordinates: [number, number][], 
+    maxDistanceMeters = 150
+): { lng: number; lat: number; bearing: number; segmentIndex: number; isSnapped: boolean } {
+    if (!coordinates || coordinates.length < 2) {
+        return { lng: lon, lat, bearing: 0, segmentIndex: 0, isSnapped: false };
+    }
+
+    let minDistance = Infinity;
+    let bestPoint: [number, number] = [lon, lat];
+    let bestBearing = 0;
+    let bestSegmentIndex = 0;
+
+    for (let i = 0; i < coordinates.length - 1; i++) {
+        const aLon = coordinates[i][0];
+        const aLat = coordinates[i][1];
+        const bLon = coordinates[i + 1][0];
+        const bLat = coordinates[i + 1][1];
+
+        const cosLat = Math.cos((lat * Math.PI) / 180);
+        const px = lon * cosLat * 111320;
+        const py = lat * 110540;
+        const ax = aLon * cosLat * 111320;
+        const ay = aLat * 110540;
+        const bx = bLon * cosLat * 111320;
+        const by = bLat * 110540;
+
+        const dx = bx - ax;
+        const dy = by - ay;
+        const lenSq = dx * dx + dy * dy;
+
+        if (lenSq === 0) continue;
+
+        const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+        const projLon = aLon + t * (bLon - aLon);
+        const projLat = aLat + t * (bLat - aLat);
+
+        const projX = ax + t * dx;
+        const projY = ay + t * dy;
+        const dist = Math.hypot(px - projX, py - projY);
+
+        if (dist < minDistance) {
+            minDistance = dist;
+            bestPoint = [projLon, projLat];
+            bestSegmentIndex = i;
+            const rad = Math.atan2(bLon - aLon, bLat - aLat);
+            bestBearing = (rad * 180 / Math.PI + 360) % 360;
+        }
+    }
+
+    if (minDistance <= maxDistanceMeters) {
+        return { 
+            lng: bestPoint[0], 
+            lat: bestPoint[1], 
+            bearing: bestBearing, 
+            segmentIndex: bestSegmentIndex, 
+            isSnapped: true 
+        };
+    }
+
+    return { lng: lon, lat, bearing: 0, segmentIndex: 0, isSnapped: false };
+}
+
+/**
+ * Calculates remaining distance (in meters) from a snapped point along the rest of the polyline
+ */
+export function getRemainingDistance(
+    snappedLon: number, 
+    snappedLat: number, 
+    segmentIndex: number, 
+    coordinates: [number, number][]
+): number {
+    if (!coordinates || coordinates.length < 2) return 0;
+    
+    // Distance from snapped position to the end of the current segment
+    const nextPt = coordinates[Math.min(segmentIndex + 1, coordinates.length - 1)];
+    let total = getDistanceInMeters(snappedLat, snappedLon, nextPt[1], nextPt[0]);
+
+    // Add up all remaining segments
+    for (let i = segmentIndex + 1; i < coordinates.length - 1; i++) {
+        total += getDistanceInMeters(
+            coordinates[i][1], coordinates[i][0],
+            coordinates[i + 1][1], coordinates[i + 1][0]
+        );
+    }
+
+    return total;
+}
+
 export function formatDistance(meters: number | null): string {
     if (meters === null || isNaN(meters)) return '--';
     if (meters < 1000) return `${Math.round(meters)} m`;
@@ -148,6 +247,9 @@ export default function LiveMonitoringMap({
     } | null>(null);
 
     const prevActiveIdRef = useRef<number | string | null>(null);
+    const lastRouteCalcTimeRef = useRef<number>(0);
+    const isRoutingInProgressRef = useRef<boolean>(false);
+    const consecutiveOffRouteCountRef = useRef<number>(0);
 
     // Extract current responder location for a dispatch
     const getResponderLocation = useCallback((dispatch: any): LiveLocation | null => {
@@ -179,10 +281,18 @@ export default function LiveMonitoringMap({
     const calculateRoute = useCallback(async (
         startLon: number, startLat: number,
         destLon: number, destLat: number,
-        dispatchId: number | string
+        dispatchId: number | string,
+        keepExistingLine = false
     ) => {
+        if (isRoutingInProgressRef.current) return;
+        isRoutingInProgressRef.current = true;
+        
+        if (!keepExistingLine) {
+            setIsCalculatingRoute(true);
+        }
+        lastRouteCalcTimeRef.current = Date.now();
+
         const token = import.meta.env.VITE_MAPBOX_TOKEN;
-        setIsCalculatingRoute(true);
 
         // 1. Try Mapbox Directions API first
         if (token) {
@@ -199,6 +309,7 @@ export default function LiveMonitoringMap({
 
                     setRouteGeojson(geometry);
                     setIsOffRoute(false);
+                    consecutiveOffRouteCountRef.current = 0;
 
                     activeRouteRef.current = {
                         dispatchId,
@@ -218,6 +329,7 @@ export default function LiveMonitoringMap({
                         });
                     }
                     setIsCalculatingRoute(false);
+                    isRoutingInProgressRef.current = false;
                     return;
                 }
             } catch (err) {
@@ -239,6 +351,7 @@ export default function LiveMonitoringMap({
 
                 setRouteGeojson(geometry);
                 setIsOffRoute(false);
+                consecutiveOffRouteCountRef.current = 0;
 
                 activeRouteRef.current = {
                     dispatchId,
@@ -262,15 +375,17 @@ export default function LiveMonitoringMap({
             console.error("Both Mapbox and OSRM routing failed:", osrmErr);
         } finally {
             setIsCalculatingRoute(false);
+            isRoutingInProgressRef.current = false;
         }
     }, [onRouteTelemetryChange]);
 
-    // Off-route detection & smart route recalculation for active dispatch
+    // Stable route tracking: Calculates route ONCE when mission selected; glides along route without re-routing on every move!
     useEffect(() => {
         if (!activeDispatch) {
             setRouteGeojson(null);
             activeRouteRef.current = null;
             setIsOffRoute(false);
+            consecutiveOffRouteCountRef.current = 0;
             if (prevActiveIdRef.current !== null) {
                 prevActiveIdRef.current = null;
                 // Animate smoothly back to default fleet overview
@@ -298,6 +413,7 @@ export default function LiveMonitoringMap({
             setRouteGeojson(null);
             activeRouteRef.current = null;
             setIsOffRoute(false);
+            consecutiveOffRouteCountRef.current = 0;
             if (onRouteTelemetryChange) {
                 onRouteTelemetryChange(dispatchId, {
                     distanceMeters: 0,
@@ -313,40 +429,70 @@ export default function LiveMonitoringMap({
 
         // Cannot route without both valid coordinates
         if (!incLon || !incLat || !responderLoc) {
-            setRouteGeojson(null);
-            activeRouteRef.current = null;
             return;
         }
 
         const currentRoute = activeRouteRef.current;
         const isNewDispatch = prevActiveIdRef.current !== dispatchId;
-        prevActiveIdRef.current = dispatchId;
 
-        // If no route yet or active dispatch changed: calculate initial route
+        // 1. If dispatch changed or no route established yet: calculate route ONCE
         if (!currentRoute || isNewDispatch || currentRoute.dispatchId !== dispatchId) {
+            prevActiveIdRef.current = dispatchId;
             calculateRoute(responderLoc.longitude, responderLoc.latitude, incLon, incLat, dispatchId);
             return;
         }
 
-        // Check if responder is off-route:
-        // Compare responder's current position to the polyline of the active route
-        const deviationDistance = distanceToPolylineInMeters(
-            responderLoc.longitude,
-            responderLoc.latitude,
-            currentRoute.coordinates
-        );
+        // 2. Responder is moving while active route is already established!
+        // Snap responder to route polyline and update distance/ETA in-memory WITHOUT re-fetching route!
+        const snapped = snapToPolyline(responderLoc.longitude, responderLoc.latitude, currentRoute.coordinates, 150);
 
-        const OFF_ROUTE_THRESHOLD_METERS = 50;
-
-        if (deviationDistance > OFF_ROUTE_THRESHOLD_METERS) {
-            // Significant deviation detected: recalculate new route
-            setIsOffRoute(true);
-            calculateRoute(responderLoc.longitude, responderLoc.latitude, incLon, incLat, dispatchId);
-        } else {
-            // On route: DO NOT recalculate route!
+        if (snapped.isSnapped) {
+            // Vehicle is on or near the planned route:
+            consecutiveOffRouteCountRef.current = 0;
             setIsOffRoute(false);
+
+            // Compute remaining distance along the route polyline in real-time
+            const remainingMeters = getRemainingDistance(
+                snapped.lng, 
+                snapped.lat, 
+                snapped.segmentIndex, 
+                currentRoute.coordinates
+            );
+
+            // Calculate ETA proportional to remaining distance
+            const speedMps = (currentRoute.distance > 0 && currentRoute.duration > 0)
+                ? (currentRoute.distance / currentRoute.duration)
+                : 9.7; // ~35 km/h fallback
+            const remainingSeconds = Math.max(15, Math.round(remainingMeters / Math.max(speedMps, 3)));
+
+            if (onRouteTelemetryChange) {
+                onRouteTelemetryChange(dispatchId, {
+                    distanceMeters: remainingMeters,
+                    durationSeconds: remainingSeconds,
+                    formattedDistance: formatDistance(remainingMeters),
+                    formattedEta: formatDuration(remainingSeconds),
+                    isOffRoute: false,
+                    routeGeometry: routeGeojson,
+                });
+            }
+        } else {
+            // Responder is genuinely > 150m away from the entire route
+            consecutiveOffRouteCountRef.current += 1;
+
+            // Only recalculate route if sustained off-route for 4+ consecutive location updates AND at least 30s cooldown
+            const OFF_ROUTE_CONSECUTIVE_LIMIT = 4;
+            const RECALC_COOLDOWN_MS = 30000;
+            const now = Date.now();
+
+            if (
+                consecutiveOffRouteCountRef.current >= OFF_ROUTE_CONSECUTIVE_LIMIT &&
+                now - lastRouteCalcTimeRef.current >= RECALC_COOLDOWN_MS
+            ) {
+                setIsOffRoute(true);
+                calculateRoute(responderLoc.longitude, responderLoc.latitude, incLon, incLat, dispatchId, true);
+            }
         }
-    }, [activeDispatch, liveLocations, getResponderLocation, calculateRoute, onRouteTelemetryChange]);
+    }, [activeDispatch, liveLocations, getResponderLocation, calculateRoute, onRouteTelemetryChange, routeGeojson]);
 
     // Smooth cinematic camera animation (zooms smoothly without snapping or teleporting)
     const animateToDispatch = useCallback((dispatch: any) => {
@@ -539,60 +685,160 @@ export default function LiveMonitoringMap({
                                             if (onSelectDispatch) onSelectDispatch(dispatch);
                                         }}
                                     >
-                                        <div className="flex flex-col items-center group cursor-pointer">
-                                            <div className="px-2.5 py-0.5 rounded-full text-white font-bold text-[10px] shadow-lg uppercase tracking-wider mb-1 flex items-center gap-1.5 border transition-all bg-[#F61509] border-red-300 scale-105 shadow-[#F61509]/40 ring-2 ring-[#F61509]/30">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                                        <div className="flex flex-col items-center group cursor-pointer select-none">
+                                            {/* Header Badge Tag */}
+                                            <div className="px-2.5 py-0.5 rounded-full text-white font-bold text-[10px] shadow-lg uppercase tracking-wider mb-1 flex items-center gap-1.5 border border-rose-400/40 bg-gradient-to-r from-rose-600 to-red-600 backdrop-blur-md">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                                                 <span>INCIDENT #{dispatch.incident_id || dispatch.id}</span>
                                             </div>
+
+                                            {/* Premium Vector Teardrop Pin (NO BACKGROUND CIRCLE) */}
                                             <div className="relative flex items-center justify-center">
-                                                <span className="absolute w-8 h-8 rounded-full bg-[#F61509]/40 animate-ping" />
-                                                <div className="p-2 rounded-full border-2 border-white shadow-xl transition-all bg-[#F61509] scale-110">
-                                                    <MapPin className="w-4 h-4 text-white" />
-                                                </div>
+                                                <svg 
+                                                    width="36" 
+                                                    height="46" 
+                                                    viewBox="0 0 36 46" 
+                                                    fill="none" 
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    className="filter drop-shadow-[0_10px_18px_rgba(225,29,72,0.5)] transform hover:scale-110 transition-transform"
+                                                >
+                                                    <defs>
+                                                        <linearGradient id={`inc-pin-${dispatch.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                                                            <stop offset="0%" stopColor="#fb7185" />
+                                                            <stop offset="40%" stopColor="#f43f5e" />
+                                                            <stop offset="100%" stopColor="#9f1239" />
+                                                        </linearGradient>
+                                                        <radialGradient id={`inc-ground-${dispatch.id}`} cx="50%" cy="50%" r="50%">
+                                                            <stop offset="0%" stopColor="rgba(0,0,0,0.65)" />
+                                                            <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+                                                        </radialGradient>
+                                                    </defs>
+
+                                                    {/* Ground Contact Shadow */}
+                                                    <ellipse cx="18" cy="44" rx="8" ry="2" fill={`url(#inc-ground-${dispatch.id})`} />
+
+                                                    {/* Teardrop Pin Body */}
+                                                    <path 
+                                                        d="M18 2C10.5 2 4.5 8 4.5 15.5C4.5 25.5 18 42 18 42C18 42 31.5 25.5 31.5 15.5C31.5 8 25.5 2 18 2Z" 
+                                                        fill={`url(#inc-pin-${dispatch.id})`} 
+                                                        stroke="#FFFFFF" 
+                                                        strokeWidth="1.8" 
+                                                        strokeLinejoin="round"
+                                                    />
+
+                                                    {/* Upper Specular Gloss Sheen */}
+                                                    <path 
+                                                        d="M18 4C11.8 4 6.8 9 6.8 15.2C6.8 17.5 7.5 19.5 8.6 21.4C9.4 16.3 13.2 12.4 18 12.4C22.8 12.4 26.6 16.3 27.4 21.4C28.5 19.5 29.2 17.5 29.2 15.2C29.2 9 24.2 4 18 4Z" 
+                                                        fill="white" 
+                                                        fillOpacity="0.45" 
+                                                    />
+
+                                                    {/* White Core Ring */}
+                                                    <circle cx="18" cy="15.5" r="6" fill="#FFFFFF" filter="drop-shadow(0 1px 2px rgba(0,0,0,0.35))" />
+
+                                                    {/* Center Ruby Beacon */}
+                                                    <circle cx="18" cy="15.5" r="3.2" fill="#be123c" />
+                                                </svg>
                                             </div>
                                         </div>
                                     </Marker>
                                 )}
 
-                                {/* 🔵 RESPONDER / DRIVER LIVE LOCATION MARKER (Updates live as responder moves) */}
-                                {responderLoc && (
-                                    <Marker 
-                                        longitude={responderLoc.longitude} 
-                                        latitude={responderLoc.latitude}
-                                        anchor="center"
-                                        onClick={(e) => {
-                                            e.originalEvent?.preventDefault();
-                                            e.originalEvent?.stopPropagation();
-                                            if (onSelectDispatch) onSelectDispatch(dispatch);
-                                        }}
-                                    >
-                                        <div className="flex flex-col items-center group cursor-pointer">
-                                            <div className={`px-2 py-0.5 rounded-full text-white font-bold text-[10px] shadow-md uppercase tracking-wider mb-1 flex items-center gap-1 border transition-all whitespace-nowrap ${
-                                                isSelected 
-                                                    ? 'bg-blue-600 border-blue-400 scale-105 shadow-blue-600/50 ring-2 ring-blue-500/30' 
-                                                    : 'bg-slate-800/90 border-slate-600 text-slate-300 hover:bg-slate-700'
-                                            }`}>
-                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                                <span>{dispatch.ambulance?.plate_number || (dispatch.driver ? `${dispatch.driver.first_name} ${dispatch.driver.last_name}` : 'Responder')}</span>
-                                            </div>
-                                            <div className="relative flex items-center justify-center">
-                                                {isSelected && (
-                                                    <span className="absolute w-10 h-10 rounded-full bg-blue-500/30 animate-pulse" />
-                                                )}
-                                                <div 
-                                                    className={`p-2 rounded-full border-2 border-white shadow-xl text-white transition-all transform duration-500 ${
-                                                        isSelected ? 'bg-blue-600 scale-110 shadow-blue-500/50' : 'bg-slate-700/90 scale-95 group-hover:scale-105'
-                                                    }`}
-                                                    style={{ 
-                                                        transform: responderLoc.heading ? `rotate(${responderLoc.heading}deg)` : undefined 
-                                                    }}
-                                                >
-                                                    <Truck className="w-4 h-4" />
+                                {/* 🔵 RESPONDER / DRIVER LIVE LOCATION MARKER (Navigation Arrow Only, No Circle Background) */}
+                                {responderLoc && (() => {
+                                    // Snap to route polyline if on active mission so it smoothly follows the road!
+                                    const snapped = isSelected && routeGeojson?.coordinates
+                                        ? snapToPolyline(responderLoc.longitude, responderLoc.latitude, routeGeojson.coordinates, 150)
+                                        : null;
+
+                                    const displayLng = snapped?.isSnapped ? snapped.lng : responderLoc.longitude;
+                                    const displayLat = snapped?.isSnapped ? snapped.lat : responderLoc.latitude;
+                                    const displayHeading = (responderLoc.heading && responderLoc.heading !== 0)
+                                        ? responderLoc.heading
+                                        : (snapped?.bearing ?? 0);
+
+                                    return (
+                                        <Marker 
+                                            longitude={displayLng} 
+                                            latitude={displayLat}
+                                            anchor="center"
+                                            onClick={(e) => {
+                                                e.originalEvent?.preventDefault();
+                                                e.originalEvent?.stopPropagation();
+                                                if (onSelectDispatch) onSelectDispatch(dispatch);
+                                            }}
+                                        >
+                                            <div className="flex flex-col items-center group cursor-pointer select-none">
+                                                {/* Floating Unit Identifier Pill */}
+                                                <div className={`px-2 py-0.5 rounded-full text-white font-bold text-[9px] font-mono tracking-wider mb-1 flex items-center gap-1 border transition-all whitespace-nowrap shadow-md ${
+                                                    isSelected 
+                                                        ? 'bg-blue-600 border-blue-400 scale-105 shadow-blue-500/40 ring-1 ring-blue-400/50' 
+                                                        : 'bg-slate-900/90 border-slate-700 text-slate-300 hover:bg-slate-800'
+                                                }`}>
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                                    <span>{dispatch.ambulance?.plate_number || (dispatch.driver ? `${dispatch.driver.first_name} ${dispatch.driver.last_name}` : 'Responder')}</span>
+                                                </div>
+
+                                                {/* Sleek 3D Navigation Arrow (NO Circle Background, Arrow Only!) */}
+                                                <div className="relative flex items-center justify-center">
+                                                    <svg 
+                                                        width="38" 
+                                                        height="38" 
+                                                        viewBox="0 0 38 38" 
+                                                        fill="none" 
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        className="filter drop-shadow-[0_6px_14px_rgba(0,0,0,0.65)] transition-transform duration-300 transform hover:scale-115"
+                                                        style={{ 
+                                                            transform: `rotate(${displayHeading}deg)` 
+                                                        }}
+                                                    >
+                                                        <defs>
+                                                            <linearGradient id={`arrow-wing-l-${dispatch.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                                                                <stop offset="0%" stopColor="#38bdf8" />
+                                                                <stop offset="100%" stopColor="#2563eb" />
+                                                            </linearGradient>
+                                                            <linearGradient id={`arrow-wing-r-${dispatch.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                                                                <stop offset="0%" stopColor="#2563eb" />
+                                                                <stop offset="100%" stopColor="#1d4ed8" />
+                                                            </linearGradient>
+                                                            <filter id={`arrow-glow-${dispatch.id}`} x="-20%" y="-20%" width="140%" height="140%">
+                                                                <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#1e40af" floodOpacity="0.5" />
+                                                            </filter>
+                                                        </defs>
+
+                                                        {/* Ground Depth Shadow */}
+                                                        <ellipse cx="19" cy="22" rx="10" ry="5" fill="rgba(0,0,0,0.3)" />
+
+                                                        {/* High-Contrast White Outer Shell */}
+                                                        <path 
+                                                            d="M19 3 L6 33 L19 25 L32 33 Z" 
+                                                            fill="none"
+                                                            stroke="#FFFFFF" 
+                                                            strokeWidth="3" 
+                                                            strokeLinejoin="round"
+                                                            strokeLinecap="round"
+                                                        />
+
+                                                        {/* Left Wing (Vivid Light Facet) */}
+                                                        <path 
+                                                            d="M19 4 L7 32 L19 25 Z" 
+                                                            fill={`url(#arrow-wing-l-${dispatch.id})`}
+                                                        />
+
+                                                        {/* Right Wing (Deep Blue Facet) */}
+                                                        <path 
+                                                            d="M19 4 L19 25 L31 32 Z" 
+                                                            fill={`url(#arrow-wing-r-${dispatch.id})`}
+                                                        />
+
+                                                        {/* Center Spine Ridge Highlight */}
+                                                        <line x1="19" y1="4" x2="19" y2="25" stroke="#BAE6FD" strokeWidth="1.2" strokeLinecap="round" />
+                                                    </svg>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </Marker>
-                                )}
+                                        </Marker>
+                                    );
+                                })()}
                             </div>
                         );
                     })}

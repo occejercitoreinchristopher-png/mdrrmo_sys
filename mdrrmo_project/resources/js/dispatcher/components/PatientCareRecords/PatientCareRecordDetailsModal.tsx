@@ -21,6 +21,8 @@ import {
     User,
     Users,
     Printer,
+    Camera,
+    ExternalLink,
 } from 'lucide-react';
 import { printPatientCareRecord } from '@/dispatcher/utils/printPatientCareRecord';
 
@@ -491,6 +493,56 @@ export default function PatientCareRecordDetailsModal({
                         );
                     })()}
                 </div>
+
+                {/* Responder Incident / Scene Photos */}
+                {(() => {
+                    const pcrPhotos = record.images || dispatch?.images || [];
+                    if (!pcrPhotos || pcrPhotos.length === 0) return null;
+
+                    return (
+                        <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 rounded-xl p-4 shadow-sm dark:shadow-none space-y-3">
+                            <div className="flex items-center justify-between">
+                                <h4 className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center gap-2">
+                                    <Camera className="w-4 h-4" /> Responder PCR Scene / Incident Photos
+                                </h4>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30">
+                                    {pcrPhotos.length} Photo{pcrPhotos.length === 1 ? '' : 's'} Captured
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {pcrPhotos.map((img: any, idx: number) => (
+                                    <div key={idx} className="bg-white dark:bg-white/5 p-3 rounded-xl border border-slate-200 dark:border-white/10 space-y-2">
+                                        <div className="relative group overflow-hidden rounded-lg bg-slate-900/50">
+                                            <img
+                                                src={img.image_url || `/storage/${img.image_path}`}
+                                                alt={`PCR Photo ${idx + 1}`}
+                                                className="w-full h-44 object-cover cursor-pointer hover:scale-102 transition-transform"
+                                                onClick={() => window.open(img.image_url || `/storage/${img.image_path}`, '_blank')}
+                                            />
+                                        </div>
+                                        <div className="text-xs space-y-1 text-slate-600 dark:text-slate-300">
+                                            <div className="flex items-start gap-1.5">
+                                                <span className="font-bold text-slate-500 shrink-0">Location:</span>
+                                                <span className="line-clamp-2">{img.location_name || 'Opol, Misamis Oriental'}</span>
+                                            </div>
+                                            {img.latitude && img.longitude && (
+                                                <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                                                    <span className="font-bold text-slate-500 font-sans text-xs shrink-0">Coordinates:</span>
+                                                    <span>{Number(img.latitude).toFixed(6)}, {Number(img.longitude).toFixed(6)}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="font-bold text-slate-500 shrink-0">Date/Time:</span>
+                                                <span>{img.formatted_captured_at || (img.captured_at ? new Date(img.captured_at).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—')}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
         </Modal>
     );

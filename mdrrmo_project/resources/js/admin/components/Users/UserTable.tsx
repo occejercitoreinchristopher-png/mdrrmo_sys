@@ -62,14 +62,29 @@ export default function UserTable({ users = [], loading = false, onEdit, onReset
             key: 'role',
             header: 'Account Role',
             sortable: true,
-            render: (v) => {
+            render: (v, row) => {
                 const conf = roleConfig[v] || { label: v, icon: UserIcon, style: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-white/10 dark:text-slate-300' };
                 const Icon = conf.icon;
                 return (
-                    <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border backdrop-blur-sm', conf.style)}>
-                        <Icon className="w-3.5 h-3.5" />
-                        <span>{conf.label}</span>
-                    </span>
+                    <div className="flex flex-col gap-1 items-start">
+                        <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border backdrop-blur-sm', conf.style)}>
+                            <Icon className="w-3.5 h-3.5" />
+                            <span>{conf.label}</span>
+                        </span>
+                        {row.responder_profile && (
+                            <span className={clsx(
+                                "text-[10px] font-semibold px-2 py-0.5 rounded-md border",
+                                row.responder_profile.is_reliever
+                                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                                    : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
+                            )}>
+                                {row.responder_profile.is_reliever
+                                    ? `Reliever • ${row.responder_profile.position === 'driver' ? 'Driver' : 'EMT'}`
+                                    : `Team ${row.responder_profile.team || 'Alpha'} • ${row.responder_profile.position === 'driver' ? 'Driver' : 'EMT'}`
+                                }
+                            </span>
+                        )}
+                    </div>
                 );
             },
         },

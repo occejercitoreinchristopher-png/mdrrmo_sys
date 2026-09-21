@@ -55,9 +55,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/dispatches/walk-in', [ResponderDispatchController::class, 'walkIn']);
         Route::post('/dispatches/{dispatch}/accept', [ResponderDispatchController::class, 'accept']);
         Route::post('/dispatches/{dispatch}/status', [ResponderDispatchController::class, 'updateStatus']);
+        Route::post('/dispatches/{dispatch}/unfounded', [ResponderDispatchController::class, 'reportUnfounded']);
         Route::post('/dispatches/{dispatch}/location', [ResponderDispatchController::class, 'updateLocation']);
 
         Route::post('/dispatches/{dispatch}/pcr', [PatientCareRecordController::class, 'update']);
+        Route::post('/dispatches/{dispatch}/pcr/photo', [PatientCareRecordController::class, 'uploadPhoto']);
         Route::post('/dispatches/{dispatch}/pcr/submit', [PatientCareRecordController::class, 'submit']);
     });
 });

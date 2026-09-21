@@ -1,10 +1,12 @@
-import { Menu, X, Bell, LogOut, PhoneCall, Clock } from 'lucide-react';
+import { Menu, X, Bell, LogOut, PhoneCall, Clock, Volume2 } from 'lucide-react';
 import { usePage, router, Link } from '@inertiajs/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import ThemeToggle from '@/shared/components/ThemeToggle';
+import { AlarmContext } from '../contexts/AlarmContext';
 
 export default function DispatcherNavbar({ collapsed, onToggle }) {
     const { auth } = usePage().props;
+    const { isPlaying, testAlarm } = useContext(AlarmContext);
     const [notifOpen, setNotifOpen] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -86,6 +88,25 @@ export default function DispatcherNavbar({ collapsed, onToggle }) {
                 >
                     <Bell className="w-4 h-4" />
                     <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#F61509] rounded-full ring-2 ring-white dark:ring-[#090e1a] animate-pulse" />
+                </button>
+
+                {/* Siren Audio Test Button */}
+                <button
+                    className={`relative p-2 rounded-xl transition-all cursor-pointer ${
+                        isPlaying
+                            ? 'bg-red-500/15 text-red-600 dark:text-red-400 ring-1 ring-red-500/40 animate-pulse'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10'
+                    }`}
+                    onClick={testAlarm}
+                    title={isPlaying ? 'Emergency Siren Sounding (Click to silence)' : 'Test Loud Incident Alarm Sound'}
+                >
+                    <Volume2 className={`w-4 h-4 ${isPlaying ? 'text-red-600 dark:text-red-400 animate-bounce' : ''}`} />
+                    {isPlaying && (
+                        <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                        </span>
+                    )}
                 </button>
 
                 {/* Theme Mode Toggle (Light / Dark) */}

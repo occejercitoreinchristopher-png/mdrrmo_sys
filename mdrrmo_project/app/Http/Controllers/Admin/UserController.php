@@ -74,10 +74,23 @@ class UserController extends Controller
             'status' => ['nullable', Rule::in(['active', 'inactive', 'suspended'])],
             'position' => ['nullable', Rule::in(['driver', 'emt'])],
             'team' => 'nullable|string|max:255',
+            'is_reliever' => 'nullable|boolean',
             'password' => 'nullable|string|min:8|confirmed',
         ]);
 
-        $validatedUser = collect($validated)->except(['position', 'team', 'password', 'password_confirmation', 'birthday'])->toArray();
+        $isReliever = $request->boolean('is_reliever');
+        if ($request->role === 'responder') {
+            if (! $isReliever && empty($request->team)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'team' => 'Team is required for permanent responders.',
+                ]);
+            }
+            if (! $isReliever) {
+                $this->validateTeamLimits($request->team, $request->position, false);
+            }
+        }
+
+        $validatedUser = collect($validated)->except(['position', 'team', 'is_reliever', 'password', 'password_confirmation', 'birthday'])->toArray();
 
         $birthdate = $request->birthdate ?? $request->birthday;
         $age = $request->filled('age') ? (int) $request->age : null;
@@ -110,7 +123,8 @@ class UserController extends Controller
             ResponderProfile::create([
                 'user_id' => $user->id,
                 'badge_number' => 'RSP-'.strtoupper(substr(uniqid(), -6)), // Auto-generate simple badge
-                'team' => $request->team ?? 'Alpha',
+                'is_reliever' => $isReliever,
+                'team' => $isReliever ? null : ($request->team ?? 'Alpha'),
                 'position' => $request->position ?? 'emt',
                 'availability' => 'available',
             ]);
@@ -161,7 +175,8 @@ class UserController extends Controller
             'status' => ['required', Rule::in(['active', 'inactive', 'suspended'])],
             'password' => 'nullable|string|min:8|confirmed',
             'position' => ['required_if:role,responder', 'nullable', Rule::in(['driver', 'emt'])],
-            'team' => 'required_if:role,responder|nullable|string|max:255',
+            'team' => 'nullable|string|max:255',
+            'is_reliever' => 'nullable|boolean',
         ]);
 
         // Prevent manually assigning the resident role to a non-resident
@@ -174,7 +189,19 @@ class UserController extends Controller
             abort(403, 'Cannot change a resident to another role.');
         }
 
-        $validatedUser = collect($validated)->except(['position', 'team', 'birthday'])->toArray();
+        $isReliever = $request->boolean('is_reliever');
+        if ($validated['role'] === 'responder') {
+            if (! $isReliever && empty($request->team)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'team' => 'Team is required for permanent responders.',
+                ]);
+            }
+            if (! $isReliever) {
+                $this->validateTeamLimits($request->team, $request->position, false, $user->id);
+            }
+        }
+
+        $validatedUser = collect($validated)->except(['position', 'team', 'is_reliever', 'birthday'])->toArray();
 
         $birthdate = $request->birthdate ?? $request->birthday;
         $age = $request->filled('age') ? (int) $request->age : null;
@@ -198,17 +225,64 @@ class UserController extends Controller
                 ['user_id' => $user->id],
                 [
                     'badge_number' => 'RSP-'.strtoupper(substr(uniqid(), -6)),
-                    'team' => 'Alpha',
+                    'is_reliever' => $isReliever,
+                    'team' => $isReliever ? null : ($request->team ?? 'Alpha'),
+                    'position' => $request->position ?? 'emt',
                     'availability' => 'available',
                 ]
             );
             $profile->update([
+                'is_reliever' => $isReliever,
                 'position' => $request->position,
-                'team' => $request->team ?? 'Alpha',
+                'team' => $isReliever ? null : ($request->team ?? 'Alpha'),
             ]);
         }
 
         return back()->with('success', 'User updated successfully.');
+    }
+
+    protected function validateTeamLimits(?string $team, ?string $position, bool $isReliever, ?int $ignoreUserId = null): void
+    {
+        if ($isReliever || empty($team) || empty($position)) {
+            return;
+        }
+
+        if ($position === 'driver') {
+            $existingDrivers = ResponderProfile::where('team', $team)
+                ->where('is_reliever', false)
+                ->where('position', 'driver')
+                ->when($ignoreUserId, fn ($q) => $q->where('user_id', '!=', $ignoreUserId))
+                ->count();
+
+            if ($existingDrivers >= 1) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'team' => "Team {$team} already has a permanent Driver (maximum 1 allowed).",
+                ]);
+            }
+        } elseif ($position === 'emt') {
+            $existingEmts = ResponderProfile::where('team', $team)
+                ->where('is_reliever', false)
+                ->where('position', 'emt')
+                ->when($ignoreUserId, fn ($q) => $q->where('user_id', '!=', $ignoreUserId))
+                ->count();
+
+            if ($existingEmts >= 3) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'team' => "Team {$team} already has 3 permanent EMTs (maximum 3 allowed).",
+                ]);
+            }
+        }
+
+        $totalPermanent = ResponderProfile::where('team', $team)
+            ->where('is_reliever', false)
+            ->when($ignoreUserId, fn ($q) => $q->where('user_id', '!=', $ignoreUserId))
+            ->count();
+
+        if ($totalPermanent >= 4) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'team' => "Team {$team} already has the maximum of 4 permanent members (1 Driver and 3 EMTs).",
+            ]);
+        }
     }
 
     public function destroy(User $user)
@@ -216,7 +290,7 @@ class UserController extends Controller
         $activeDispatches = Dispatch::where(function ($q) use ($user) {
             $q->where('driver_id', $user->id)
                 ->orWhere('emt_id', $user->id)
-                ->orWhere('team_leader_id', $user->id);
+                ->orWhereHas('crew', fn ($cq) => $cq->where('users.id', $user->id));
         })
             ->whereIn('dispatch_status', ['assigned', 'accepted', 'en_route', 'arrived_on_scene'])
             ->exists();

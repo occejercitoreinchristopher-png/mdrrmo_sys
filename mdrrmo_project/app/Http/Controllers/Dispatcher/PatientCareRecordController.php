@@ -17,6 +17,7 @@ class PatientCareRecordController extends Controller
             'dispatch.teamLeader',
             'dispatch.driver',
             'dispatch.emt',
+            'images',
         ])
             ->latest()
             ->paginate(15);
@@ -42,6 +43,8 @@ class PatientCareRecordController extends Controller
             'dispatch.teamLeader',
             'dispatch.driver',
             'dispatch.emt',
+            'images',
+            'dispatch.images',
         ]);
 
         return response()->json([

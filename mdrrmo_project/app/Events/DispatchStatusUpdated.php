@@ -32,21 +32,15 @@ class DispatchStatusUpdated implements ShouldBroadcastNow
     {
         $channels = [new PrivateChannel('dispatcher')];
 
-        $assignedUserIds = array_filter([
+        $assignedUserIds = $this->dispatch->crew()->pluck('users.id')->toArray();
+        $fallbackUserIds = array_filter([
             $this->dispatch->driver_id,
-            $this->dispatch->team_leader_id,
             $this->dispatch->emt_id,
+            $this->dispatch->team_leader_id,
         ]);
+        $allResponderIds = array_unique(array_merge($assignedUserIds, $fallbackUserIds));
 
-        if (! empty($this->dispatch->borrowed_crew) && is_array($this->dispatch->borrowed_crew)) {
-            foreach ($this->dispatch->borrowed_crew as $crew) {
-                if (! empty($crew['user_id'])) {
-                    $assignedUserIds[] = $crew['user_id'];
-                }
-            }
-        }
-
-        foreach (array_unique($assignedUserIds) as $userId) {
+        foreach ($allResponderIds as $userId) {
             $channels[] = new PrivateChannel('responder.'.$userId);
         }
 

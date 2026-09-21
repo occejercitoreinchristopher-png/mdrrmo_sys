@@ -21,58 +21,40 @@ class ResponderController extends Controller
         // Fetch active dispatches for these users
         $userIds = $users->pluck('id')->toArray();
         $activeDispatches = Dispatch::whereNotIn('dispatch_status', ['completed', 'cancelled'])
-            ->with(['incident.incidentType', 'ambulance'])
+            ->with(['incident.incidentType', 'ambulance', 'crew'])
             ->where(function ($q) use ($userIds) {
                 $q->whereIn('driver_id', $userIds)
-                    ->orWhereIn('team_leader_id', $userIds)
-                    ->orWhereIn('emt_id', $userIds);
+                    ->orWhereIn('emt_id', $userIds)
+                    ->orWhereHas('crew', fn ($cq) => $cq->whereIn('users.id', $userIds));
             })->get();
 
-        // Attach active dispatch and borrowed mission info to users
+        // Attach active dispatch and reliever mission info to users
         $users->getCollection()->transform(function ($user) use ($activeDispatches) {
             $dispatch = $activeDispatches->first(function ($d) use ($user) {
-                return $d->driver_id === $user->id || $d->team_leader_id === $user->id || $d->emt_id === $user->id;
+                return $d->driver_id === $user->id 
+                    || $d->emt_id === $user->id 
+                    || $d->crew->contains('id', $user->id);
             });
 
             $rawRole = $user->responderProfile?->position ?? $user->role;
             $displayRole = match (strtolower(str_replace(['_', '-'], ' ', (string) $rawRole))) {
                 'driver' => 'Driver',
                 'emt' => 'EMT',
-                'team leader' => 'Team Leader',
                 default => ucfirst(str_replace('_', ' ', (string) $rawRole)),
             };
 
-            $rawTeam = $user->responderProfile?->team ?? 'Unassigned';
-            $permanentCrew = str_starts_with($rawTeam, 'Team ') ? $rawTeam : 'Team '.$rawTeam;
+            $isReliever = (bool) $user->responderProfile?->is_reliever;
+            $rawTeam = $user->responderProfile?->team;
+            $permanentCrew = $isReliever 
+                ? 'Reliever Pool' 
+                : ($rawTeam ? (str_starts_with($rawTeam, 'Team ') ? $rawTeam : 'Team '.$rawTeam) : 'Unassigned');
 
             $temporaryMission = null;
-            $isBorrowed = false;
 
             if ($dispatch) {
                 $dispatchTeam = $dispatch->team
                     ? (str_starts_with($dispatch->team, 'Team ') ? $dispatch->team : 'Team '.$dispatch->team)
                     : null;
-
-                $borrowedTo = null;
-
-                // If responder's permanent team differs from the dispatch's team, they are borrowed
-                if ($dispatchTeam && $permanentCrew && strcasecmp($permanentCrew, $dispatchTeam) !== 0) {
-                    $isBorrowed = true;
-                    $borrowedTo = $dispatchTeam;
-                }
-
-                // Also check explicit borrowed_crew array
-                if (is_array($dispatch->borrowed_crew)) {
-                    foreach ($dispatch->borrowed_crew as $b) {
-                        if (($b['user_id'] ?? null) == $user->id) {
-                            $isBorrowed = true;
-                            $borrowedTo = $b['borrowed_to'] ?? $dispatchTeam;
-                            if ($borrowedTo && ! str_starts_with($borrowedTo, 'Team ')) {
-                                $borrowedTo = 'Team '.$borrowedTo;
-                            }
-                        }
-                    }
-                }
 
                 $temporaryMission = [
                     'dispatch_id' => $dispatch->id,
@@ -81,16 +63,16 @@ class ResponderController extends Controller
                     'incident_type' => $dispatch->incident?->incidentType?->name ?? 'Emergency Incident',
                     'dispatch_team' => $dispatchTeam,
                     'dispatch_status' => $dispatch->dispatch_status,
-                    'is_borrowed' => $isBorrowed,
-                    'borrowed_to' => $borrowedTo,
+                    'is_reliever' => $isReliever,
                     'permanent_crew' => $permanentCrew,
                 ];
             }
 
+            $user->is_reliever = $isReliever;
             $user->display_role = $displayRole;
             $user->permanent_crew = $permanentCrew;
             $user->temporary_mission = $temporaryMission;
-            $user->is_borrowed = $isBorrowed;
+            $user->is_borrowed = $isReliever && (bool) $dispatch;
             $user->current_status = $dispatch ? 'assigned' : ($user->responderProfile?->availability ?? 'offline');
             $user->dispatches = $dispatch ? [$dispatch] : [];
 
@@ -118,8 +100,8 @@ class ResponderController extends Controller
         $hasActiveDispatch = Dispatch::whereNotIn('dispatch_status', ['completed', 'cancelled'])
             ->where(function ($q) use ($user) {
                 $q->where('driver_id', $user->id)
-                    ->orWhere('team_leader_id', $user->id)
-                    ->orWhere('emt_id', $user->id);
+                    ->orWhere('emt_id', $user->id)
+                    ->orWhereHas('crew', fn ($cq) => $cq->where('users.id', $user->id));
             })->first();
 
         if ($hasActiveDispatch) {

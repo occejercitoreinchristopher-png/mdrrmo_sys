@@ -13,6 +13,7 @@ use App\Models\Incident;
 use App\Models\IncidentType;
 use App\Models\LocationCode;
 use App\Models\LocationMarker;
+use App\Models\PatientCareRecord;
 use App\Models\ResponderProfile;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -26,10 +27,45 @@ class IncidentController extends Controller
     {
         $status = $request->query('status', 'active');
 
-        $query = Incident::with(['resident', 'incidentType', 'images'])->latest();
+        $query = Incident::with([
+            'resident.residentProfile.barangay', 
+            'incidentType', 
+            'images', 
+            'dispatches.patientCareRecord',
+            'dispatches.ambulance',
+            'dispatches.driver',
+            'dispatches.crew'
+        ])->latest();
+
+        $allHistoryIncidents = [];
+        $pcrChiefComplaints = [];
+        $barangayGeojson = null;
 
         if ($status === 'history') {
             $query->whereIn('incident_status', ['resolved', 'rejected']);
+
+            if ($request->filled('is_prank')) {
+                $query->where('is_prank', $request->boolean('is_prank'));
+            }
+
+            if ($request->filled('rejection_category')) {
+                $query->where('rejection_category', $request->query('rejection_category'));
+            }
+
+            $allHistoryIncidents = (clone $query)->get();
+
+            $pcrChiefComplaints = PatientCareRecord::whereNotNull('chief_complaint')
+                ->where('chief_complaint', '!=', '')
+                ->distinct()
+                ->pluck('chief_complaint')
+                ->sort()
+                ->values()
+                ->all();
+
+            $geojsonPath = resource_path('data/opol_barangays.json');
+            if (file_exists($geojsonPath)) {
+                $barangayGeojson = json_decode(file_get_contents($geojsonPath), true);
+            }
         } else {
             // Default to active
             $query->whereIn('incident_status', ['pending', 'verified', 'assigned', 'responding']);
@@ -37,22 +73,48 @@ class IncidentController extends Controller
 
         $incidents = $query->paginate(15);
 
+        // Compute prank counts in batch without N+1 queries
+        $residentPranks = Incident::where('is_prank', true)
+            ->whereNotNull('resident_id')
+            ->select('resident_id', DB::raw('count(*) as prank_count'))
+            ->groupBy('resident_id')
+            ->pluck('prank_count', 'resident_id');
+
+        $phonePranks = Incident::where('is_prank', true)
+            ->whereNotNull('caller_phone_number')
+            ->select('caller_phone_number', DB::raw('count(*) as prank_count'))
+            ->groupBy('caller_phone_number')
+            ->pluck('prank_count', 'caller_phone_number');
+
+        $incidents->getCollection()->transform(function ($inc) use ($residentPranks, $phonePranks) {
+            $count = 0;
+            if ($inc->resident_id && isset($residentPranks[$inc->resident_id])) {
+                $count = max($count, (int) $residentPranks[$inc->resident_id]);
+            }
+            if ($inc->caller_phone_number && isset($phonePranks[$inc->caller_phone_number])) {
+                $count = max($count, (int) $phonePranks[$inc->caller_phone_number]);
+            }
+            $inc->reporter_prank_count = $count;
+            return $inc;
+        });
+
         // Fetch real emergency ambulances (exclude station walk-in placeholder)
         $ambulances = Ambulance::where('plate_number', '!=', 'WALK-IN')
             ->where('vehicle_type', '!=', 'Station')
             ->get();
 
-        $responders = User::whereIn('role', ['responder', 'team_leader', 'emt', 'driver'])
-            ->whereHas('responderProfile', function ($q) {
-                $q->where('availability', 'available');
-            })
+        $responders = User::where('role', 'responder')
             ->with('responderProfile')
             ->get();
 
         return Inertia::render('dispatcher/Incidents', [
             'incidents' => $incidents->items(),
+            'allHistoryIncidents' => $allHistoryIncidents,
             'incidentTypes' => IncidentType::all(),
             'chiefComplaints' => EmergencyComplaints::ALL,
+            'pcrChiefComplaints' => $pcrChiefComplaints,
+            'opolBarangays' => Incident::OPOL_BARANGAYS,
+            'barangayGeojson' => $barangayGeojson,
             'statusFilter' => $status,
             'ambulances' => $ambulances,
             'responders' => $responders,
@@ -67,13 +129,35 @@ class IncidentController extends Controller
 
     public function map(Request $request)
     {
-        $incidents = Incident::with(['incidentType', 'images'])
+        $incidents = Incident::with([
+            'resident.residentProfile.barangay', 
+            'incidentType', 
+            'images', 
+            'dispatches.patientCareRecord',
+            'dispatches.ambulance',
+            'dispatches.driver',
+            'dispatches.crew'
+        ])
             ->whereIn('incident_status', ['resolved', 'rejected'])
             ->get();
+
+        $pcrChiefComplaints = PatientCareRecord::whereNotNull('chief_complaint')
+            ->where('chief_complaint', '!=', '')
+            ->distinct()
+            ->pluck('chief_complaint')
+            ->sort()
+            ->values()
+            ->all();
+
+        $geojsonPath = resource_path('data/opol_barangays.json');
+        $barangayGeojson = file_exists($geojsonPath) ? json_decode(file_get_contents($geojsonPath), true) : null;
 
         return Inertia::render('dispatcher/IncidentHistoryMapView', [
             'incidents' => $incidents,
             'selectedIncidentId' => $request->query('incident_id'),
+            'opolBarangays' => Incident::OPOL_BARANGAYS,
+            'pcrChiefComplaints' => $pcrChiefComplaints,
+            'barangayGeojson' => $barangayGeojson,
         ]);
     }
 
@@ -102,25 +186,62 @@ class IncidentController extends Controller
 
     public function reject(Request $request, Incident $incident)
     {
-        if (! in_array($incident->incident_status, ['pending', 'verified'])) {
-            abort(403, 'Only pending or verified incidents can be rejected.');
+        if (! in_array($incident->incident_status, ['pending', 'verified', 'assigned', 'responding'])) {
+            abort(403, 'This incident cannot be rejected in its current status.');
         }
 
         $request->validate([
             'rejection_reason' => 'required|string|max:500',
+            'rejection_category' => 'nullable|string|in:prank,false_alarm,duplicate,out_of_jurisdiction,test_drill,other',
         ]);
 
-        $incident->update([
-            'incident_status' => 'rejected',
-            'resolved_at' => now(),
-            'rejection_reason' => $request->rejection_reason,
-            'verified_by' => $request->user()->id,
-        ]);
+        $category = $request->input('rejection_category', 'other');
+        $isPrank = ($category === 'prank');
+
+        DB::transaction(function () use ($incident, $request, $category, $isPrank) {
+            // Cancel any active dispatches and release responders/ambulances
+            foreach ($incident->dispatches()->whereNotIn('dispatch_status', ['completed', 'cancelled'])->get() as $dispatch) {
+                $dispatch->update([
+                    'dispatch_status' => 'cancelled',
+                    'completed_at' => now(),
+                ]);
+
+                if ($dispatch->ambulance_id) {
+                    Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
+                }
+
+                $crewUserIds = $dispatch->crew()->pluck('users.id')->toArray();
+                $assignedUserIds = array_unique(array_filter(array_merge($crewUserIds, [
+                    $dispatch->driver_id,
+                    $dispatch->emt_id,
+                    $dispatch->team_leader_id,
+                ])));
+                if (! empty($assignedUserIds)) {
+                    ResponderProfile::whereIn('user_id', $assignedUserIds)->update(['availability' => 'available']);
+                }
+
+                $dispatch->load(['incident', 'ambulance']);
+                try {
+                    broadcast(new DispatchStatusUpdated($dispatch));
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Failed to broadcast DispatchStatusUpdated: '.$e->getMessage());
+                }
+            }
+
+            $incident->update([
+                'incident_status' => 'rejected',
+                'resolved_at' => now(),
+                'rejection_reason' => $request->rejection_reason,
+                'rejection_category' => $category,
+                'is_prank' => $isPrank,
+                'verified_by' => $request->user()->id,
+            ]);
+        });
 
         event(new IncidentRejected($incident));
         \App\Services\PushNotificationService::notifyIncidentRejected($incident);
 
-        return back()->with('success', 'Incident rejected successfully.');
+        return back()->with('success', 'Incident rejected and any active dispatches cancelled.');
     }
 
     public function resolve(Request $request, Incident $incident)
@@ -143,23 +264,17 @@ class IncidentController extends Controller
                     Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
                 }
 
-                $crewUserIds = array_filter([$dispatch->driver_id, $dispatch->emt_id, $dispatch->team_leader_id]);
+                $crewUserIds = $dispatch->crew()->pluck('users.id')->toArray();
+                if (empty($crewUserIds)) {
+                    $crewUserIds = array_filter([$dispatch->driver_id, $dispatch->emt_id]);
+                }
                 if (! empty($crewUserIds)) {
                     ResponderProfile::whereIn('user_id', $crewUserIds)->update(['availability' => 'available']);
                 }
 
-                if (is_array($dispatch->borrowed_crew) && count($dispatch->borrowed_crew) > 0) {
-                    foreach ($dispatch->borrowed_crew as $b) {
-                        $name = $b['name'] ?? null;
-                        if (! $name && ! empty($b['user_id'])) {
-                            $u = User::find($b['user_id']);
-                            $name = $u ? $u->first_name : 'Crew member';
-                        }
-                        $permTeam = $b['permanent_team'] ?? 'their permanent crew';
-                        if ($name) {
-                            $returnNotes[] = "{$name} has been returned to {$permTeam}.";
-                        }
-                    }
+                $relievers = $dispatch->crew()->wherePivot('is_reliever', true)->get();
+                foreach ($relievers as $reliever) {
+                    $returnNotes[] = "Reliever {$reliever->first_name} {$reliever->last_name} has returned to the Reliever Pool.";
                 }
 
                 broadcast(new DispatchCompleted($dispatch));
@@ -335,7 +450,9 @@ class IncidentController extends Controller
         })
             ->count();
 
-        if (! $resident && ! $previousIncident) {
+        $prankHistory = Incident::getPrankHistoryForReporter($resident?->id, $normalizedPhone);
+
+        if (! $resident && ! $previousIncident && ! $prankHistory['has_prank_history']) {
             return response()->json([
                 'recognized' => false,
                 'data' => null,
@@ -384,6 +501,9 @@ class IncidentController extends Controller
                 'total_calls' => $totalCalls,
                 'previous_incident_id' => $previousIncident?->id,
                 'previous_location' => $previousLocation,
+                'has_prank_history' => $prankHistory['has_prank_history'],
+                'prank_count' => $prankHistory['prank_count'],
+                'latest_prank' => $prankHistory['latest_prank'],
             ],
         ]);
     }
@@ -422,6 +542,13 @@ class IncidentController extends Controller
             ->take(6)
             ->get();
 
+        $residentIds = $residents->pluck('id')->toArray();
+        $residentPrankCounts = Incident::where('is_prank', true)
+            ->whereIn('resident_id', $residentIds)
+            ->select('resident_id', DB::raw('count(*) as prank_count'))
+            ->groupBy('resident_id')
+            ->pluck('prank_count', 'resident_id');
+
         foreach ($residents as $resident) {
             $normalized = $this->normalizePhilippinePhoneNumber($resident->phone_number) ?? $resident->phone_number;
             $results->put($normalized, [
@@ -431,6 +558,7 @@ class IncidentController extends Controller
                 'is_registered_resident' => true,
                 'barangay' => $resident->residentProfile?->barangay?->barangay_name,
                 'total_calls' => 0,
+                'prank_count' => (int) ($residentPrankCounts[$resident->id] ?? 0),
                 'previous_location_code' => null,
             ]);
         }
@@ -449,6 +577,13 @@ class IncidentController extends Controller
             ->take(15)
             ->get();
 
+        $phoneNumbers = $recentPhoneIncidents->pluck('caller_phone_number')->unique()->toArray();
+        $phonePrankCounts = Incident::where('is_prank', true)
+            ->whereIn('caller_phone_number', $phoneNumbers)
+            ->select('caller_phone_number', DB::raw('count(*) as prank_count'))
+            ->groupBy('caller_phone_number')
+            ->pluck('prank_count', 'caller_phone_number');
+
         foreach ($recentPhoneIncidents as $inc) {
             $normalized = $inc->caller_phone_number;
             if ($results->has($normalized)) {
@@ -466,6 +601,7 @@ class IncidentController extends Controller
                     'is_registered_resident' => false,
                     'barangay' => null,
                     'total_calls' => 1,
+                    'prank_count' => (int) ($phonePrankCounts[$normalized] ?? 0),
                     'previous_location_code' => $inc->location_code,
                 ]);
             }
@@ -483,14 +619,15 @@ class IncidentController extends Controller
         }
 
         $request->validate([
+            'caller_name' => 'nullable|string|max:255',
             'caller_phone_number' => 'required|string',
             'incident_type_id' => 'required|exists:incident_types,id',
-            'chief_complaint' => 'nullable|string|max:255',
-            'location_method' => 'nullable|string|in:location_code,code,pinpoint',
+            'chief_complaint' => 'nullable|string',
+            'location_method' => 'nullable|string',
             'location_code' => 'nullable|string',
-            'place_of_incident' => 'nullable|string|max:255',
-            'latitude' => 'nullable|numeric|between:-90,90',
-            'longitude' => 'nullable|numeric|between:-180,180',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'place_of_incident' => 'nullable|string',
             'location_confirmed' => 'required|boolean',
             'description' => 'nullable|string|max:2000',
         ]);
@@ -595,9 +732,14 @@ class IncidentController extends Controller
             $incidentAddress = ! empty($parts) ? implode(', ', $parts) : null;
         }
 
+        $callerName = $request->filled('caller_name')
+            ? trim($request->caller_name)
+            : ($resident ? trim($resident->first_name.' '.$resident->last_name) : null);
+
         $incident = Incident::create([
             'resident_id' => $residentId,
             'caller_phone_number' => $normalizedPhone,
+            'caller_name' => $callerName,
             'incident_type_id' => $request->incident_type_id,
             'chief_complaint' => $request->chief_complaint,
             'location_code' => $code,
@@ -608,7 +750,7 @@ class IncidentController extends Controller
             'reporter_latitude' => $latitude,
             'reporter_longitude' => $longitude,
             'location_source' => $locationSource,
-            'description' => $request->description ?: "Reported via Phone/SIM Call from {$normalizedPhone} at {$placeOfIncident}",
+            'description' => $request->description ?: "Reported via Phone/SIM Call from ".($callerName ? "{$callerName} ({$normalizedPhone})" : $normalizedPhone)." at {$placeOfIncident}",
             'incident_status' => 'pending',
             'priority' => 'Moderate',
             'reported_at' => now(),
@@ -616,6 +758,7 @@ class IncidentController extends Controller
         ]);
 
         $incident->load(['incidentType', 'resident']);
+        $incident->reporter_prank_history = Incident::getPrankHistoryForReporter($residentId, $normalizedPhone);
 
         try {
             broadcast(new IncidentCreated($incident));

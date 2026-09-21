@@ -8,7 +8,15 @@ class Incident extends Model
 {
     protected $guarded = [];
 
-    protected $appends = ['location', 'barangay'];
+    public const OPOL_BARANGAYS = [
+        'Awang', 'Bagocboc', 'Barra', 'Bonbon', 'Cauyonan',
+        'Igpit', 'Limonda', 'Luyongbonbon', 'Malanang',
+        'Nangcaon', 'Patag', 'Poblacion', 'Taboc', 'Tingalan'
+    ];
+
+    protected static ?array $cachedGeojson = null;
+
+    protected $appends = ['location', 'barangay', 'pcr_chief_complaint', 'pcr_chief_complaints'];
 
     public function getLocationAttribute(): ?string
     {
@@ -21,8 +29,120 @@ class Incident extends Model
 
     public function getBarangayAttribute(): ?string
     {
-        return $this->resident?->residentProfile?->barangay?->barangay_name
-            ?: null;
+        if ($this->resident?->residentProfile?->barangay?->barangay_name) {
+            return $this->resident->residentProfile->barangay->barangay_name;
+        }
+
+        $fromCoords = self::resolveBarangayFromCoordinates($this->incident_latitude, $this->incident_longitude);
+        if ($fromCoords) {
+            return $fromCoords;
+        }
+
+        $fullText = ($this->place_of_incident ?? '') . ' ' . ($this->incident_address ?? '');
+        if (!empty($fullText)) {
+            foreach (self::OPOL_BARANGAYS as $bName) {
+                if (stripos($fullText, $bName) !== false) {
+                    return $bName;
+                }
+            }
+            if (stripos($fullText, 'luyong bonbon') !== false || stripos($fullText, 'luyong-bonbon') !== false) {
+                return 'Luyongbonbon';
+            }
+        }
+
+        return null;
+    }
+
+    public function getPcrChiefComplaintAttribute(): ?string
+    {
+        if ($this->relationLoaded('dispatches')) {
+            foreach ($this->dispatches as $d) {
+                if ($d->relationLoaded('patientCareRecord') && $d->patientCareRecord?->chief_complaint) {
+                    return $d->patientCareRecord->chief_complaint;
+                }
+            }
+        }
+        return null;
+    }
+
+    public function getPcrChiefComplaintsAttribute(): array
+    {
+        if ($this->relationLoaded('dispatches')) {
+            return $this->dispatches->map(function ($d) {
+                return $d->relationLoaded('patientCareRecord') ? $d->patientCareRecord?->chief_complaint : null;
+            })->filter()->unique()->values()->all();
+        }
+        return [];
+    }
+
+    protected static function resolveBarangayFromCoordinates($lat, $lng): ?string
+    {
+        if (!$lat || !$lng || (float)$lat == 0 || (float)$lng == 0) {
+            return null;
+        }
+
+        if (self::$cachedGeojson === null) {
+            $path = resource_path('data/opol_barangays.json');
+            if (file_exists($path)) {
+                self::$cachedGeojson = json_decode(file_get_contents($path), true);
+            } else {
+                self::$cachedGeojson = [];
+            }
+        }
+
+        if (empty(self::$cachedGeojson['features'])) {
+            return null;
+        }
+
+        $pt = [(float)$lng, (float)$lat];
+
+        foreach (self::$cachedGeojson['features'] as $feature) {
+            $rawName = strtolower(trim($feature['properties']['name'] ?? ''));
+            $normName = match ($rawName) {
+                'luyong-bonbon', 'luyong bonbon' => 'Luyongbonbon',
+                default => ucfirst($rawName),
+            };
+
+            $geometry = $feature['geometry'] ?? null;
+            if (!$geometry) continue;
+
+            $type = $geometry['type'] ?? '';
+            $coords = $geometry['coordinates'] ?? [];
+
+            if ($type === 'Polygon') {
+                if (isset($coords[0]) && self::isPointInPolygon($pt, $coords[0])) {
+                    return $normName;
+                }
+            } elseif ($type === 'MultiPolygon') {
+                foreach ($coords as $poly) {
+                    if (isset($poly[0]) && self::isPointInPolygon($pt, $poly[0])) {
+                        return $normName;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    protected static function isPointInPolygon(array $point, array $polygon): bool
+    {
+        $x = $point[0];
+        $y = $point[1];
+        $inside = false;
+        $n = count($polygon);
+        for ($i = 0, $j = $n - 1; $i < $n; $j = $i++) {
+            $xi = $polygon[$i][0];
+            $yi = $polygon[$i][1];
+            $xj = $polygon[$j][0];
+            $yj = $polygon[$j][1];
+            $intersect = (($yi > $y) != ($yj > $y))
+                && ($x < ($xj - $xi) * ($y - $yi) / ($yj - $yi) + $xi);
+            if ($intersect) {
+                $inside = !$inside;
+            }
+        }
+        return $inside;
     }
 
     protected function casts(): array
@@ -31,6 +151,47 @@ class Incident extends Model
             'reported_at' => 'datetime',
             'verified_at' => 'datetime',
             'resolved_at' => 'datetime',
+            'is_prank' => 'boolean',
+        ];
+    }
+
+    public static function getPrankHistoryForReporter(?int $residentId, ?string $phoneNumber): array
+    {
+        if (! $residentId && ! $phoneNumber) {
+            return [
+                'has_prank_history' => false,
+                'prank_count' => 0,
+                'latest_prank' => null,
+            ];
+        }
+
+        $query = self::where('is_prank', true);
+        if ($residentId && $phoneNumber) {
+            $query->where(function ($q) use ($residentId, $phoneNumber) {
+                $q->where('resident_id', $residentId)
+                  ->orWhere('caller_phone_number', $phoneNumber);
+            });
+        } elseif ($residentId) {
+            $query->where('resident_id', $residentId);
+        } else {
+            $query->where('caller_phone_number', $phoneNumber);
+        }
+
+        $pranks = $query->latest('reported_at')->get();
+        $latest = $pranks->first();
+
+        return [
+            'has_prank_history' => $pranks->isNotEmpty(),
+            'prank_count' => $pranks->count(),
+            'latest_prank' => $latest ? [
+                'id' => $latest->id,
+                'reported_at' => $latest->reported_at?->toIso8601String(),
+                'formatted_date' => $latest->reported_at ? $latest->reported_at->format('M d, Y, h:i A') : $latest->created_at->format('M d, Y, h:i A'),
+                'time_ago' => $latest->reported_at?->diffForHumans() ?? $latest->created_at->diffForHumans(),
+                'rejection_reason' => $latest->rejection_reason,
+                'rejection_category' => $latest->rejection_category,
+                'place_of_incident' => $latest->place_of_incident ?? $latest->incident_address ?? 'Location not specified',
+            ] : null,
         ];
     }
 

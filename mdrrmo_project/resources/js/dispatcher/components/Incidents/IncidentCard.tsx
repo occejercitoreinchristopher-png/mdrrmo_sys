@@ -104,16 +104,36 @@ export default function IncidentCard({ incident, onClick, selected = false }) {
                         {incident.incident_status === 'responding' && (
                             <StatusBadge status="responding" size="xs" />
                         )}
+                        {(incident.reporter_prank_count > 0 || incident.is_prank) && (
+                            <span 
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800/60"
+                                title={incident.is_prank ? "Confirmed Prank Call" : `Reporter has ${incident.reporter_prank_count} prior confirmed prank call(s)`}
+                            >
+                                <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                {incident.is_prank ? 'Prank Call' : `⚠️ Prank Record (${incident.reporter_prank_count})`}
+                            </span>
+                        )}
                     </div>
                 </div>
 
                 {/* Location */}
                 <div className="flex items-start gap-1.5 mt-2.5 text-xs text-slate-600 dark:text-slate-300">
                     <MapPin className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
-                    <span className="line-clamp-2">
-                        {incident.description || 'Location / Description unavailable'}
+                    <span className="line-clamp-2 font-medium">
+                        {incident.place_of_incident 
+                            || incident.incident_address 
+                            || (incident.location_code ? `Marker: ${incident.location_code}` : null) 
+                            || incident.location 
+                            || 'Location unavailable'}
                     </span>
                 </div>
+
+                {/* Description */}
+                {incident.description && (
+                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 italic">
+                        "{incident.description}"
+                    </p>
+                )}
 
                 {/* Responder / Assignment info */}
                 {(incident.incident_status === 'assigned' || incident.incident_status === 'responding') && incident.dispatches?.length > 0 && (

@@ -43,7 +43,8 @@ class DispatchController extends Controller
                 'emt',
                 'teamLeader',
                 'patientCareRecord',
-                'patientCareRecord.patient'
+                'patientCareRecord.patient',
+                'patientCareRecord.images'
             ])
             ->get();
 
@@ -72,6 +73,8 @@ class DispatchController extends Controller
         $validated = $request->validate([
             'latitude' => 'nullable|numeric',
             'longitude' => 'nullable|numeric',
+            'place_of_incident' => 'nullable|string',
+            'address' => 'nullable|string',
         ]);
 
         $user = Auth::user();
@@ -101,15 +104,26 @@ class DispatchController extends Controller
             ['description' => 'General Medical Emergency']
         );
 
-        $ambulance = Ambulance::firstOrCreate(
-            ['plate_number' => 'WALK-IN'],
-            [
+        $ambulance = Ambulance::withTrashed()->where('plate_number', 'WALK-IN')->first();
+        if ($ambulance) {
+            if ($ambulance->trashed()) {
+                $ambulance->restore();
+            }
+            $ambulance->update([
                 'ambulance_code' => 'STATION-WALK-IN',
                 'vehicle_name' => 'MDRRMO Station / Walk-in Clinic',
                 'vehicle_type' => 'Station',
                 'status' => 'available',
-            ]
-        );
+            ]);
+        } else {
+            $ambulance = Ambulance::create([
+                'plate_number' => 'WALK-IN',
+                'ambulance_code' => 'STATION-WALK-IN',
+                'vehicle_name' => 'MDRRMO Station / Walk-in Clinic',
+                'vehicle_type' => 'Station',
+                'status' => 'available',
+            ]);
+        }
 
         $incidentTypeId = $incidentType->id;
         $ambulanceId = $ambulance->id;
@@ -117,11 +131,13 @@ class DispatchController extends Controller
         $lat = $validated['latitude'] ?? 0;
         $lng = $validated['longitude'] ?? 0;
 
+        $placeOfIncident = $request->input('place_of_incident') ?: ($request->input('address') ?: 'Direct Scene Response (Citizen Request)');
+
         $incident = Incident::create([
             'resident_id' => $user->id, // Responder self-reporting
             'incident_type_id' => $incidentTypeId,
-            'description' => 'Walk-In / Station Assistance',
-            'place_of_incident' => 'MDRRMO Station (Walk-In)',
+            'description' => 'Walk-In / Direct Citizen Emergency Request',
+            'place_of_incident' => $placeOfIncident,
             'incident_latitude' => $lat,
             'incident_longitude' => $lng,
             'reporter_latitude' => $lat,
@@ -161,6 +177,7 @@ class DispatchController extends Controller
             'teamLeader',
             'patientCareRecord',
             'patientCareRecord.patient',
+            'patientCareRecord.images',
         ]);
 
         broadcast(new DispatchCreated($dispatch));
@@ -199,12 +216,22 @@ class DispatchController extends Controller
         if (in_array($validated['status'], ['completed', 'cancelled'])) {
             if ($dispatch->incident) {
                 $dispatch->incident->update([
-                    'incident_status' => $validated['status'] === 'completed' ? 'resolved' : 'cancelled',
-                    'resolved_at' => now(),
+                    'incident_status' => $validated['status'] === 'completed' ? 'resolved' : 'verified',
+                    'resolved_at' => $validated['status'] === 'completed' ? now() : null,
                 ]);
             }
-            Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
-            ResponderProfile::whereIn('user_id', array_filter([$dispatch->driver_id, $dispatch->emt_id, $dispatch->team_leader_id]))->update(['availability' => 'available']);
+            if ($dispatch->ambulance_id) {
+                Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
+            }
+            $crewUserIds = $dispatch->crew()->pluck('users.id')->toArray();
+            $assignedUserIds = array_unique(array_filter(array_merge($crewUserIds, [
+                $dispatch->driver_id,
+                $dispatch->emt_id,
+                $dispatch->team_leader_id,
+            ])));
+            if (! empty($assignedUserIds)) {
+                ResponderProfile::whereIn('user_id', $assignedUserIds)->update(['availability' => 'available']);
+            }
         }
 
         try {
@@ -328,6 +355,65 @@ class DispatchController extends Controller
                 'accuracy' => $accuracy,
                 'timestamp' => $timestamp,
             ],
+        ]);
+    }
+
+    public function reportUnfounded(Request $request, Dispatch $dispatch)
+    {
+        $validated = $request->validate([
+            'reason' => 'required|string|max:500',
+            'category' => 'required|in:false_alarm,prank',
+        ]);
+
+        $user = Auth::user();
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($dispatch, $validated, $user) {
+            $dispatch->update([
+                'dispatch_status' => 'cancelled',
+                'completed_at' => now(),
+            ]);
+
+            if ($dispatch->incident) {
+                $isPrank = ($validated['category'] === 'prank');
+                $dispatch->incident->update([
+                    'incident_status' => 'rejected',
+                    'is_prank' => $isPrank,
+                    'rejection_category' => $validated['category'],
+                    'rejection_reason' => '[Reported on Scene by Responders] '.$validated['reason'],
+                    'resolved_at' => now(),
+                    'verified_by' => $user->id,
+                ]);
+            }
+
+            if ($dispatch->ambulance_id) {
+                Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
+            }
+
+            $crewUserIds = $dispatch->crew()->pluck('users.id')->toArray();
+            $assignedUserIds = array_unique(array_filter(array_merge($crewUserIds, [
+                $dispatch->driver_id,
+                $dispatch->emt_id,
+                $dispatch->team_leader_id,
+            ])));
+            if (! empty($assignedUserIds)) {
+                ResponderProfile::whereIn('user_id', $assignedUserIds)->update(['availability' => 'available']);
+            }
+
+            $dispatch->load(['incident', 'incident.resident', 'ambulance']);
+            try {
+                broadcast(new DispatchStatusUpdated($dispatch));
+                if ($dispatch->incident) {
+                    event(new \App\Events\IncidentRejected($dispatch->incident));
+                    \App\Services\PushNotificationService::notifyIncidentRejected($dispatch->incident);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('reportUnfounded broadcast notice: '.$e->getMessage());
+            }
+        });
+
+        return response()->json([
+            'message' => 'Negative result / false alarm reported successfully. Units released.',
+            'data' => $dispatch,
         ]);
     }
 }

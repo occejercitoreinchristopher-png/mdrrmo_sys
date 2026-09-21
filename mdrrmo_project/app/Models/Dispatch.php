@@ -72,4 +72,16 @@ class Dispatch extends Model
     {
         return $this->belongsTo(User::class, 'emt_id');
     }
+
+    public function crew()
+    {
+        return $this->belongsToMany(User::class, 'dispatch_crews')
+            ->withPivot(['role', 'is_reliever'])
+            ->withTimestamps();
+    }
+
+    public function images()
+    {
+        return $this->hasMany(IncidentImage::class, 'dispatch_id');
+    }
 }

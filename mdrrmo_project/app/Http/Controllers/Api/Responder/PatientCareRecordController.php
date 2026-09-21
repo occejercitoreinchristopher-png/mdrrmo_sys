@@ -157,6 +157,24 @@ class PatientCareRecordController extends Controller
             ]);
         }
 
+        // Optional photo attached during submission
+        if ($request->hasFile('photo')) {
+            $path = $request->file('photo')->store('pcr_photos', 'public');
+            \App\Models\IncidentImage::create([
+                'incident_id' => $dispatch->incident_id,
+                'dispatch_id' => $dispatch->id,
+                'patient_care_record_id' => $pcr->id,
+                'user_id' => $request->user()->id,
+                'image_path' => $path,
+                'capture_method' => 'camera',
+                'latitude' => $request->filled('latitude') ? (float) $request->latitude : null,
+                'longitude' => $request->filled('longitude') ? (float) $request->longitude : null,
+                'location_name' => $request->filled('location_name') ? $request->location_name : null,
+                'captured_at' => $request->filled('captured_at') ? \Carbon\Carbon::parse($request->captured_at) : now(),
+                'source' => 'responder_pcr',
+            ]);
+        }
+
         Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
         ResponderProfile::whereIn('user_id', array_filter([$dispatch->driver_id, $dispatch->emt_id, $dispatch->team_leader_id]))->update(['availability' => 'available']);
 
@@ -169,5 +187,39 @@ class PatientCareRecordController extends Controller
         }
 
         return response()->json(['message' => 'PCR Submitted and Dispatch Completed']);
+    }
+
+    public function uploadPhoto(Request $request, Dispatch $dispatch)
+    {
+        $request->validate([
+            'photo' => 'required|image|mimes:jpeg,png,jpg,webp|max:10240',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'location_name' => 'nullable|string',
+            'captured_at' => 'nullable|date',
+        ]);
+
+        $path = $request->file('photo')->store('pcr_photos', 'public');
+
+        $pcr = $dispatch->patientCareRecord;
+
+        $image = \App\Models\IncidentImage::create([
+            'incident_id' => $dispatch->incident_id,
+            'dispatch_id' => $dispatch->id,
+            'patient_care_record_id' => $pcr?->id,
+            'user_id' => $request->user()->id,
+            'image_path' => $path,
+            'capture_method' => 'camera',
+            'latitude' => $request->filled('latitude') ? (float) $request->latitude : null,
+            'longitude' => $request->filled('longitude') ? (float) $request->longitude : null,
+            'location_name' => $request->filled('location_name') ? $request->location_name : null,
+            'captured_at' => $request->filled('captured_at') ? \Carbon\Carbon::parse($request->captured_at) : now(),
+            'source' => 'responder_pcr',
+        ]);
+
+        return response()->json([
+            'message' => 'PCR photo uploaded successfully',
+            'data' => $image,
+        ], 201);
     }
 }

@@ -162,19 +162,6 @@ export default function ActiveDispatchWorkspace({
         return { status: 'stale', label: `Last updated ${minutes}m ago`, color: 'text-slate-400 bg-slate-500/10 border-slate-500/30', isLive: false };
     };
 
-    const handleCancelDispatch = (dispatch: any) => {
-        if (!dispatch) return;
-        if (confirm(`Cancel mission #${dispatch.id}? This will release the crew/ambulance and cancel this emergency request.`)) {
-            setActionLoading(true);
-            router.post(`/dispatcher/dispatches/${dispatch.id}/cancel`, { revert_incident: false }, {
-                onFinish: () => {
-                    setActionLoading(false);
-                    setSelectedDispatch(null);
-                }
-            });
-        }
-    };
-
     useEffect(() => {
         if (selectedIncidentId) {
             const dispatch = dispatches.find(d => d.incident_id == selectedIncidentId);
@@ -307,7 +294,14 @@ export default function ActiveDispatchWorkspace({
                                             </h3>
                                             <div className={`text-xs flex items-start gap-1.5 mb-3 ${isAlarming ? 'text-red-700/80 dark:text-red-300/80' : 'text-slate-500 dark:text-slate-400'}`}>
                                                 <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-                                                <span className="line-clamp-2">{incident.description || 'No description'}</span>
+                                                <span className="line-clamp-2">
+                                                    {incident.place_of_incident 
+                                                        || incident.incident_address 
+                                                        || (incident.location_code ? `Marker: ${incident.location_code}` : null) 
+                                                        || incident.location 
+                                                        || incident.description 
+                                                        || 'Location unavailable'}
+                                                </span>
                                             </div>
                                             <Button 
                                                 size="sm" 
@@ -667,22 +661,13 @@ export default function ActiveDispatchWorkspace({
                                     )}
                                 </div>
                                 
-                                <div className="flex gap-2">
+                                <div className="flex">
                                     <button 
                                         onClick={() => setIsExpanded(!isExpanded)}
-                                        className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200/80 dark:border-white/10 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                                        className="w-full py-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200/80 dark:border-white/10 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                                     >
                                         {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
                                         {isExpanded ? 'Collapse Mission Details' : 'View Full Mission Details'}
-                                    </button>
-                                    <button
-                                        onClick={() => handleCancelDispatch(selectedDispatch)}
-                                        disabled={actionLoading}
-                                        className="px-4 py-2 bg-[#F61509]/10 hover:bg-[#F61509]/20 text-[#F61509] border border-[#F61509]/20 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
-                                        title="Cancel Mission and Revert Incident"
-                                    >
-                                        <XCircle className="w-3.5 h-3.5" />
-                                        Cancel Mission
                                     </button>
                                 </div>
                             </div>

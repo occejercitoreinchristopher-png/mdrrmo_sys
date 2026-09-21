@@ -1,9 +1,10 @@
-import { MapPin, Clock, CheckCircle, XCircle, ShieldAlert, Truck, Send, CheckCircle2, PhoneCall, Smartphone, UserCheck, Image as ImageIcon, ExternalLink, X } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, XCircle, ShieldAlert, AlertTriangle, Truck, Send, CheckCircle2, PhoneCall, Smartphone, UserCheck, Image as ImageIcon, ExternalLink, X, Camera } from 'lucide-react';
 import Drawer from '@/shared/components/Drawer';
 import StatusBadge from '@/shared/components/StatusBadge';
 import Button from '@/shared/components/Button';
 import { router } from '@inertiajs/react';
 import { useState, useEffect, ReactNode } from 'react';
+import RejectModal from './RejectModal';
 
 // Haversine distance calculation in meters
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -57,6 +58,7 @@ export default function IncidentDetails({
     onAssignUnit?: (incident: any) => void; 
 }) {
     const [processing, setProcessing] = useState(false);
+    const [showRejectModal, setShowRejectModal] = useState(false);
     const [address, setAddress] = useState<string | null>(null);
     const [loadingAddress, setLoadingAddress] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -312,19 +314,21 @@ export default function IncidentDetails({
                         
                         <div>
                             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                                Coordinates & Map Location
+                                Coordinates & Reporter Telemetry
                             </p>
                             <div className="text-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none">
                                 <div className="flex items-start gap-2">
                                     <MapPin className="w-4 h-4 text-[#F61509] flex-shrink-0 mt-0.5" />
                                     <div className="flex flex-col">
                                         <span className="font-semibold text-slate-900 dark:text-white capitalize">
-                                            {incident.place_of_incident 
-                                                || incident.incident_address 
-                                                || (incident.location_code ? `Location Marker: ${incident.location_code}` : null) 
-                                                || (loadingAddress ? 'Fetching location name...' : address) 
-                                                || (incident.resident?.resident_profile?.barangay?.barangay_name ? `Brgy. ${incident.resident.resident_profile.barangay.barangay_name}, Opol` : null)
-                                                || 'Opol, Misamis Oriental'}
+                                            {incident.place_of_incident && distance && distance > 50
+                                                ? 'Reporter Device Position'
+                                                : (incident.place_of_incident 
+                                                    || incident.incident_address 
+                                                    || (incident.location_code ? `Location Marker: ${incident.location_code}` : null) 
+                                                    || (loadingAddress ? 'Fetching location name...' : address) 
+                                                    || (incident.resident?.resident_profile?.barangay?.barangay_name ? `Brgy. ${incident.resident.resident_profile.barangay.barangay_name}, Opol` : null)
+                                                    || 'Opol, Misamis Oriental')}
                                         </span>
                                         {incident.incident_latitude && incident.incident_longitude && (
                                             <span className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">
@@ -355,6 +359,50 @@ export default function IncidentDetails({
                                             Click to enlarge
                                         </div>
                                     </div>
+
+                                    {/* Captured Photo Metadata Card */}
+                                    {incident.images[0] && (
+                                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 space-y-1.5 text-xs">
+                                            <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 dark:border-white/10">
+                                                <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                                    <Camera className="w-3.5 h-3.5 text-primary" /> Photo Information
+                                                </span>
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                                    incident.images[0].source === 'responder_pcr'
+                                                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                                }`}>
+                                                    {incident.images[0].source === 'responder_pcr' ? 'Responder Scene Photo' : 'Resident Incident Photo'}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex items-start gap-1.5 text-slate-600 dark:text-slate-300">
+                                                <span className="font-bold text-slate-500 shrink-0">Location:</span>
+                                                <span className="line-clamp-2">{incident.images[0].location_name || incident.place_of_incident || 'Poblacion, Opol, Misamis Oriental, Philippines'}</span>
+                                            </div>
+
+                                            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-mono text-[11px]">
+                                                <span className="font-bold text-slate-500 shrink-0 font-sans text-xs">Coordinates:</span>
+                                                <span>
+                                                    {incident.images[0].latitude && incident.images[0].longitude 
+                                                        ? `${Number(incident.images[0].latitude).toFixed(6)}, ${Number(incident.images[0].longitude).toFixed(6)}`
+                                                        : (incident.incident_latitude && incident.incident_longitude 
+                                                            ? `${Number(incident.incident_latitude).toFixed(6)}, ${Number(incident.incident_longitude).toFixed(6)}`
+                                                            : 'N/A')}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                                                <span className="font-bold text-slate-500 shrink-0">Date/Time:</span>
+                                                <span>
+                                                    {incident.images[0].formatted_captured_at || 
+                                                     (incident.images[0].captured_at 
+                                                        ? new Date(incident.images[0].captured_at).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) 
+                                                        : new Date(incident.created_at).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }))}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
                                     {incident.images.length > 1 && (
                                         <div className="grid grid-cols-3 gap-2">
                                             {incident.images.slice(1).map((img, idx) => (
@@ -405,43 +453,103 @@ export default function IncidentDetails({
                             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                 Reported By
                             </p>
-                            <div className="text-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none">
-                                <p className="font-medium">
-                                    {incident.resident
-                                        ? `${incident.resident.first_name} ${incident.resident.last_name}`
-                                        : (incident.caller_phone_number ? `Phone Caller (${incident.caller_phone_number})` : '—')}
-                                </p>
-                                <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">
-                                    {incident.caller_phone_number || incident.resident?.phone_number || incident.resident?.email || ''}
-                                </p>
-                                {incident.incident_address && (
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 pt-1.5 border-t border-slate-100 dark:border-white/5">
-                                        <span className="font-medium text-slate-600 dark:text-slate-300">Registered Address:</span> {incident.incident_address}
+                            <div className="text-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none space-y-2">
+                                <div>
+                                    <p className="font-medium">
+                                        {incident.resident
+                                            ? `${incident.resident.first_name} ${incident.resident.last_name}`
+                                            : (incident.caller_phone_number ? `Phone Caller (${incident.caller_phone_number})` : '—')}
                                     </p>
+                                    <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+                                        {incident.caller_phone_number || incident.resident?.phone_number || incident.resident?.email || ''}
+                                    </p>
+                                    {incident.incident_address && (
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 pt-1.5 border-t border-slate-100 dark:border-white/5">
+                                            <span className="font-medium text-slate-600 dark:text-slate-300">Registered Address:</span> {incident.incident_address}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Reporter Prank History Warning & Reference Box */}
+                                {(incident.reporter_prank_count > 0 || incident.is_prank) && (
+                                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/60 rounded-xl text-xs space-y-1.5">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-bold uppercase tracking-wider text-[11px]">
+                                                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                                <span>
+                                                    {incident.is_prank 
+                                                        ? '🚨 Recorded as Confirmed Prank' 
+                                                        : `⚠️ Reporter Has ${incident.reporter_prank_count} Prior Prank Call${incident.reporter_prank_count === 1 ? '' : 's'}`}
+                                                </span>
+                                            </div>
+                                            <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border border-amber-300/60">
+                                                Reference Only
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] text-amber-900/90 dark:text-amber-200/90 leading-relaxed">
+                                            This history is displayed for reference so dispatchers do not need to re-interrogate the resident about past events. Each new report must be evaluated independently.
+                                        </p>
+                                    </div>
                                 )}
                             </div>
                         </div>
+
+                        {/* Rejection Details (if rejected) */}
+                        {incident.incident_status === 'rejected' && (
+                            <div>
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                                    Rejection Details
+                                </p>
+                                <div className="p-3.5 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50/80 dark:bg-red-950/30 text-xs space-y-1.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-1.5 text-red-700 dark:text-red-400 font-bold uppercase tracking-wider text-[11px]">
+                                            <XCircle className="w-4 h-4 shrink-0" />
+                                            <span>
+                                                {incident.rejection_category === 'prank' 
+                                                    ? '🚨 Intentional Prank / Hoax Call' 
+                                                    : (incident.rejection_category 
+                                                        ? incident.rejection_category.replace('_', ' ').toUpperCase() 
+                                                        : 'REJECTED')}
+                                            </span>
+                                        </div>
+                                        {incident.is_prank && (
+                                            <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-red-600 text-white shadow-xs">
+                                                Flagged Prank
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-red-950 dark:text-red-200 font-medium pt-1">
+                                        <strong>Recorded Reason:</strong> "{incident.rejection_reason || 'No specific reason provided'}"
+                                    </p>
+                                    {incident.resolved_at && (
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                            Processed on {new Date(incident.resolved_at).toLocaleString('en-PH')}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* Fixed Action Footer */}
                 <div className="p-4 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-10px_20px_rgba(0,0,0,0.5)]">
                     {incident.incident_status === 'pending' && (
-                        <div className="flex gap-3">
+                        <div className="flex gap-2">
                             <Button
                                 variant="primary"
-                                className="flex-1"
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                                 loading={processing}
-                                onClick={() => updateStatus('verified', { priority: incident.priority || 'Moderate' })}
+                                onClick={() => updateStatus('verified')}
                             >
-                                <CheckCircle2 className="w-4 h-4" />
+                                <CheckCircle className="w-4 h-4" />
                                 Verify Incident
                             </Button>
                             <Button
                                 variant="destructive"
                                 className="w-auto px-4"
-                                loading={processing}
-                                onClick={() => updateStatus('rejected', { rejection_reason: 'Rejected by Dispatcher' })}
+                                title="Reject Incident (Prank / False Alarm)"
+                                onClick={() => setShowRejectModal(true)}
                             >
                                 <XCircle className="w-4 h-4" />
                             </Button>
@@ -449,47 +557,59 @@ export default function IncidentDetails({
                     )}
 
                     {incident.incident_status === 'verified' && (
-                        <Button
-                            variant="primary"
-                            className="w-full bg-gradient-to-r from-orange-500 to-rose-600 hover:from-orange-600 hover:to-rose-700 text-white shadow-lg shadow-orange-500/20"
-                            onClick={() => {
-                                if (onAssignUnit) {
-                                    onAssignUnit(incident);
-                                } else {
-                                    router.get(`/dispatcher/dispatches?incident_id=${incident.id}`);
-                                }
-                            }}
-                        >
-                            <Send className="w-4 h-4" />
-                            Assign Responder Unit
-                        </Button>
-                    )}
-
-                    {(incident.incident_status === 'assigned' || incident.incident_status === 'responding') && (
                         <div className="flex gap-2">
                             <Button
-                                variant="secondary"
-                                className="flex-1"
-                                onClick={() => {
-                                    router.get(`/dispatcher/dispatches?incident_id=${incident.id}`);
-                                }}
-                            >
-                                <Truck className="w-4 h-4" />
-                                View Active Dispatch
-                            </Button>
-                            <Button
                                 variant="primary"
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                                loading={processing}
+                                className="flex-1 bg-gradient-to-r from-orange-500 to-rose-600 hover:from-orange-600 hover:to-rose-700 text-white shadow-lg shadow-orange-500/20"
                                 onClick={() => {
-                                    if (confirm('Are you sure you want to mark this incident as resolved and complete all associated missions?')) {
-                                        updateStatus('resolved');
+                                    if (onAssignUnit) {
+                                        onAssignUnit(incident);
+                                    } else {
+                                        router.get(`/dispatcher/dispatches?incident_id=${incident.id}`);
                                     }
                                 }}
                             >
-                                <CheckCircle className="w-4 h-4" />
-                                Resolve
+                                <Send className="w-4 h-4" />
+                                Assign Responder Unit
                             </Button>
+                            <Button
+                                variant="destructive"
+                                className="w-auto px-3 text-xs"
+                                title="Reject as Prank or False Alarm"
+                                onClick={() => setShowRejectModal(true)}
+                            >
+                                <XCircle className="w-4 h-4 mr-1" />
+                                Reject
+                            </Button>
+                        </div>
+                    )}
+
+                    {(incident.incident_status === 'assigned' || incident.incident_status === 'responding') && (
+                        <div className="space-y-2">
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="secondary"
+                                    className="flex-1"
+                                    onClick={() => {
+                                        router.get(`/dispatcher/dispatches?incident_id=${incident.id}`);
+                                    }}
+                                >
+                                    <Truck className="w-4 h-4 mr-1.5" />
+                                    View Active Dispatch
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    className="w-auto px-3 text-xs"
+                                    title="Cancel mission & mark as Prank / False Alarm"
+                                    onClick={() => setShowRejectModal(true)}
+                                >
+                                    <ShieldAlert className="w-4 h-4 mr-1" />
+                                    Reject / Prank
+                                </Button>
+                            </div>
+                            <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 italic">
+                                If responders arrive and find no incident or report a hoax, use "Reject / Prank" to cancel active units and log the incident.
+                            </p>
                         </div>
                     )}
                 </div>
@@ -548,6 +668,15 @@ export default function IncidentDetails({
                     </div>
                 </div>
             )}
+            {/* Reject Modal */}
+            <RejectModal
+                incident={incident}
+                open={showRejectModal}
+                onClose={() => {
+                    setShowRejectModal(false);
+                    onClose();
+                }}
+            />
         </Drawer>
     );
 }

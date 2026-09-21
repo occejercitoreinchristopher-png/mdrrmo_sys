@@ -43,7 +43,11 @@ class IncidentController extends Controller
             'reported_at' => 'nullable|date',
             'description' => 'nullable|string',
             'address' => 'nullable|string',
-            'photo' => 'required|image|mimes:jpeg,png,jpg|max:10240',
+            'photo' => 'required|image|mimes:jpeg,png,jpg,webp|max:10240',
+            'photo_latitude' => 'nullable|numeric',
+            'photo_longitude' => 'nullable|numeric',
+            'photo_location_name' => 'nullable|string',
+            'photo_captured_at' => 'nullable|date',
         ]);
 
         $hasActiveIncident = Incident::where('resident_id', Auth::id())
@@ -81,11 +85,25 @@ class IncidentController extends Controller
         if ($request->hasFile('photo')) {
             $path = $request->file('photo')->store('incidents', 'public');
 
+            $photoLat = $request->filled('photo_latitude') ? (float) $request->photo_latitude : (float) $validated['latitude'];
+            $photoLng = $request->filled('photo_longitude') ? (float) $request->photo_longitude : (float) $validated['longitude'];
+            $photoLocationName = $request->filled('photo_location_name') ? $request->photo_location_name : ($validated['address'] ?? null);
+            $photoCapturedAt = $request->filled('photo_captured_at') ? \Carbon\Carbon::parse($request->photo_captured_at) : now();
+
             $incident->images()->create([
+                'user_id' => Auth::id(),
                 'image_path' => $path,
                 'capture_method' => 'camera',
+                'latitude' => $photoLat,
+                'longitude' => $photoLng,
+                'location_name' => $photoLocationName,
+                'captured_at' => $photoCapturedAt,
+                'source' => 'resident',
             ]);
         }
+
+        $incident->load(['incidentType', 'resident.residentProfile.barangay', 'images']);
+        $incident->reporter_prank_history = Incident::getPrankHistoryForReporter(Auth::id(), Auth::user()?->phone_number);
 
         event(new IncidentCreated($incident));
 

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { AlertCircle, KeyRound } from 'lucide-react';
+import { AlertCircle, KeyRound, Shield, UserCheck } from 'lucide-react';
 import Button from '@/shared/components/Button';
 import Input from '@/shared/components/Input';
 import Select from '@/shared/components/Select';
+import { clsx } from 'clsx';
 
 import type { User } from './UserManagement';
 
@@ -47,6 +48,7 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
         role: targetUser?.role ?? initialRole,
         position: targetUser?.responder_profile?.position ?? (initialRole === 'responder' ? 'driver' : ''),
         team: targetUser?.responder_profile?.team ?? '',
+        is_reliever: Boolean(targetUser?.responder_profile?.is_reliever),
         status: targetUser?.status ?? 'active',
     });
 
@@ -116,6 +118,12 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
         if (payload.role !== 'responder') {
             delete payload.position;
             delete payload.team;
+            delete payload.is_reliever;
+        } else {
+            payload.is_reliever = Boolean(form.is_reliever);
+            if (payload.is_reliever) {
+                payload.team = null;
+            }
         }
         // Format payload: send integer age or null
         if (payload.age !== '') {
@@ -274,29 +282,83 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
                 )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {showField('team') && (
-                    <Input
-                        label="Team"
-                        id="team"
-                        value={form.team}
-                        onChange={set('team')}
-                        error={errors.team}
-                        required={form.role === 'responder'}
-                        placeholder="e.g. Alpha"
-                    />
-                )}
-                {showField('position') && (
-                    <Select
-                        label="Position"
-                        id="position"
-                        value={form.position}
-                        onChange={set('position')}
-                        options={POSITIONS.map((p) => ({ value: p, label: p === 'emt' ? 'EMT' : p.charAt(0).toUpperCase() + p.slice(1) }))}
-                        error={errors.position}
-                    />
-                )}
-            </div>
+            {form.role === 'responder' && (
+                <div className="space-y-4">
+                    <div className="p-3.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl space-y-2.5">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                                <Shield className="w-3.5 h-3.5 text-blue-500" /> Responder Membership Type
+                            </span>
+                            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                                {form.is_reliever ? 'Reliever Pool' : 'Permanent Team'}
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setForm(f => ({ ...f, is_reliever: false }))}
+                                className={clsx(
+                                    "px-3 py-2.5 text-xs font-semibold rounded-xl border transition-all text-center cursor-pointer flex items-center justify-center gap-1.5",
+                                    !form.is_reliever
+                                        ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                                        : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-blue-400"
+                                )}
+                            >
+                                <Shield className="w-3.5 h-3.5" />
+                                Permanent Member
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setForm(f => ({ ...f, is_reliever: true, team: '' }))}
+                                className={clsx(
+                                    "px-3 py-2.5 text-xs font-semibold rounded-xl border transition-all text-center cursor-pointer flex items-center justify-center gap-1.5",
+                                    form.is_reliever
+                                        ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                                        : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-amber-400"
+                                )}
+                            >
+                                <UserCheck className="w-3.5 h-3.5" />
+                                Reliever (Standby)
+                            </button>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            {!form.is_reliever
+                                ? "Each permanent team has exactly 1 Driver and up to 3 EMTs (max 4 members total)."
+                                : "Relievers are separate, unlimited personnel that temporarily fill mission roles when permanent members are unavailable."}
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {!form.is_reliever ? (
+                            <Input
+                                label="Permanent Team"
+                                id="team"
+                                value={form.team}
+                                onChange={set('team')}
+                                error={errors.team}
+                                required
+                                placeholder="e.g. Alpha"
+                            />
+                        ) : (
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Assignment Pool</label>
+                                <div className="px-4 py-2.5 text-sm rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 font-medium">
+                                    Reliever Pool (No Permanent Team)
+                                </div>
+                            </div>
+                        )}
+
+                        <Select
+                            label={form.is_reliever ? "Reliever Position" : "Team Position"}
+                            id="position"
+                            value={form.position}
+                            onChange={set('position')}
+                            options={POSITIONS.map((p) => ({ value: p, label: p === 'emt' ? 'EMT' : 'Driver' }))}
+                            error={errors.position}
+                        />
+                    </div>
+                </div>
+            )}
 
             {Boolean(user) && showField('status') && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

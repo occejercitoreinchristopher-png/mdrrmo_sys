@@ -25,4 +25,9 @@ class PatientCareRecord extends Model
     {
         return $this->belongsTo(Dispatch::class);
     }
+
+    public function images()
+    {
+        return $this->hasMany(IncidentImage::class, 'patient_care_record_id');
+    }
 }

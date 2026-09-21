@@ -23,12 +23,14 @@ class SendDispatchPushNotification
     {
         $dispatch = $event->dispatch;
 
-        // Collect assigned user IDs
-        $userIds = array_filter([
-            $dispatch->driver_id,
-            $dispatch->team_leader_id,
-            $dispatch->emt_id,
-        ]);
+        // Collect assigned user IDs from dispatch_crews
+        $userIds = $dispatch->crew()->pluck('users.id')->toArray();
+        if (empty($userIds)) {
+            $userIds = array_filter([
+                $dispatch->driver_id,
+                $dispatch->emt_id,
+            ]);
+        }
 
         if (empty($userIds)) {
             return;

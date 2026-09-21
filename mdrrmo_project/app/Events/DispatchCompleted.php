@@ -32,18 +32,12 @@ class DispatchCompleted implements ShouldBroadcastNow
     {
         $channels = [new PrivateChannel('dispatcher')];
 
-        $assignedUserIds = array_filter([
-            $this->dispatch->driver_id,
-            $this->dispatch->team_leader_id,
-            $this->dispatch->emt_id,
-        ]);
-
-        if (! empty($this->dispatch->borrowed_crew) && is_array($this->dispatch->borrowed_crew)) {
-            foreach ($this->dispatch->borrowed_crew as $crew) {
-                if (! empty($crew['user_id'])) {
-                    $assignedUserIds[] = $crew['user_id'];
-                }
-            }
+        $assignedUserIds = $this->dispatch->crew()->pluck('users.id')->toArray();
+        if (empty($assignedUserIds)) {
+            $assignedUserIds = array_filter([
+                $this->dispatch->driver_id,
+                $this->dispatch->emt_id,
+            ]);
         }
 
         foreach (array_unique($assignedUserIds) as $userId) {

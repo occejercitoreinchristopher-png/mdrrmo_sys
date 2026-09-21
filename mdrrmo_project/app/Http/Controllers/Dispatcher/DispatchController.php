@@ -37,11 +37,8 @@ class DispatchController extends Controller
             ->where('vehicle_type', '!=', 'Station')
             ->get();
 
-        // Fetch available responders
-        $responders = User::whereIn('role', ['responder', 'team_leader', 'emt', 'driver'])
-            ->whereHas('responderProfile', function ($q) {
-                $q->where('availability', 'available');
-            })
+        // Fetch available responders (both permanent team members and relievers)
+        $responders = User::where('role', 'responder')
             ->with('responderProfile')
             ->get();
 
@@ -67,106 +64,87 @@ class DispatchController extends Controller
             'ambulance_id' => 'required|exists:ambulances,id',
             'team' => 'required|string',
             'driver_id' => 'nullable|exists:users,id',
-            'team_leader_id' => 'nullable|exists:users,id',
-            'emt_id' => 'nullable|exists:users,id',
-            'borrowed_crew' => 'nullable|array',
+            'emt_ids' => 'nullable|array',
+            'emt_ids.*' => 'exists:users,id',
+            'reliever_ids' => 'nullable|array',
+            'reliever_ids.*' => 'exists:users,id',
         ]);
 
-        DB::transaction(function () use ($validated, $request) {
+        $driverId = ! empty($validated['driver_id']) ? $validated['driver_id'] : null;
+        $emtIds = ! empty($validated['emt_ids']) ? (array) $validated['emt_ids'] : [];
+
+        if (! $driverId && empty($emtIds)) {
+            abort(422, 'Please select at least one crew member (Driver or EMT) to deploy.');
+        }
+
+        DB::transaction(function () use ($validated, $request, $driverId, $emtIds) {
             $incident = Incident::findOrFail($validated['incident_id']);
             $ambulance = Ambulance::findOrFail($validated['ambulance_id']);
 
-            // Find available responders for the selected team
-            $availableResponders = User::whereHas('responderProfile', function ($q) use ($validated) {
-                $q->where('team', $validated['team'])
-                    ->where('availability', 'available');
-            })->with('responderProfile')->get();
+            // Load driver and verify position if provided
+            $driver = null;
+            if ($driverId) {
+                $driver = User::with('responderProfile')->findOrFail($driverId);
+                if ($driver->responderProfile?->position !== 'driver') {
+                    abort(422, "User {$driver->first_name} {$driver->last_name} is not registered as a Driver.");
+                }
+            }
 
-            // Load explicitly assigned members or fallback to available team members
-            $driver = ! empty($validated['driver_id'])
-                ? User::with('responderProfile')->find($validated['driver_id'])
-                : ($availableResponders->first(fn ($u) => $u->responderProfile?->position === 'driver') ?? $availableResponders->first());
+            // Load EMTs and verify positions if provided
+            $emtUsers = collect();
+            if (! empty($emtIds)) {
+                $emtUsers = User::with('responderProfile')->whereIn('id', $emtIds)->get();
+                if ($emtUsers->count() !== count($emtIds)) {
+                    abort(422, 'One or more selected EMTs could not be found.');
+                }
 
-            $teamLeader = ! empty($validated['team_leader_id'])
-                ? User::with('responderProfile')->find($validated['team_leader_id'])
-                : $availableResponders->first(fn ($u) => $u->responderProfile?->position === 'team_leader' && $u->id !== $driver?->id);
+                foreach ($emtUsers as $emtUser) {
+                    if ($emtUser->responderProfile?->position !== 'emt') {
+                        abort(422, "User {$emtUser->first_name} {$emtUser->last_name} is not registered as an EMT.");
+                    }
+                }
+            }
 
-            $emt = ! empty($validated['emt_id'])
-                ? User::with('responderProfile')->find($validated['emt_id'])
-                : ($availableResponders->first(fn ($u) => $u->responderProfile?->position === 'emt' && $u->id !== $driver?->id && $u->id !== $teamLeader?->id)
-                   ?? $availableResponders->first(fn ($u) => $u->id !== $driver?->id && $u->id !== $teamLeader?->id));
+            // Collect all assigned crew IDs
+            $assignedCrewIds = array_values(array_unique(array_merge(
+                $driver ? [$driver->id] : [],
+                $emtUsers->pluck('id')->toArray()
+            )));
 
-            if (! $driver && ! $emt && ! $teamLeader) {
-                abort(422, 'The selected team has no available responders on duty.');
+            if (empty($assignedCrewIds)) {
+                abort(422, 'Please select at least one crew member to deploy.');
             }
 
             // Safeguard: Ensure none of the assigned members are already busy on another active mission
-            $assignedCrewIds = array_values(array_filter([$driver?->id, $teamLeader?->id, $emt?->id]));
             $alreadyActive = Dispatch::whereNotIn('dispatch_status', ['completed', 'cancelled'])
                 ->where(function ($q) use ($assignedCrewIds) {
                     $q->whereIn('driver_id', $assignedCrewIds)
-                        ->orWhereIn('team_leader_id', $assignedCrewIds)
-                        ->orWhereIn('emt_id', $assignedCrewIds);
+                        ->orWhereIn('emt_id', $assignedCrewIds)
+                        ->orWhereHas('crew', fn ($cq) => $cq->whereIn('users.id', $assignedCrewIds));
                 })->exists();
 
             if ($alreadyActive) {
                 abort(422, 'One or more assigned crew members are already deployed to an active mission.');
             }
 
-            // Strict Incomplete Rule: Borrowing is ONLY permitted when the requesting team lacks an available member for that position
-            if ($driver && $driver->responderProfile?->team && strcasecmp($driver->responderProfile->team, $validated['team']) !== 0) {
-                $teamHasDriver = $availableResponders->contains(fn ($u) => in_array($u->responderProfile?->position, ['driver']));
-                if ($teamHasDriver) {
-                    abort(422, "Cannot borrow a driver because Team {$validated['team']} already has an available on-duty driver.");
-                }
-            }
-
-            if ($emt && $emt->responderProfile?->team && strcasecmp($emt->responderProfile->team, $validated['team']) !== 0) {
-                $teamHasEmt = $availableResponders->contains(fn ($u) => in_array($u->responderProfile?->position, ['emt']) && $u->id !== $driver?->id);
-                if ($teamHasEmt) {
-                    abort(422, "Cannot borrow an EMT because Team {$validated['team']} already has an available on-duty EMT.");
-                }
-            }
-
-            // Detect and structure borrowed crew members (Permanent Crew != Requesting Team)
-            $borrowedCrew = is_array($request->borrowed_crew) ? $request->borrowed_crew : [];
-            $crewMap = [
-                'driver' => $driver,
-                'team_leader' => $teamLeader,
-                'emt' => $emt,
-            ];
-
-            foreach ($crewMap as $role => $member) {
-                if ($member && $member->responderProfile?->team) {
-                    $permTeam = $member->responderProfile->team;
-                    if (strcasecmp($permTeam, $validated['team']) !== 0) {
-                        $alreadyListed = collect($borrowedCrew)->firstWhere('user_id', $member->id);
-                        if (! $alreadyListed) {
-                            $borrowedCrew[] = [
-                                'user_id' => $member->id,
-                                'name' => $member->first_name.' '.$member->last_name,
-                                'role' => match ($role) {
-                                    'driver' => 'Driver',
-                                    'team_leader' => 'Team Leader',
-                                    'emt' => 'EMT',
-                                    default => ucfirst($role)
-                                },
-                                'permanent_team' => str_starts_with($permTeam, 'Team ') ? $permTeam : 'Team '.$permTeam,
-                                'borrowed_to' => str_starts_with($validated['team'], 'Team ') ? $validated['team'] : 'Team '.$validated['team'],
-                                'incident_id' => $incident->id,
-                            ];
-                        }
-                    }
-                }
-            }
-
+            // Snapshot structure
             $crewSnapshot = [
                 'team' => $validated['team'],
-                'driver' => $driver ? $driver->first_name.' '.$driver->last_name : null,
-                'team_leader' => $teamLeader ? $teamLeader->first_name.' '.$teamLeader->last_name : null,
-                'emt' => $emt ? $emt->first_name.' '.$emt->last_name : null,
-                'borrowed_crew' => $borrowedCrew,
+                'driver' => $driver ? [
+                    'id' => $driver->id,
+                    'name' => $driver->first_name.' '.$driver->last_name,
+                    'is_reliever' => (bool) $driver->responderProfile?->is_reliever,
+                    'position' => 'Driver',
+                ] : null,
+                'emts' => $emtUsers->map(fn ($u) => [
+                    'id' => $u->id,
+                    'name' => $u->first_name.' '.$u->last_name,
+                    'is_reliever' => (bool) $u->responderProfile?->is_reliever,
+                    'position' => 'EMT',
+                ])->toArray(),
             ];
+
+            $primaryEmt = $emtUsers->first();
 
             $dispatch = Dispatch::create([
                 'incident_id' => $incident->id,
@@ -174,27 +152,40 @@ class DispatchController extends Controller
                 'ambulance_id' => $ambulance->id,
                 'team' => $validated['team'],
                 'driver_id' => $driver?->id,
-                'team_leader_id' => $teamLeader?->id,
-                'emt_id' => $emt?->id,
-                'borrowed_crew' => ! empty($borrowedCrew) ? $borrowedCrew : null,
+                'team_leader_id' => null,
+                'emt_id' => $primaryEmt?->id,
+                'borrowed_crew' => null,
                 'crew_snapshot' => $crewSnapshot,
                 'dispatch_status' => 'assigned',
                 'assigned_at' => now(),
             ]);
 
+            // Attach all crew members to dispatch_crews
+            if ($driver) {
+                $dispatch->crew()->attach($driver->id, [
+                    'role' => 'driver',
+                    'is_reliever' => (bool) $driver->responderProfile?->is_reliever,
+                ]);
+            }
+
+            foreach ($emtUsers as $emtUser) {
+                $dispatch->crew()->attach($emtUser->id, [
+                    'role' => 'emt',
+                    'is_reliever' => (bool) $emtUser->responderProfile?->is_reliever,
+                ]);
+            }
+
             // Update statuses
             $incident->update(['incident_status' => 'assigned']);
             $ambulance->update(['status' => 'dispatched']);
 
-            if (! empty($assignedCrewIds)) {
-                ResponderProfile::whereIn('user_id', $assignedCrewIds)
-                    ->update(['availability' => 'busy']);
-            }
+            ResponderProfile::whereIn('user_id', $assignedCrewIds)
+                ->update(['availability' => 'busy']);
 
             event(new DispatchCreated($dispatch));
         });
 
-        return back()->with('success', 'Dispatch created successfully and crew notified.');
+        return back()->with('success', 'Dispatch created successfully and mission crew notified.');
     }
 
     public function resolve(Request $request, Dispatch $dispatch)
@@ -218,24 +209,18 @@ class DispatchController extends Controller
                 Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
             }
 
-            $crewUserIds = array_filter([$dispatch->driver_id, $dispatch->emt_id, $dispatch->team_leader_id]);
+            $crewUserIds = $dispatch->crew()->pluck('users.id')->toArray();
+            if (empty($crewUserIds)) {
+                $crewUserIds = array_filter([$dispatch->driver_id, $dispatch->emt_id]);
+            }
             if (! empty($crewUserIds)) {
                 ResponderProfile::whereIn('user_id', $crewUserIds)->update(['availability' => 'available']);
             }
 
-            // Collect confirmation note for borrowed crew returning to permanent crew
-            if (is_array($dispatch->borrowed_crew) && count($dispatch->borrowed_crew) > 0) {
-                foreach ($dispatch->borrowed_crew as $b) {
-                    $name = $b['name'] ?? null;
-                    if (! $name && ! empty($b['user_id'])) {
-                        $u = User::find($b['user_id']);
-                        $name = $u ? $u->first_name : 'Crew member';
-                    }
-                    $permTeam = $b['permanent_team'] ?? 'their permanent crew';
-                    if ($name) {
-                        $returnNotes[] = "{$name} has been returned to {$permTeam}.";
-                    }
-                }
+            // Note relievers returning to pool
+            $relievers = $dispatch->crew()->wherePivot('is_reliever', true)->get();
+            foreach ($relievers as $reliever) {
+                $returnNotes[] = "Reliever {$reliever->first_name} {$reliever->last_name} returned to Reliever Pool.";
             }
 
             broadcast(new DispatchStatusUpdated($dispatch));
@@ -272,23 +257,17 @@ class DispatchController extends Controller
                 Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
             }
 
-            $crewUserIds = array_filter([$dispatch->driver_id, $dispatch->emt_id, $dispatch->team_leader_id]);
+            $crewUserIds = $dispatch->crew()->pluck('users.id')->toArray();
+            if (empty($crewUserIds)) {
+                $crewUserIds = array_filter([$dispatch->driver_id, $dispatch->emt_id]);
+            }
             if (! empty($crewUserIds)) {
                 ResponderProfile::whereIn('user_id', $crewUserIds)->update(['availability' => 'available']);
             }
 
-            if (is_array($dispatch->borrowed_crew) && count($dispatch->borrowed_crew) > 0) {
-                foreach ($dispatch->borrowed_crew as $b) {
-                    $name = $b['name'] ?? null;
-                    if (! $name && ! empty($b['user_id'])) {
-                        $u = User::find($b['user_id']);
-                        $name = $u ? $u->first_name : 'Crew member';
-                    }
-                    $permTeam = $b['permanent_team'] ?? 'their permanent crew';
-                    if ($name) {
-                        $returnNotes[] = "{$name} has been returned to {$permTeam}.";
-                    }
-                }
+            $relievers = $dispatch->crew()->wherePivot('is_reliever', true)->get();
+            foreach ($relievers as $reliever) {
+                $returnNotes[] = "Reliever {$reliever->first_name} {$reliever->last_name} returned to Reliever Pool.";
             }
 
             $dispatch->load(['incident', 'ambulance']);
