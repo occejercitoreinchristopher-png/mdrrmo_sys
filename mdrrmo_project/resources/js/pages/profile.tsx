@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { useState, useRef } from 'react';
+import { Head, useForm, usePage, router } from '@inertiajs/react';
 import AdminLayout from '@/admin/layouts/AdminLayout';
 import DispatcherLayout from '@/dispatcher/layouts/DispatcherLayout';
 import Input from '@/shared/components/Input';
+import ConfirmDialog from '@/shared/components/ConfirmDialog';
 import {
     User as UserIcon,
     Key,
@@ -22,6 +23,10 @@ import {
     Copy,
     Clock,
     CheckCircle2,
+    Camera,
+    Trash2,
+    Upload,
+    Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
@@ -42,6 +47,7 @@ interface UserData {
     role: 'admin' | 'dispatcher' | string;
     position?: string | null;
     status: string;
+    profile_photo_url?: string | null;
     created_at?: string | null;
     updated_at?: string | null;
 }
@@ -127,6 +133,23 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
     const isAdmin = user?.role === 'admin';
     const Layout = isAdmin ? AdminLayout : DispatcherLayout;
 
+    const officerIdPrefix = isAdmin ? 'MDRRMO-ADM-' : 'MDRRMO-DSP-';
+    const officerId = `${officerIdPrefix}${String(user?.id || 1).padStart(3, '0')}`;
+    const clearanceLevel = isAdmin
+        ? 'Level 1 • Administrative Authority'
+        : 'Level 2 • Operations & Dispatch Authority';
+    const designation = user?.position || (isAdmin ? 'Administrator' : 'Emergency Dispatcher');
+    const roleBadgeText = isAdmin ? 'Administrator' : 'Dispatcher';
+    const roleBadgeStyle = isAdmin
+        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+        : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+    const commandCenter = isAdmin
+        ? `${designation} • Municipal Disaster Operations Command`
+        : `${designation} • Emergency Operations & Dispatch Center`;
+    const bannerAgency = isAdmin ? 'MDRRMO Administration' : 'MDRRMO Dispatch Operations';
+    const pageTitle = isAdmin ? 'Administrator Profile' : 'Dispatcher Profile';
+    const headTitle = `${isAdmin ? 'Admin' : 'Dispatcher'} Profile - MDRRMO Opol`;
+
     // Active Navigation Tab
     const [activeTab, setActiveTab] = useState<'overview' | 'security' | 'edit'>('overview');
 
@@ -137,7 +160,7 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
 
     // Format birthday display helper
     const formatBirthday = (dateStr?: string | null) => {
-        if (!dateStr) return 'December 16, 2002';
+        if (!dateStr) return '—';
         try {
             return new Intl.DateTimeFormat('en-PH', {
                 year: 'numeric',
@@ -154,7 +177,7 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
         ? `${user.age} yrs old`
         : user?.birthdate
         ? `${Math.max(0, new Date().getFullYear() - new Date(user.birthdate).getFullYear())} yrs old`
-        : '21 yrs old';
+        : '—';
 
     // Profile Edit Form
     const profileForm = useForm({
@@ -162,12 +185,12 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
         middle_name: user?.middle_name || '',
         last_name: user?.last_name || '',
         gender: user?.gender || 'Male',
-        birthdate: user?.birthdate || user?.birthday || '2002-12-16',
-        age: user?.age ? String(user.age) : '21',
+        birthdate: user?.birthdate || user?.birthday || '',
+        age: user?.age ? String(user.age) : '',
         phone_number: user?.phone_number || '',
-        position: user?.position || 'Administrator',
-        address: user?.address || 'zone 1 molugan, Molugan, City Of El Salvador, Misamis Oriental',
-        zip_code: user?.zip_code || '9017',
+        position: user?.position || designation,
+        address: user?.address || '',
+        zip_code: user?.zip_code || '',
     });
 
     // Password Form
@@ -181,14 +204,72 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
     const rawFullName = [user?.first_name, user?.middle_name, user?.last_name]
         .filter(Boolean)
         .join(' ');
-    const displayFullName = rawFullName.toUpperCase() || 'REIN CHRISTOPHER MAGTRAYO EJERCITO';
+    const displayFullName = rawFullName.toUpperCase() || (isAdmin ? 'ADMINISTRATOR' : 'DISPATCHER');
     const initials =
-        `${user?.first_name?.[0] || 'R'}${user?.last_name?.[0] || 'E'}`.toUpperCase();
+        `${user?.first_name?.[0] || (isAdmin ? 'A' : 'D')}${user?.last_name?.[0] || (isAdmin ? 'D' : 'P')}`.toUpperCase();
 
     // Copy to clipboard helper
     const handleCopy = (text: string, title: string) => {
         navigator.clipboard.writeText(text);
         toast.success(`Copied ${title} to clipboard.`);
+    };
+
+    // Photo Management
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+    const [isDeletingPhoto, setIsDeletingPhoto] = useState(false);
+    const [showDeletePhotoModal, setShowDeletePhotoModal] = useState(false);
+
+    const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Max 5MB
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error('Image size must be less than 5MB.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('photo', file);
+
+        setIsUploadingPhoto(true);
+        router.post('/profile/photo', formData, {
+            forceFormData: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                setIsUploadingPhoto(false);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                toast.success('Profile photo updated successfully!');
+            },
+            onError: (errors: any) => {
+                setIsUploadingPhoto(false);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                toast.error(errors?.photo || 'Failed to upload photo.');
+            },
+        });
+    };
+
+    const handleDeletePhoto = () => {
+        if (!user?.profile_photo_url) return;
+        setShowDeletePhotoModal(true);
+    };
+
+    const confirmDeletePhoto = () => {
+        setIsDeletingPhoto(true);
+        router.delete('/profile/photo', {
+            preserveScroll: true,
+            onSuccess: () => {
+                setIsDeletingPhoto(false);
+                setShowDeletePhotoModal(false);
+                toast.success('Profile photo removed.');
+            },
+            onError: () => {
+                setIsDeletingPhoto(false);
+                setShowDeletePhotoModal(false);
+                toast.error('Failed to remove profile photo.');
+            },
+        });
     };
 
     // Handle Profile Save
@@ -213,12 +294,12 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
             middle_name: user?.middle_name || '',
             last_name: user?.last_name || '',
             gender: user?.gender || 'Male',
-            birthdate: user?.birthdate || user?.birthday || '2002-12-16',
-            age: user?.age ? String(user.age) : '21',
+            birthdate: user?.birthdate || user?.birthday || '',
+            age: user?.age ? String(user.age) : '',
             phone_number: user?.phone_number || '',
-            position: user?.position || 'Administrator',
-            address: user?.address || 'zone 1 molugan, Molugan, City Of El Salvador, Misamis Oriental',
-            zip_code: user?.zip_code || '9017',
+            position: user?.position || designation,
+            address: user?.address || '',
+            zip_code: user?.zip_code || '',
         });
         profileForm.clearErrors();
         setActiveTab('overview');
@@ -243,8 +324,8 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
     };
 
     return (
-        <Layout title="Administrator Profile">
-            <Head title="Admin Profile - MDRRMO Opol" />
+        <Layout title={pageTitle}>
+            <Head title={headTitle} />
 
             <div className="max-w-6xl mx-auto space-y-6">
                 {/* 1. HERO & BANNER CARD */}
@@ -269,7 +350,7 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                             <div className="space-y-1">
                                 <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase bg-white/10 text-cyan-200 backdrop-blur-md border border-white/15">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                    MDRRMO Administration
+                                    {bannerAgency}
                                 </span>
                                 <p className="text-white/60 text-xs sm:text-sm font-medium tracking-wide uppercase">
                                     MDRRMO OPOL • Misamis Oriental Operations Center
@@ -283,17 +364,50 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 -mt-16 sm:-mt-20">
                             {/* Avatar & User Core Details */}
                             <div className="flex flex-col sm:flex-row sm:items-end gap-5">
-                                {/* Avatar with Metallic Ring & Status Indicator */}
-                                <div className="relative shrink-0">
-                                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center text-3xl sm:text-4xl font-extrabold tracking-wider shadow-2xl shadow-blue-600/30 ring-4 ring-white dark:ring-[#0c1220]">
-                                        {initials}
+                                {/* Avatar with Metallic Ring, Status Indicator & Photo Actions */}
+                                <div className="relative shrink-0 group">
+                                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center text-3xl sm:text-4xl font-extrabold tracking-wider shadow-2xl shadow-blue-600/30 ring-4 ring-white dark:ring-[#0c1220] overflow-hidden relative">
+                                        {user?.profile_photo_url ? (
+                                            <img
+                                                src={user.profile_photo_url}
+                                                alt={displayFullName}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            initials
+                                        )}
+
+                                        {/* Loading spinner overlay */}
+                                        {(isUploadingPhoto || isDeletingPhoto) && (
+                                            <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center text-white z-20">
+                                                <Loader2 className="w-6 h-6 animate-spin text-white" />
+                                                <span className="text-[10px] font-semibold mt-1">
+                                                    {isUploadingPhoto ? 'Uploading...' : 'Removing...'}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {/* Hover Camera Overlay button */}
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={isUploadingPhoto || isDeletingPhoto}
+                                            className="absolute inset-0 bg-black/55 backdrop-blur-xs opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity duration-200 cursor-pointer z-10"
+                                            title="Click to change profile photo"
+                                        >
+                                            <Camera className="w-6 h-6 text-white mb-0.5" />
+                                            <span className="text-[10px] font-bold tracking-wider uppercase">Change</span>
+                                        </button>
                                     </div>
-                                    <div
-                                        className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 ring-4 ring-white dark:ring-[#0c1220] flex items-center justify-center text-white"
-                                        title="Active Online & On-Duty"
-                                    >
-                                        <Check className="w-3 h-3 stroke-[3]" />
-                                    </div>
+
+                                    {/* Hidden File Input */}
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handlePhotoSelect}
+                                        accept="image/jpeg,image/png,image/jpg,image/webp"
+                                        className="hidden"
+                                    />
                                 </div>
 
                                 {/* Names and Badges */}
@@ -302,14 +416,14 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                         <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight uppercase">
                                             {displayFullName}
                                         </h1>
-                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                                        <span className={clsx("inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border", roleBadgeStyle)}>
                                             <ShieldCheck className="w-3 h-3" />
-                                            Administrator
+                                            {roleBadgeText}
                                         </span>
                                     </div>
 
                                     <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
-                                        {user?.position || 'Administrator'} • Municipal Disaster Operations Command
+                                        {commandCenter}
                                     </p>
                                 </div>
                             </div>
@@ -380,7 +494,7 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                         <div className="p-6 rounded-3xl bg-white dark:bg-[#0c1220] border border-slate-200/90 dark:border-white/10 shadow-xs space-y-5">
                             <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-white/10">
                                 <div className="flex items-center gap-2">
-                                    <Shield className="w-4 h-4 text-blue-500" />
+                                    <Shield className={clsx("w-4 h-4", isAdmin ? "text-blue-500" : "text-rose-500")} />
                                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
                                         Account Clearance
                                     </h3>
@@ -397,13 +511,13 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                     </p>
                                     <div className="flex items-center justify-between mt-1">
                                         <p className="text-sm font-bold font-mono text-slate-900 dark:text-white">
-                                            MDRRMO-ADM-{String(user?.id || 1).padStart(3, '0')}
+                                            {officerId}
                                         </p>
                                         <button
                                             type="button"
                                             onClick={() =>
                                                 handleCopy(
-                                                    `MDRRMO-ADM-${String(user?.id || 1).padStart(3, '0')}`,
+                                                    officerId,
                                                     'Officer ID'
                                                 )
                                             }
@@ -419,7 +533,7 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                         CLEARANCE LEVEL
                                     </p>
                                     <p className="text-sm font-semibold text-slate-900 dark:text-white mt-1">
-                                        Level 1 • Administrative Authority
+                                        {clearanceLevel}
                                     </p>
                                 </div>
 
@@ -428,7 +542,7 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                         OFFICIAL DESIGNATION
                                     </p>
                                     <p className="text-sm font-semibold text-slate-900 dark:text-white mt-1">
-                                        {user?.position || 'Administrator'}
+                                        {designation}
                                     </p>
                                 </div>
 
@@ -498,19 +612,19 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                         <InfoFieldCard
                                             icon={UserIcon}
                                             label="First Name"
-                                            value={user?.first_name || 'REIN CHRISTOPHER'}
+                                            value={user?.first_name}
                                             uppercaseValue
                                         />
                                         <InfoFieldCard
                                             icon={UserIcon}
                                             label="Middle Name"
-                                            value={user?.middle_name || 'MAGTRAYO'}
+                                            value={user?.middle_name}
                                             uppercaseValue
                                         />
                                         <InfoFieldCard
                                             icon={UserIcon}
                                             label="Last Name"
-                                            value={user?.last_name || 'EJERCITO'}
+                                            value={user?.last_name}
                                             uppercaseValue
                                         />
                                     </div>
@@ -520,7 +634,7 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                         <InfoFieldCard
                                             icon={UserIcon}
                                             label="Gender"
-                                            value={user?.gender || 'Male'}
+                                            value={user?.gender || '—'}
                                         />
                                         <InfoFieldCard
                                             icon={Cake}
@@ -553,31 +667,31 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                         <InfoFieldCard
                                             icon={Mail}
                                             label="Email Address"
-                                            value={user?.email || 'cyrax630@gmail.com'}
-                                            action={{
+                                            value={user?.email}
+                                            action={user?.email ? {
                                                 icon: Copy,
                                                 title: 'Copy Email',
                                                 onClick: () =>
                                                     handleCopy(
-                                                        user?.email || 'cyrax630@gmail.com',
+                                                        user.email,
                                                         'Email address'
                                                     ),
-                                            }}
+                                            } : undefined}
                                         />
                                         <InfoFieldCard
                                             icon={Phone}
                                             label="Contact Number"
-                                            value={user?.phone_number || '0966-895-9596'}
+                                            value={user?.phone_number}
                                             mono
-                                            action={{
+                                            action={user?.phone_number ? {
                                                 icon: Copy,
                                                 title: 'Copy Contact Number',
                                                 onClick: () =>
                                                     handleCopy(
-                                                        user?.phone_number || '0966-895-9596',
+                                                        user.phone_number,
                                                         'Phone number'
                                                     ),
-                                            }}
+                                            } : undefined}
                                         />
                                     </div>
 
@@ -587,17 +701,14 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                             <InfoFieldCard
                                                 icon={MapPin}
                                                 label="Present Address"
-                                                value={
-                                                    user?.address ||
-                                                    'zone 1 molugan, Molugan, City Of El Salvador, Misamis Oriental'
-                                                }
+                                                value={user?.address}
                                             />
                                         </div>
                                         <div>
                                             <InfoFieldCard
                                                 icon={Hash}
                                                 label="Zip Code"
-                                                value={user?.zip_code || '9017'}
+                                                value={user?.zip_code}
                                                 mono
                                             />
                                         </div>
@@ -617,6 +728,57 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                             Update legal names, contact numbers, and assigned residential address.
                                         </p>
+                                    </div>
+
+                                    {/* Profile Photo Management in Edit Tab */}
+                                    <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-bold text-xl overflow-hidden shrink-0 shadow-sm border border-slate-200/60 dark:border-white/10">
+                                                {user?.profile_photo_url ? (
+                                                    <img
+                                                        src={user.profile_photo_url}
+                                                        alt={displayFullName}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : (
+                                                    initials
+                                                )}
+                                            </div>
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                                                    Profile Photo
+                                                </h4>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                                    Allowed formats: JPG, PNG, WEBP (Max 5MB)
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                                            <button
+                                                type="button"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                disabled={isUploadingPhoto || isDeletingPhoto}
+                                                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all cursor-pointer"
+                                            >
+                                                {isUploadingPhoto ? (
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                ) : (
+                                                    <Camera className="w-3.5 h-3.5" />
+                                                )}
+                                                <span>{user?.profile_photo_url ? 'Change Photo' : 'Upload Photo'}</span>
+                                            </button>
+                                            {user?.profile_photo_url && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleDeletePhoto}
+                                                    disabled={isUploadingPhoto || isDeletingPhoto}
+                                                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 transition-all cursor-pointer"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                    <span>Remove</span>
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Personal Names */}
@@ -739,7 +901,7 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                                     profileForm.setData('position', e.target.value)
                                                 }
                                                 error={profileForm.errors.position}
-                                                placeholder="Administrator"
+                                                placeholder={designation}
                                             />
                                         </div>
 
@@ -959,6 +1121,19 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                     </div>
                 </div>
             </div>
+
+            {/* Custom Styled Confirm Dialog for Photo Removal */}
+            <ConfirmDialog
+                open={showDeletePhotoModal}
+                onClose={() => setShowDeletePhotoModal(false)}
+                onConfirm={confirmDeletePhoto}
+                title="Remove Profile Photo"
+                description="Are you sure you want to remove your profile photo? Your avatar will revert back to your initials."
+                confirmLabel="Remove Photo"
+                cancelLabel="Cancel"
+                variant="danger"
+                loading={isDeletingPhoto}
+            />
         </Layout>
     );
 }

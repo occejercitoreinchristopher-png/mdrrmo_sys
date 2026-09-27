@@ -56,7 +56,9 @@ class AuthController extends Controller
                 'last_name' => $user->last_name,
                 'email' => $user->email,
                 'role' => $user->role,
+                'profile_photo_url' => $user->profile_photo_url,
                 'responder_profile' => $user->responderProfile,
+                'resident_profile' => $user->residentProfile,
             ],
         ], 201);
     }
@@ -102,7 +104,9 @@ class AuthController extends Controller
                 'last_name' => $user->last_name,
                 'email' => $user->email,
                 'role' => $user->role,
+                'profile_photo_url' => $user->profile_photo_url,
                 'responder_profile' => $user->responderProfile,
+                'resident_profile' => $user->residentProfile,
             ],
         ]);
     }
@@ -117,7 +121,9 @@ class AuthController extends Controller
             'last_name' => $user->last_name,
             'email' => $user->email,
             'role' => $user->role,
+            'profile_photo_url' => $user->profile_photo_url,
             'responder_profile' => $user->responderProfile,
+            'resident_profile' => $user->residentProfile,
         ]);
     }
 

@@ -17,6 +17,26 @@ class PasswordChangeController extends Controller
     {
         $user = $request->user();
 
+        if ($user->role === 'responder') {
+            auth()->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')->withErrors([
+                'email' => 'Responder accounts can only access the MDRRMO mobile application. Please use the Responder mobile app to continue.',
+            ]);
+        }
+
+        if ($user->role === 'resident') {
+            auth()->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')->withErrors([
+                'email' => 'Resident accounts can only access the MDRRMO mobile application. Please use the Resident mobile app to continue.',
+            ]);
+        }
+
         // If password change is not required, redirect to their normal dashboard
         if (! $user->password_change_required) {
             if ($user->role === 'admin') {
@@ -25,7 +45,9 @@ class PasswordChangeController extends Controller
             if ($user->role === 'dispatcher') {
                 return redirect()->route('dispatcher.dashboard');
             }
-            return redirect('/dashboard');
+
+            auth()->logout();
+            return redirect()->route('login');
         }
 
         return Inertia::render('auth/ChangePassword', [
@@ -55,7 +77,8 @@ class PasswordChangeController extends Controller
             'password.confirmed' => 'The password confirmation does not match.',
         ]);
 
-        if (! Hash::check($request->current_password, $user->password)) {
+        $currentPassword = (string) $request->current_password;
+        if (! Hash::check($currentPassword, $user->password) && ! Hash::check(trim($currentPassword), $user->password)) {
             throw ValidationException::withMessages([
                 'current_password' => 'The provided temporary password does not match our records.',
             ]);
@@ -75,6 +98,12 @@ class PasswordChangeController extends Controller
             return redirect()->route('dispatcher.dashboard')->with('success', 'Password created successfully! Welcome to the Dispatch Center.');
         }
 
-        return redirect('/dashboard')->with('success', 'Password created successfully! Welcome to MDRRMO Opol.');
+        auth()->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login')->withErrors([
+            'email' => 'This account can only access the MDRRMO mobile application.',
+        ]);
     }
 }

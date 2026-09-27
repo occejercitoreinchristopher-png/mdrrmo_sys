@@ -54,10 +54,10 @@ class IncidentController extends Controller
 
             $allHistoryIncidents = (clone $query)->get();
 
-            $pcrChiefComplaints = PatientCareRecord::whereNotNull('chief_complaint')
-                ->where('chief_complaint', '!=', '')
+            $pcrChiefComplaints = PatientCareRecord::whereNotNull('clinical_chief_complaint')
+                ->where('clinical_chief_complaint', '!=', '')
                 ->distinct()
-                ->pluck('chief_complaint')
+                ->pluck('clinical_chief_complaint')
                 ->sort()
                 ->values()
                 ->all();
@@ -141,10 +141,10 @@ class IncidentController extends Controller
             ->whereIn('incident_status', ['resolved', 'rejected'])
             ->get();
 
-        $pcrChiefComplaints = PatientCareRecord::whereNotNull('chief_complaint')
-            ->where('chief_complaint', '!=', '')
+        $pcrChiefComplaints = PatientCareRecord::whereNotNull('clinical_chief_complaint')
+            ->where('clinical_chief_complaint', '!=', '')
             ->distinct()
-            ->pluck('chief_complaint')
+            ->pluck('clinical_chief_complaint')
             ->sort()
             ->values()
             ->all();
@@ -163,23 +163,36 @@ class IncidentController extends Controller
 
     public function verify(Request $request, Incident $incident)
     {
-        $request->validate([
-            'priority' => 'required|in:Critical,High,Moderate',
+        $validated = $request->validate([
+            'priority' => 'nullable|in:Critical,High,Moderate',
         ]);
 
         if ($incident->incident_status !== 'pending') {
             abort(403, 'Only pending incidents can be verified.');
         }
 
+        $priority = $validated['priority'] ?? $request->input('priority') ?? $incident->priority ?? 'Moderate';
+
         $incident->update([
             'incident_status' => 'verified',
-            'priority' => $request->priority,
+            'priority' => $priority,
             'verified_at' => now(),
-            'verified_by' => $request->user()->id,
+            'verified_by' => $request->user()?->id,
         ]);
 
-        event(new IncidentVerified($incident));
-        \App\Services\PushNotificationService::notifyIncidentVerified($incident);
+        $incident->loadMissing(['incidentType', 'resident']);
+
+        try {
+            event(new IncidentVerified($incident));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to broadcast IncidentVerified: ' . $e->getMessage());
+        }
+
+        try {
+            \App\Services\PushNotificationService::notifyIncidentVerified($incident);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to push notification for IncidentVerified: ' . $e->getMessage());
+        }
 
         return redirect()->route('dispatcher.dispatches', ['incident_id' => $incident->id]);
     }
@@ -214,7 +227,6 @@ class IncidentController extends Controller
                 $assignedUserIds = array_unique(array_filter(array_merge($crewUserIds, [
                     $dispatch->driver_id,
                     $dispatch->emt_id,
-                    $dispatch->team_leader_id,
                 ])));
                 if (! empty($assignedUserIds)) {
                     ResponderProfile::whereIn('user_id', $assignedUserIds)->update(['availability' => 'available']);
@@ -272,7 +284,7 @@ class IncidentController extends Controller
                     ResponderProfile::whereIn('user_id', $crewUserIds)->update(['availability' => 'available']);
                 }
 
-                $relievers = $dispatch->crew()->wherePivot('is_reliever', true)->get();
+                $relievers = $dispatch->crew()->wherePivot('is_reliever_assignment', true)->get();
                 foreach ($relievers as $reliever) {
                     $returnNotes[] = "Reliever {$reliever->first_name} {$reliever->last_name} has returned to the Reliever Pool.";
                 }
@@ -473,14 +485,13 @@ class IncidentController extends Controller
 
         // 4. Build previous location suggestion
         $previousLocation = null;
-        if ($previousIncident?->location_code) {
-            $loc = LocationCode::with('barangay')->where('location_code', $previousIncident->location_code)->first();
-            $marker = $loc ? null : LocationMarker::where('code', $previousIncident->location_code)
-                ->where('is_active', true)
-                ->first();
+        if ($previousIncident?->location_code_id || $previousIncident?->location_code) {
+            $loc = $previousIncident->locationCode ?: LocationCode::with('barangay')->find($previousIncident->location_code_id);
+            $locCodeString = $loc?->location_code ?? $previousIncident->location_code;
+            $marker = $loc ? null : ($locCodeString ? LocationMarker::where('code', $locCodeString)->where('is_active', true)->first() : null);
 
             $previousLocation = [
-                'code' => $previousIncident->location_code,
+                'code' => $locCodeString,
                 'marker_name' => $loc?->location_name ?? $marker?->marker_name ?? $previousIncident->place_of_incident,
                 'barangay' => $loc?->barangay?->barangay_name ?? $marker?->barangay,
                 'description' => $loc?->description ?? $marker?->description,
@@ -572,7 +583,8 @@ class IncidentController extends Controller
         }
 
         $recentPhoneIncidents = $incidentsQuery
-            ->select('caller_phone_number', 'location_code', 'place_of_incident')
+            ->with('locationCode')
+            ->select('id', 'caller_phone_number', 'location_code_id', 'incident_address')
             ->latest('id')
             ->take(15)
             ->get();
@@ -630,6 +642,7 @@ class IncidentController extends Controller
             'place_of_incident' => 'nullable|string',
             'location_confirmed' => 'required|boolean',
             'description' => 'nullable|string|max:2000',
+            'dispatch_log_id' => 'nullable|exists:dispatch_logs,id',
         ]);
 
         if (! $request->boolean('location_confirmed')) {
@@ -677,6 +690,7 @@ class IncidentController extends Controller
                 ->first();
 
             if ($loc) {
+                $locationCodeId = $loc->id;
                 $bName = $loc->barangay?->barangay_name ?? '';
                 $placeOfIncident = "{$loc->location_name}, Barangay {$bName}";
                 if ($loc->description) {
@@ -691,6 +705,8 @@ class IncidentController extends Controller
                     ->first();
 
                 if ($marker) {
+                    $locFromMarker = LocationCode::where('location_code', $marker->code)->first();
+                    $locationCodeId = $locFromMarker?->id;
                     $placeOfIncident = "{$marker->marker_name}, Barangay {$marker->barangay}";
                     if ($marker->description) {
                         $placeOfIncident .= " ({$marker->description})";
@@ -741,32 +757,75 @@ class IncidentController extends Controller
             'caller_phone_number' => $normalizedPhone,
             'caller_name' => $callerName,
             'incident_type_id' => $request->incident_type_id,
-            'chief_complaint' => $request->chief_complaint,
-            'location_code' => $code,
-            'place_of_incident' => $placeOfIncident,
-            'incident_address' => $incidentAddress,
+            'location_code_id' => $locationCodeId ?? null,
+            'incident_address' => ($placeOfIncident && $incidentAddress && $placeOfIncident !== $incidentAddress)
+                ? "{$placeOfIncident}, {$incidentAddress}"
+                : ($incidentAddress ?: $placeOfIncident),
             'incident_latitude' => $latitude,
             'incident_longitude' => $longitude,
             'reporter_latitude' => $latitude,
             'reporter_longitude' => $longitude,
             'location_source' => $locationSource,
-            'description' => $request->description ?: "Reported via Phone/SIM Call from ".($callerName ? "{$callerName} ({$normalizedPhone})" : $normalizedPhone)." at {$placeOfIncident}",
-            'incident_status' => 'pending',
+            'incident_description' => ($request->chief_complaint || $request->reported_chief_complaint)
+                ? (($request->description || $request->incident_description)
+                    ? "[".($request->chief_complaint ?? $request->reported_chief_complaint)."] ".($request->description ?? $request->incident_description)
+                    : "[".($request->chief_complaint ?? $request->reported_chief_complaint)."]")
+                : ($request->incident_description ?? $request->description ?: "Reported via Phone/SIM Call from ".($callerName ? "{$callerName} ({$normalizedPhone})" : $normalizedPhone)." at {$placeOfIncident}"),
+            'incident_status' => 'verified',
             'priority' => 'Moderate',
             'reported_at' => now(),
-            'report_source' => 'dispatcher',
+            'verified_at' => now(),
+            'verified_by' => $request->user()?->id,
+            'report_source' => 'phone_sim',
         ]);
 
-        $incident->load(['incidentType', 'resident']);
+        $incident->load(['incidentType', 'resident.residentProfile.barangay']);
         $incident->reporter_prank_history = Incident::getPrankHistoryForReporter($residentId, $normalizedPhone);
 
-        try {
-            broadcast(new IncidentCreated($incident));
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Failed to broadcast IncidentCreated: ' . $e->getMessage());
+        // Dispatch Log -> Incident Linkage Workflow
+        if ($request->filled('dispatch_log_id')) {
+            $originatingDispatchLog = \App\Models\DispatchLog::find($request->dispatch_log_id);
+            if ($originatingDispatchLog) {
+                $originatingDispatchLog->update([
+                    'incident_id' => $incident->id,
+                    'call_status' => 'answered',
+                ]);
+            }
         }
 
-        return back()->with('success', 'Phone/SIM emergency call incident created successfully.');
+        // Record in Admin Dispatch Logs
+        try {
+            $action = \App\Models\DispatchLogAction::firstOrCreate(
+                ['name' => 'Phone/SIM Incident Created'],
+                ['is_system_action' => false]
+            );
+            \App\Models\DispatchLog::create([
+                'incident_id' => $incident->id,
+                'user_id' => $request->user()?->id,
+                'action_id' => $action->id,
+                'previous_status' => null,
+                'new_status' => 'verified',
+                'remarks' => 'Phone/SIM emergency call received and automatically verified by Dispatcher. Ready for dispatch.',
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to record dispatch log for Phone/SIM incident: ' . $e->getMessage());
+        }
+
+        // Broadcast IncidentVerified to Dispatcher Web and Responders (do NOT broadcast IncidentCreated to prevent incoming alarm)
+        try {
+            broadcast(new IncidentVerified($incident));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to broadcast IncidentVerified: ' . $e->getMessage());
+        }
+
+        // Send light push notification to available Responders mobile app
+        try {
+            \App\Services\PushNotificationService::notifyRespondersNewVerifiedIncident($incident);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to send push notification to responders: ' . $e->getMessage());
+        }
+
+        return back()->with('success', 'Phone/SIM emergency call incident created and automatically verified.');
     }
 
     protected function normalizePhilippinePhoneNumber(string $phone): ?string

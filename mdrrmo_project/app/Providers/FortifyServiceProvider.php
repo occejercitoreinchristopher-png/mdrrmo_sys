@@ -57,6 +57,44 @@ class FortifyServiceProvider extends ServiceProvider
                 ->line('This password reset link will expire in 60 minutes.')
                 ->line('If you did not request a password reset, no further action is required and your account remains secure.');
         });
+
+        Fortify::authenticateUsing(function (Request $request) {
+            $login = trim((string) $request->input('email', ''));
+            $password = (string) $request->input('password', '');
+
+            if ($login === '' || $password === '') {
+                return null;
+            }
+
+            $user = \App\Models\User::where('email', $login)
+                ->orWhereRaw('LOWER(email) = ?', [strtolower($login)])
+                ->orWhere('phone_number', $login)
+                ->first();
+
+            if ($user && (\Illuminate\Support\Facades\Hash::check($password, $user->password) || \Illuminate\Support\Facades\Hash::check(trim($password), $user->password))) {
+                if ($user->role === 'responder') {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'email' => 'Responder accounts can only access the MDRRMO mobile application. Please use the Responder mobile app to continue.',
+                    ]);
+                }
+
+                if ($user->role === 'resident') {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'email' => 'Resident accounts can only access the MDRRMO mobile application. Please use the Resident mobile app to continue.',
+                    ]);
+                }
+
+                if (! in_array($user->role, ['admin', 'dispatcher'])) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'email' => 'This account is not authorized to access the web application.',
+                    ]);
+                }
+
+                return $user;
+            }
+
+            return null;
+        });
     }
 
     /**

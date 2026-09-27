@@ -2,6 +2,16 @@ import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import Card from './Card';
 import { clsx } from 'clsx';
 
+export interface StatCardProps {
+    title: string;
+    value?: string | number | null;
+    icon?: React.ComponentType<{ className?: string }> | any;
+    trend?: number | null;
+    trendLabel?: string;
+    color?: 'blue' | 'green' | 'amber' | 'red' | 'purple' | string;
+    loading?: boolean;
+}
+
 export default function StatCard({
     title,
     value,
@@ -10,7 +20,7 @@ export default function StatCard({
     trendLabel,
     color = 'blue',
     loading = false,
-}) {
+}: StatCardProps) {
     const colorMap = {
         blue: {
             bg: 'from-blue-600 to-indigo-600',
@@ -42,11 +52,11 @@ export default function StatCard({
     const c = colorMap[color] || colorMap.blue;
 
     const TrendIcon =
-        trend > 0 ? TrendingUp : trend < 0 ? TrendingDown : Minus;
+        (trend ?? 0) > 0 ? TrendingUp : (trend ?? 0) < 0 ? TrendingDown : Minus;
     const trendColor =
-        trend > 0
+        (trend ?? 0) > 0
             ? 'text-emerald-500 dark:text-emerald-400'
-            : trend < 0
+            : (trend ?? 0) < 0
               ? 'text-red-500 dark:text-red-400'
               : 'text-slate-400';
 
@@ -89,9 +99,9 @@ export default function StatCard({
 
                 {trendLabel !== undefined && (
                     <div className="flex items-center gap-1.5 mt-4 pt-3.5 border-t border-slate-100 dark:border-white/5">
-                        <span className={clsx('inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-bold', trendColor, trend > 0 ? 'bg-emerald-500/10' : trend < 0 ? 'bg-red-500/10' : 'bg-slate-500/10')}>
+                        <span className={clsx('inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-bold', trendColor, (trend ?? 0) > 0 ? 'bg-emerald-500/10' : (trend ?? 0) < 0 ? 'bg-red-500/10' : 'bg-slate-500/10')}>
                             <TrendIcon className="w-3 h-3" />
-                            {trend > 0 ? '+' : ''}
+                            {(trend ?? 0) > 0 ? '+' : ''}
                             {trend}%
                         </span>
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">

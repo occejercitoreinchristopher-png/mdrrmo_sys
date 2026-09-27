@@ -229,8 +229,8 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
                 )}
             >
                 <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="w-9 h-9 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shadow-slate-900/10 flex-shrink-0 ring-1 ring-slate-900/10 dark:ring-white/20 overflow-hidden">
-                        <img src="/images/opol-logo.png" alt="Municipality of Opol" className="w-full h-full object-contain" />
+                    <div className="w-9 h-9 flex items-center justify-center flex-shrink-0">
+                        <img src="/images/opol-logo.png" alt="MDRRMO Opol" className="w-full h-full object-contain drop-shadow-sm" />
                     </div>
 
                     {!collapsed && (

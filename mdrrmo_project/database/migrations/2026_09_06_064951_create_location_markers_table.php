@@ -13,12 +13,12 @@ return new class extends Migration
     {
         Schema::create('location_markers', function (Blueprint $table) {
             $table->id();
-            $table->string('code')->unique()->index();
-            $table->string('marker_name');
-            $table->string('barangay');
-            $table->decimal('latitude', 10, 7);
-            $table->decimal('longitude', 10, 7);
-            $table->text('description')->nullable();
+            $table->string('code',50)->unique()->index();
+            $table->string('marker_name',100);
+            $table->string('barangay_name',100);
+            $table->decimal('marker_latitude', 10, 7);
+            $table->decimal('marker_longitude', 10, 7);
+            $table->string('marker_description')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });

@@ -51,12 +51,12 @@ return new class extends Migration
         Schema::create('location_codes', function (Blueprint $table) {
             $table->id();
             $table->foreignId('barangay_id')->constrained('barangays')->cascadeOnDelete();
-            $table->string('location_code')->unique()->index();
-            $table->string('location_type')->index();
-            $table->string('location_name');
-            $table->text('description')->nullable();
-            $table->decimal('latitude', 10, 7);
-            $table->decimal('longitude', 10, 7);
+            $table->string('location_code',50)->unique()->index();
+            $table->string('location_type',50)->index();
+            $table->string('location_name',100);
+            $table->string('location_description')->nullable();
+            $table->decimal('location_latitude', 10, 7);
+            $table->decimal('location_longitude', 10, 7);
             $table->timestamps();
         });
 
@@ -68,7 +68,8 @@ return new class extends Migration
             });
 
             foreach ($existingMarkers as $marker) {
-                $cleanedKey = strtolower(str_replace(' ', '', $marker->barangay));
+                $markerBrgy = $marker->barangay_name ?? $marker->barangay ?? '';
+                $cleanedKey = strtolower(str_replace(' ', '', $markerBrgy));
                 $barangay = $barangayMap->get($cleanedKey);
 
                 if (! $barangay) {
@@ -101,9 +102,9 @@ return new class extends Migration
                         'location_code' => $marker->code,
                         'location_type' => $type,
                         'location_name' => $marker->marker_name,
-                        'description' => $marker->description,
-                        'latitude' => $marker->latitude,
-                        'longitude' => $marker->longitude,
+                        'location_description' => $marker->marker_description ?? $marker->description ?? null,
+                        'location_latitude' => $marker->marker_latitude ?? $marker->latitude,
+                        'location_longitude' => $marker->marker_longitude ?? $marker->longitude,
                         'created_at' => $marker->created_at ?? $now,
                         'updated_at' => $marker->updated_at ?? $now,
                     ]);

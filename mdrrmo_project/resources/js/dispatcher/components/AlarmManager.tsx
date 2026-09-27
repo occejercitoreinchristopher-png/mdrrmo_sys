@@ -14,6 +14,17 @@ export default function AlarmManager() {
             
             const handleIncidentCreated = (e: any) => {
                 const incident = e.incident || e;
+
+                // Backend & Frontend Guard: Phone/SIM incidents and non-pending incidents must never sound the alarm
+                if (incident.incident_status && incident.incident_status !== 'pending') {
+                    router.reload();
+                    return;
+                }
+                if (incident.report_source === 'phone_sim' || incident.report_source === 'dispatcher') {
+                    router.reload();
+                    return;
+                }
+
                 triggerAlarm(incident);
                 
                 // Still reload the router so the new incident appears in the lists

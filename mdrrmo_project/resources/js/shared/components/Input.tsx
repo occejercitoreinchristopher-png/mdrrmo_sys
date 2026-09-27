@@ -3,7 +3,7 @@ import { ComponentProps, ElementType } from 'react';
 
 interface InputProps extends Omit<ComponentProps<'input'>, 'type'> {
     label?: string;
-    id: string;
+    id?: string;
     type?: string;
     error?: string;
     className?: string;

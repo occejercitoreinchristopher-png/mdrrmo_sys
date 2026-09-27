@@ -18,18 +18,16 @@ return new class extends Migration
                 ->constrained('users')
                 ->nullOnDelete();
 
-            $table->string('first_name');
-            $table->string('middle_name')->nullable();
-            $table->string('last_name');
+            $table->string('patient_first_name', 100);
+            $table->string('patient_middle_name', 100)->nullable();
+            $table->string('patient_last_name', 100);
 
-            $table->date('birthdate')->nullable();
+            $table->date('patient_birthdate')->nullable();
 
-            $table->enum('gender', [
+            $table->enum('patient_gender', [
                 'male',
                 'female',
             ])->nullable();
-
-            $table->string('contact_number')->nullable();
 
             $table->foreignId('barangay_id')
                 ->nullable()

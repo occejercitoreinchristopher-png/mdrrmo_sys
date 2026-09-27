@@ -77,18 +77,14 @@ class PatientCareRecordController extends Controller
             'waiver_signature' => 'nullable|string',
         ]);
 
-        $pcrData = collect($validated)->except(['age', 'incident_address'])->all();
-
-        // Automatically fill operational response times from dispatch timeline if not explicitly provided
-        if (empty($pcrData['dispatch_time']) && $dispatch->created_at) {
-            $pcrData['dispatch_time'] = $dispatch->created_at->format('H:i');
-        }
-        if (empty($pcrData['en_route_time']) && $dispatch->en_route_at) {
-            $pcrData['en_route_time'] = $dispatch->en_route_at->format('H:i');
-        }
-        if (empty($pcrData['on_scene_time']) && ($dispatch->arrived_on_scene_at || $dispatch->arrived_at)) {
-            $pcrData['on_scene_time'] = ($dispatch->arrived_on_scene_at ?: $dispatch->arrived_at)->format('H:i');
-        }
+        $pcrData = collect($validated)->except([
+            'age', 
+            'incident_address', 
+            'gender',
+            'dispatch_time',
+            'en_route_time',
+            'on_scene_time',
+        ])->all();
 
         // Cross-sync patient_signature and waiver_signature if either is populated
         if (!empty($validated['waiver_signature']) && empty($pcrData['patient_signature'])) {
@@ -112,7 +108,7 @@ class PatientCareRecordController extends Controller
         $patient = \App\Models\Patient::find($validated['patient_id']);
         if ($patient) {
             $patientUpdates = [];
-            if (! empty($validated['gender']) && empty($patient->gender) && in_array($validated['gender'], ['male', 'female'])) {
+            if (! empty($validated['gender']) && in_array($validated['gender'], ['male', 'female'])) {
                 $patientUpdates['gender'] = $validated['gender'];
             }
             if (! empty($validated['incident_address']) && empty($patient->street)) {
@@ -129,7 +125,7 @@ class PatientCareRecordController extends Controller
         // Broadcast to other crew members on the same dispatch
         // broadcast(new PatientCareRecordUpdatedEvent($pcr))->toOthers();
 
-        return response()->json(['message' => 'PCR updated', 'data' => $pcr]);
+        return response()->json(['message' => 'PCR updated', 'data' => $pcr->load('patient')]);
     }
 
     public function submit(Request $request, Dispatch $dispatch)
@@ -176,7 +172,7 @@ class PatientCareRecordController extends Controller
         }
 
         Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
-        ResponderProfile::whereIn('user_id', array_filter([$dispatch->driver_id, $dispatch->emt_id, $dispatch->team_leader_id]))->update(['availability' => 'available']);
+        ResponderProfile::whereIn('user_id', array_filter([$dispatch->driver_id, $dispatch->emt_id]))->update(['availability' => 'available']);
 
         // Broadcast to Dispatcher in real-time
         try {

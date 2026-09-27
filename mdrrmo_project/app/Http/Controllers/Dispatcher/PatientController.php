@@ -22,9 +22,9 @@ class PatientController extends Controller
         if ($request->filled('search')) {
             $search = trim($request->search);
             $query->where(function ($q) use ($search) {
-                $q->where(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', "%{$search}%")
-                    ->orWhere('first_name', 'LIKE', "%{$search}%")
-                    ->orWhere('last_name', 'LIKE', "%{$search}%")
+                $q->where(DB::raw("CONCAT(patient_first_name, ' ', patient_last_name)"), 'LIKE', "%{$search}%")
+                    ->orWhere('patient_first_name', 'LIKE', "%{$search}%")
+                    ->orWhere('patient_last_name', 'LIKE', "%{$search}%")
                     ->orWhere('street', 'LIKE', "%{$search}%")
                     ->orWhere('house_no', 'LIKE', "%{$search}%")
                     ->orWhereHas('barangay', function ($b) use ($search) {
@@ -112,9 +112,9 @@ class PatientController extends Controller
 
         if (! empty($search)) {
             $query->where(function ($q) use ($search) {
-                $q->where(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', "%{$search}%")
-                    ->orWhere('first_name', 'LIKE', "%{$search}%")
-                    ->orWhere('last_name', 'LIKE', "%{$search}%")
+                $q->where(DB::raw("CONCAT(patient_first_name, ' ', patient_last_name)"), 'LIKE', "%{$search}%")
+                    ->orWhere('patient_first_name', 'LIKE', "%{$search}%")
+                    ->orWhere('patient_last_name', 'LIKE', "%{$search}%")
                     ->orWhere('street', 'LIKE', "%{$search}%")
                     ->orWhere('house_no', 'LIKE', "%{$search}%")
                     ->orWhereHas('barangay', function ($b) use ($search) {
@@ -278,7 +278,10 @@ class PatientController extends Controller
                 'glasgow_coma_scale' => $pcr->glasgow_coma_scale ?? null,
                 'special_instructions' => $pcr->special_instructions,
                 'disposition' => is_array($pcr->disposition) ? $pcr->disposition : ($pcr->disposition ? [$pcr->disposition] : []),
-                'responders' => $pcr->responders,
+                'responders' => $pcr->responders ?: ($dispatch ? collect([
+                    $dispatch->driver ? "{$dispatch->driver->first_name} {$dispatch->driver->last_name} (Driver)" : null,
+                    $dispatch->emt ? "{$dispatch->emt->first_name} {$dispatch->emt->last_name} (EMT)" : null,
+                ])->filter()->join(', ') : null),
                 'transported' => (bool) $pcr->transported,
                 'transported_to' => $pcr->transported_to,
                 'received_by' => $pcr->received_by,

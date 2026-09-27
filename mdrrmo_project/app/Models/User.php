@@ -27,14 +27,26 @@ use Laravel\Sanctum\HasApiTokens;
  * @property Carbon|null $updated_at
  * @property string|null $expo_push_token
  */
-#[Fillable(['first_name', 'middle_name', 'last_name', 'gender', 'age', 'birthdate', 'email', 'phone_number', 'address', 'zip_code', 'profile_photo_path', 'password', 'role', 'position', 'status', 'expo_push_token', 'password_change_required', 'temporary_password_expires_at'])]
+#[Fillable(['first_name', 'middle_name', 'last_name', 'gender', 'age', 'birthdate', 'email', 'phone_number', 'address', 'zip_code', 'profile_photo_path', 'password', 'role', 'status', 'expo_push_token', 'password_change_required', 'temporary_password_expires_at'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
-    protected $appends = ['name', 'birthday', 'profile_photo_url'];
+    protected $appends = ['name', 'birthday', 'profile_photo_url', 'position'];
+
+    public function getPositionAttribute(): ?string
+    {
+        return $this->responderProfile?->position;
+    }
+
+    protected static function booted(): void
+    {
+        static::deleting(function (User $user) {
+            $user->responderProfile?->delete();
+        });
+    }
 
     /**
      * Get the attributes that should be cast.
@@ -96,5 +108,10 @@ class User extends Authenticatable
     public function reportedIncidents()
     {
         return $this->hasMany(Incident::class, 'resident_id');
+    }
+
+    public function dispatchLogs()
+    {
+        return $this->hasMany(DispatchLog::class);
     }
 }

@@ -18,7 +18,12 @@ class Ambulance extends Model
 
     public function teamLeader()
     {
-        return $this->belongsTo(User::class, 'team_leader_id');
+        return $this->belongsTo(User::class, 'emt_id');
+    }
+
+    public function getTeamLeaderIdAttribute()
+    {
+        return $this->attributes['team_leader_id'] ?? $this->emt_id;
     }
 
     public function emt()

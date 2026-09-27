@@ -59,20 +59,35 @@ export default function ActiveDispatchWorkspace({
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(Date.now()), 5000);
         const pollTimer = setInterval(() => {
-            router.reload({ only: ['dispatches'] });
-        }, 10000);
+            router.reload({ only: ['dispatches', 'verifiedIncidents', 'ambulances', 'responders'] });
+        }, 8000);
         return () => {
             clearInterval(timer);
             clearInterval(pollTimer);
         };
     }, []);
 
-    // Echo listener for real-time responder coordinates
+    // Echo listener for real-time responder coordinates and incident/dispatch updates
     useEffect(() => {
         // @ts-ignore
         if (typeof window !== 'undefined' && window.Echo) {
             // @ts-ignore
             const channel = window.Echo.private('dispatcher');
+
+            const refreshData = () => {
+                router.reload({ only: ['dispatches', 'verifiedIncidents', 'ambulances', 'responders'] });
+            };
+
+            channel.listen('IncidentVerified', refreshData);
+            channel.listen('.IncidentVerified', refreshData);
+            channel.listen('IncidentCreated', refreshData);
+            channel.listen('.IncidentCreated', refreshData);
+            channel.listen('DispatchCreated', refreshData);
+            channel.listen('.DispatchCreated', refreshData);
+            channel.listen('DispatchCompleted', refreshData);
+            channel.listen('.DispatchCompleted', refreshData);
+            channel.listen('DispatchStatusUpdated', refreshData);
+            channel.listen('.DispatchStatusUpdated', refreshData);
 
             channel.listen('AmbulanceLocationUpdated', (e: any) => {
                 const lat = parseFloat(e.latitude ?? e.ambulance?.latitude);
@@ -98,6 +113,16 @@ export default function ActiveDispatchWorkspace({
 
             return () => {
                 channel.stopListening('AmbulanceLocationUpdated');
+                channel.stopListening('IncidentVerified');
+                channel.stopListening('.IncidentVerified');
+                channel.stopListening('IncidentCreated');
+                channel.stopListening('.IncidentCreated');
+                channel.stopListening('DispatchCreated');
+                channel.stopListening('.DispatchCreated');
+                channel.stopListening('DispatchCompleted');
+                channel.stopListening('.DispatchCompleted');
+                channel.stopListening('DispatchStatusUpdated');
+                channel.stopListening('.DispatchStatusUpdated');
             };
         }
     }, []);
@@ -168,10 +193,15 @@ export default function ActiveDispatchWorkspace({
             if (dispatch) {
                 setSelectedDispatch(dispatch);
                 setIsExpanded(true); // Auto-expand if opened via URL
+            } else {
+                const vi = verifiedIncidents.find(i => i.id == selectedIncidentId);
+                if (vi) {
+                    setAssigningIncident(vi);
+                }
             }
             window.history.replaceState({}, '', '/dispatcher/dispatches');
         }
-    }, [selectedIncidentId, dispatches]);
+    }, [selectedIncidentId, dispatches, verifiedIncidents]);
 
     // Keep selectedDispatch synchronized with latest dispatches or clear if completed
     useEffect(() => {
@@ -757,12 +787,7 @@ export default function ActiveDispatchWorkspace({
 
                                              <div className="grid gap-3">
                                                  {crew.map((c, i) => {
-                                                     const isBorrowed = Boolean(
-                                                         selectedDispatch.borrowed_crew?.some((b: any) => b.user_id === c.user?.id) ||
-                                                         (c.user?.responder_profile?.team && selectedDispatch.team && c.user.responder_profile.team !== selectedDispatch.team)
-                                                     );
-                                                     const borrowedInfo = selectedDispatch.borrowed_crew?.find((b: any) => b.user_id === c.user?.id);
-                                                     const permTeam = borrowedInfo?.permanent_team || c.user?.responder_profile?.team;
+                                                     const permTeam = c.user?.responder_profile?.team;
 
                                                      return (
                                                          <div key={i} className="p-3.5 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-950/50 flex items-center justify-between gap-4 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
@@ -775,16 +800,11 @@ export default function ActiveDispatchWorkspace({
                                                                      <div className="text-sm font-medium text-slate-900 dark:text-white truncate">{c.user ? `${c.user.first_name} ${c.user.last_name}` : 'Not assigned'}</div>
                                                                      {permTeam && (
                                                                          <div className="text-[10px] text-slate-500">
-                                                                             Permanent Crew: {permTeam.startsWith('Team ') ? permTeam : `Team ${permTeam}`}
+                                                                             Team: {permTeam.startsWith('Team ') ? permTeam : `Team ${permTeam}`}
                                                                          </div>
                                                                      )}
                                                                  </div>
                                                              </div>
-                                                             {isBorrowed && (
-                                                                 <span className="shrink-0 px-2 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-500 dark:text-amber-300 border border-amber-500/40">
-                                                                     Borrowed
-                                                                 </span>
-                                                             )}
                                                          </div>
                                                      );
                                                  })}

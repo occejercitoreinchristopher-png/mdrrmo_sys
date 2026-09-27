@@ -19,9 +19,9 @@ class PatientController extends Controller
 
         $patients = Patient::with(['barangay', 'latestCareRecord', 'registeredUser.residentProfile.barangay'])
             ->where(function ($q) use ($query) {
-                $q->where(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', "%{$query}%")
-                    ->orWhere('first_name', 'LIKE', "%{$query}%")
-                    ->orWhere('last_name', 'LIKE', "%{$query}%")
+                $q->where(DB::raw("CONCAT(patient_first_name, ' ', patient_last_name)"), 'LIKE', "%{$query}%")
+                    ->orWhere('patient_first_name', 'LIKE', "%{$query}%")
+                    ->orWhere('patient_last_name', 'LIKE', "%{$query}%")
                     ->orWhereHas('careRecords', function ($cr) use ($query) {
                         $cr->where('contact_number', 'LIKE', "%{$query}%")
                             ->orWhere('caller_no', 'LIKE', "%{$query}%");
@@ -112,8 +112,8 @@ class PatientController extends Controller
         $street = $validated['address'] ?? $validated['incident_address'] ?? null;
 
         // Prevent duplicates: Check if patient already exists by first_name and last_name (case-insensitive)
-        $existingPatient = Patient::whereRaw('LOWER(first_name) = ?', [strtolower($firstName)])
-            ->whereRaw('LOWER(last_name) = ?', [strtolower($lastName)])
+        $existingPatient = Patient::whereRaw('LOWER(patient_first_name) = ?', [strtolower($firstName)])
+            ->whereRaw('LOWER(patient_last_name) = ?', [strtolower($lastName)])
             ->first();
 
         if ($existingPatient) {

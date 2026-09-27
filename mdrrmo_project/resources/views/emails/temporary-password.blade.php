@@ -99,6 +99,37 @@
             border-radius: 6px;
             border: 1px dashed rgba(225, 29, 72, 0.4);
             display: inline-block;
+            user-select: all;
+            -webkit-user-select: all;
+            -moz-user-select: all;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+        }
+        .copy-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(59, 130, 246, 0.2);
+            color: #93c5fd;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            vertical-align: middle;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .copy-button:hover {
+            background: rgba(59, 130, 246, 0.35);
+            border-color: rgba(59, 130, 246, 0.6);
+            color: #ffffff;
+        }
+        .copy-button:active {
+            transform: scale(0.96);
         }
         .badge {
             display: inline-block;
@@ -214,8 +245,11 @@
                 </div>
                 <div class="credential-row">
                     <span class="credential-label">Temporary Password</span>
-                    <span class="credential-value">
-                        <span class="password-highlight">{{ $temporaryPassword }}</span>
+                    <span class="credential-value" style="display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px;">
+                        <span id="tempPasswordTarget" class="password-highlight" title="Click to select all">{{ $temporaryPassword }}</span>
+                        <button type="button" class="copy-button" onclick="copyTemporaryPassword(this, '{{ $temporaryPassword }}')" title="Copy temporary password">
+                            <span class="copy-label">Copy</span>
+                        </button>
                     </span>
                 </div>
                 <div class="credential-row">
@@ -267,5 +301,61 @@
             <p>This is an automated system email. Please do not reply directly to this message.</p>
         </div>
     </div>
+
+    <script>
+        function copyTemporaryPassword(btn, text) {
+            var label = btn.querySelector('.copy-label') || btn;
+            var originalText = label.innerText;
+
+            function showSuccess() {
+                label.innerText = 'Copied!';
+                btn.style.background = 'rgba(16, 185, 129, 0.35)';
+                btn.style.borderColor = 'rgba(16, 185, 129, 0.6)';
+                btn.style.color = '#34d399';
+                setTimeout(function() {
+                    label.innerText = originalText;
+                    btn.style.background = '';
+                    btn.style.borderColor = '';
+                    btn.style.color = '';
+                }, 2500);
+            }
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(showSuccess).catch(fallbackCopy);
+            } else {
+                fallbackCopy();
+            }
+
+            function fallbackCopy() {
+                try {
+                    var input = document.createElement('textarea');
+                    input.value = text;
+                    input.style.position = 'fixed';
+                    input.style.opacity = '0';
+                    document.body.appendChild(input);
+                    input.focus();
+                    input.select();
+                    var success = document.execCommand('copy');
+                    document.body.removeChild(input);
+                    if (success) {
+                        showSuccess();
+                        return;
+                    }
+                } catch (e) {}
+
+                // Selection fallback if clipboard writing is restricted in email viewer
+                var target = document.getElementById('tempPasswordTarget');
+                if (target) {
+                    var range = document.createRange();
+                    range.selectNodeContents(target);
+                    var sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    label.innerText = 'Selected!';
+                    setTimeout(function() { label.innerText = originalText; }, 2000);
+                }
+            }
+        }
+    </script>
 </body>
 </html>

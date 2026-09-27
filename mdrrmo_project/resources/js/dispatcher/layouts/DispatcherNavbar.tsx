@@ -9,8 +9,10 @@ export default function DispatcherNavbar({ collapsed, onToggle }) {
     const { isPlaying, testAlarm } = useContext(AlarmContext);
     const [notifOpen, setNotifOpen] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
+        setMounted(true);
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
@@ -64,7 +66,7 @@ export default function DispatcherNavbar({ collapsed, onToggle }) {
                 {/* Live Accurate Real-Time Clock */}
                 <div className="hidden lg:flex items-center gap-2 bg-slate-100/80 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 rounded-xl px-3 py-1 font-mono text-xs font-semibold text-slate-800 dark:text-slate-200 shadow-sm tabular-nums" title="Real-time synchronized local clock">
                     <Clock className="w-3.5 h-3.5 text-[#F61509]" />
-                    <span>{dateStr} • {timeStr}</span>
+                    <span suppressHydrationWarning>{mounted ? `${dateStr} • ${timeStr}` : '—'}</span>
                 </div>
 
                 {/* Quick Phone Call Button */}
@@ -127,8 +129,12 @@ export default function DispatcherNavbar({ collapsed, onToggle }) {
                         </p>
                     </div>
                     {/* Avatar */}
-                    <div className="w-9 h-9 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform ring-1 ring-slate-900/10 dark:ring-white/20">
-                        {initials}
+                    <div className="w-9 h-9 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform ring-1 ring-slate-900/10 dark:ring-white/20 overflow-hidden">
+                        {user?.profile_photo_url ? (
+                            <img src={user.profile_photo_url as string} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                            initials
+                        )}
                     </div>
                 </Link>
 

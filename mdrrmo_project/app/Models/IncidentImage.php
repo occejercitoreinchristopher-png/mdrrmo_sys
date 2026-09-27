@@ -8,13 +8,33 @@ class IncidentImage extends Model
 {
     protected $guarded = [];
 
-    protected $appends = ['image_url', 'formatted_captured_at'];
+    protected $appends = ['image_url', 'formatted_captured_at', 'latitude', 'longitude'];
 
     protected $casts = [
         'captured_at' => 'datetime',
-        'latitude' => 'float',
-        'longitude' => 'float',
+        'image_latitude' => 'float',
+        'image_longitude' => 'float',
     ];
+
+    public function getLatitudeAttribute(): ?float
+    {
+        return isset($this->attributes['image_latitude']) ? (float) $this->attributes['image_latitude'] : null;
+    }
+
+    public function getLongitudeAttribute(): ?float
+    {
+        return isset($this->attributes['image_longitude']) ? (float) $this->attributes['image_longitude'] : null;
+    }
+
+    public function setLatitudeAttribute($value): void
+    {
+        $this->attributes['image_latitude'] = $value;
+    }
+
+    public function setLongitudeAttribute($value): void
+    {
+        $this->attributes['image_longitude'] = $value;
+    }
 
     public function getImageUrlAttribute(): ?string
     {

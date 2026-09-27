@@ -88,15 +88,11 @@ test('carlos from team bravo can be borrowed by team alpha for an emergency miss
     expect($this->carlos->responderProfile->team)->toBe('Bravo');
     expect($this->carlos->responderProfile->availability)->toBe('busy');
 
-    // Verify dispatch recorded borrowed crew
+    // Verify dispatch was created
     $dispatch = Dispatch::where('incident_id', $this->incident->id)->first();
     expect($dispatch)->not->toBeNull();
     expect($dispatch->team)->toBe('Alpha');
     expect($dispatch->driver_id)->toBe($this->carlos->id);
-    expect($dispatch->borrowed_crew)->not->toBeNull();
-    expect($dispatch->borrowed_crew[0]['user_id'])->toBe($this->carlos->id);
-    expect($dispatch->borrowed_crew[0]['permanent_team'])->toBe('Team Bravo');
-    expect($dispatch->borrowed_crew[0]['borrowed_to'])->toBe('Team Alpha');
 });
 
 test('responder roster shows borrowed badge, temporary mission, and permanent crew', function () {

@@ -21,13 +21,16 @@ return new class extends Migration
                 ->constrained('users')
                 ->restrictOnDelete();
 
-            $table->foreignId('responder_id')
-                ->constrained('users')
-                ->restrictOnDelete();
-
             $table->foreignId('ambulance_id')
                 ->constrained('ambulances')
                 ->restrictOnDelete();
+
+            $table->string('team',50)->nullable();
+
+            $table->foreignId('driver_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('emt_id')->nullable()->constrained('users')->nullOnDelete();
+
+            $table->json('crew_snapshot')->nullable();
 
             $table->enum('dispatch_status', [
                 'assigned',
@@ -38,14 +41,16 @@ return new class extends Migration
                 'cancelled',
             ])->default('assigned');
 
-            $table->timestamp('assigned_at');
+            $table->decimal('last_latitude', 10, 7)->nullable();
+            $table->decimal('last_longitude', 10, 7)->nullable();
+            $table->decimal('last_heading', 6, 2)->nullable();
+            $table->decimal('last_accuracy', 8, 2)->nullable();
+            $table->timestamp('last_location_updated_at')->nullable();
 
+            $table->timestamp('assigned_at')->useCurrent();
             $table->timestamp('accepted_at')->nullable();
-
             $table->timestamp('en_route_at')->nullable();
-
             $table->timestamp('arrived_at')->nullable();
-
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();
         });

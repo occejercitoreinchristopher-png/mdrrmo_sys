@@ -68,8 +68,8 @@ export function printPatientCareRecord(record: any): void {
     };
 
     // Checkbox Helper: [ ] vs [x]
-    const box = (checked: boolean) => checked 
-        ? `<span style="display:inline-block; width:10px; height:10px; border:1px solid #000; text-align:center; line-height:9px; font-size:8pt; font-weight:bold; margin-right:2px; vertical-align:middle;">&#10003;</span>` 
+    const box = (checked: boolean) => checked
+        ? `<span style="display:inline-block; width:10px; height:10px; border:1px solid #000; text-align:center; line-height:9px; font-size:8pt; font-weight:bold; margin-right:2px; vertical-align:middle;">&#10003;</span>`
         : `<span style="display:inline-block; width:10px; height:10px; border:1px solid #000; margin-right:2px; vertical-align:middle;"></span>`;
 
     // 3. Exact Pinpoint Calculator for Front/Back Body Diagram (100% Accurate)
@@ -739,15 +739,15 @@ export function printPatientCareRecord(record: any): void {
                 <div class="body-canvas">
                     <img src="${BODY_DIAGRAM_BASE64}" class="body-img" alt="Anatomical Diagram" />
                     ${assessmentMarkers.map((m, idx) => {
-                        const pos = calculatePinPosition(m);
-                        const labelText = m.label || m.type || '';
-                        return `
+        const pos = calculatePinPosition(m);
+        const labelText = m.label || m.type || '';
+        return `
                             <div class="pin-marker" style="left: ${pos.left}; top: ${pos.top};" title="${labelText}">
                                 <div class="pin-dot">${idx + 1}</div>
                                 ${labelText ? `<div class="pin-text ${pos.isRightSide ? 'pin-text-left' : ''}">${labelText}</div>` : ''}
                             </div>
                         `;
-                    }).join('')}
+    }).join('')}
                 </div>
                 <div style="display: flex; justify-content: space-around; font-size: 7pt; font-weight: bold; margin-top: 1px;">
                     <span>FRONT</span>
@@ -958,16 +958,16 @@ export function printPatientCareRecord(record: any): void {
             <div class="sig-col">
                 <div style="min-height: 28px; display: flex; align-items: flex-end;">
                     ${(() => {
-                        const effectivePatientSig = record.patient_signature || record.waiver_signature;
-                        const isPatientUnableToSign = record.patient_signature === 'UNABLE_TO_SIGN' || record.waiver_signature === 'UNABLE_TO_SIGN';
-                        if (!isPatientUnableToSign && effectivePatientSig && String(effectivePatientSig).startsWith('data:image')) {
-                            return `<img src="${effectivePatientSig}" class="sig-holder-img" alt="Signature" />`;
-                        }
-                        if (isPatientUnableToSign) {
-                            return `<span style="font-size: 7.5pt; font-weight: bold; color: #b91c1c; font-style: italic; margin-bottom: 2px;">[ PATIENT UNABLE TO SIGN / UNCONSCIOUS ]</span>`;
-                        }
-                        return '';
-                    })()}
+            const effectivePatientSig = record.patient_signature || record.waiver_signature;
+            const isPatientUnableToSign = record.patient_signature === 'UNABLE_TO_SIGN' || record.waiver_signature === 'UNABLE_TO_SIGN';
+            if (!isPatientUnableToSign && effectivePatientSig && String(effectivePatientSig).startsWith('data:image')) {
+                return `<img src="${effectivePatientSig}" class="sig-holder-img" alt="Signature" />`;
+            }
+            if (isPatientUnableToSign) {
+                return `<span style="font-size: 7.5pt; font-weight: bold; color: #b91c1c; font-style: italic; margin-bottom: 2px;">[ PATIENT UNABLE TO SIGN / UNCONSCIOUS ]</span>`;
+            }
+            return '';
+        })()}
                 </div>
                 <div style="margin-bottom: 2px;">
                     <span class="field-name">SIGNATURE:</span>

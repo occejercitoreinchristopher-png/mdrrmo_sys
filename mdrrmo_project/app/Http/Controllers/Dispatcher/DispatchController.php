@@ -85,7 +85,8 @@ class DispatchController extends Controller
             $driver = null;
             if ($driverId) {
                 $driver = User::with('responderProfile')->findOrFail($driverId);
-                if ($driver->responderProfile?->position !== 'driver') {
+                $driverPos = $driver->responderProfile?->position;
+                if (! in_array($driverPos, ['driver', 'team_leader'])) {
                     abort(422, "User {$driver->first_name} {$driver->last_name} is not registered as a Driver.");
                 }
             }
@@ -99,8 +100,9 @@ class DispatchController extends Controller
                 }
 
                 foreach ($emtUsers as $emtUser) {
-                    if ($emtUser->responderProfile?->position !== 'emt') {
-                        abort(422, "User {$emtUser->first_name} {$emtUser->last_name} is not registered as an EMT.");
+                    $pos = $emtUser->responderProfile?->position;
+                    if (! in_array($pos, ['emt', 'team_leader'])) {
+                        abort(422, "User {$emtUser->first_name} {$emtUser->last_name} is not registered as an EMT or Team Leader.");
                     }
                 }
             }
@@ -134,17 +136,20 @@ class DispatchController extends Controller
                     'id' => $driver->id,
                     'name' => $driver->first_name.' '.$driver->last_name,
                     'is_reliever' => (bool) $driver->responderProfile?->is_reliever,
-                    'position' => 'Driver',
+                    'position' => $driver->responderProfile?->position === 'team_leader' ? 'Team Leader' : 'Driver',
                 ] : null,
                 'emts' => $emtUsers->map(fn ($u) => [
                     'id' => $u->id,
                     'name' => $u->first_name.' '.$u->last_name,
                     'is_reliever' => (bool) $u->responderProfile?->is_reliever,
-                    'position' => 'EMT',
+                    'position' => $u->responderProfile?->position === 'team_leader' ? 'Team Leader' : 'EMT',
                 ])->toArray(),
             ];
 
-            $primaryEmt = $emtUsers->first();
+            $teamLeaderUser = $emtUsers->first(fn ($u) => $u->responderProfile?->position === 'team_leader')
+                ?? ($driver?->responderProfile?->position === 'team_leader' ? $driver : null);
+
+            $primaryEmt = $emtUsers->first(fn ($u) => $u->responderProfile?->position === 'emt') ?? $emtUsers->first();
 
             $dispatch = Dispatch::create([
                 'incident_id' => $incident->id,
@@ -152,9 +157,7 @@ class DispatchController extends Controller
                 'ambulance_id' => $ambulance->id,
                 'team' => $validated['team'],
                 'driver_id' => $driver?->id,
-                'team_leader_id' => null,
                 'emt_id' => $primaryEmt?->id,
-                'borrowed_crew' => null,
                 'crew_snapshot' => $crewSnapshot,
                 'dispatch_status' => 'assigned',
                 'assigned_at' => now(),
@@ -163,15 +166,15 @@ class DispatchController extends Controller
             // Attach all crew members to dispatch_crews
             if ($driver) {
                 $dispatch->crew()->attach($driver->id, [
-                    'role' => 'driver',
-                    'is_reliever' => (bool) $driver->responderProfile?->is_reliever,
+                    'role' => $driver->responderProfile?->position === 'team_leader' ? 'team_leader' : 'driver',
+                    'is_reliever_assignment' => (bool) $driver->responderProfile?->is_reliever,
                 ]);
             }
 
             foreach ($emtUsers as $emtUser) {
                 $dispatch->crew()->attach($emtUser->id, [
-                    'role' => 'emt',
-                    'is_reliever' => (bool) $emtUser->responderProfile?->is_reliever,
+                    'role' => $emtUser->responderProfile?->position === 'team_leader' ? 'team_leader' : 'emt',
+                    'is_reliever_assignment' => (bool) $emtUser->responderProfile?->is_reliever,
                 ]);
             }
 
@@ -218,7 +221,7 @@ class DispatchController extends Controller
             }
 
             // Note relievers returning to pool
-            $relievers = $dispatch->crew()->wherePivot('is_reliever', true)->get();
+            $relievers = $dispatch->crew()->wherePivot('is_reliever_assignment', true)->get();
             foreach ($relievers as $reliever) {
                 $returnNotes[] = "Reliever {$reliever->first_name} {$reliever->last_name} returned to Reliever Pool.";
             }
@@ -265,7 +268,7 @@ class DispatchController extends Controller
                 ResponderProfile::whereIn('user_id', $crewUserIds)->update(['availability' => 'available']);
             }
 
-            $relievers = $dispatch->crew()->wherePivot('is_reliever', true)->get();
+            $relievers = $dispatch->crew()->wherePivot('is_reliever_assignment', true)->get();
             foreach ($relievers as $reliever) {
                 $returnNotes[] = "Reliever {$reliever->first_name} {$reliever->last_name} returned to Reliever Pool.";
             }

@@ -141,3 +141,16 @@
         @apply bg-background text-foreground;
     }
 }
+
+@media print {
+    /* Hide application UI, sidebar, navigation, search, filters, and pagination during print */
+    header,
+    nav,
+    aside,
+    footer,
+    [role="navigation"],
+    .no-print {
+        display: none !important;
+    }
+}
+

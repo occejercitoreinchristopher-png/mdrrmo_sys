@@ -10,16 +10,56 @@ test('login screen can be rendered', function () {
     $response->assertOk();
 });
 
-test('users can authenticate using the login screen', function () {
-    $user = User::factory()->create();
+test('admin can authenticate and is redirected to admin dashboard', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
 
     $response = $this->post(route('login.store'), [
-        'email' => $user->email,
+        'email' => $admin->email,
         'password' => 'password',
     ]);
 
-    $this->assertAuthenticated();
-    $response->assertRedirect(route('dashboard', absolute: false));
+    $this->assertAuthenticatedAs($admin);
+    $response->assertRedirect(route('admin.dashboard', absolute: false));
+});
+
+test('dispatcher can authenticate and is redirected to dispatcher dashboard', function () {
+    $dispatcher = User::factory()->create(['role' => 'dispatcher']);
+
+    $response = $this->post(route('login.store'), [
+        'email' => $dispatcher->email,
+        'password' => 'password',
+    ]);
+
+    $this->assertAuthenticatedAs($dispatcher);
+    $response->assertRedirect(route('dispatcher.dashboard', absolute: false));
+});
+
+test('responder cannot authenticate on web and receives mobile-only message', function () {
+    $responder = User::factory()->create(['role' => 'responder']);
+
+    $response = $this->post(route('login.store'), [
+        'email' => $responder->email,
+        'password' => 'password',
+    ]);
+
+    $this->assertGuest();
+    $response->assertSessionHasErrors([
+        'email' => 'Responder accounts can only access the MDRRMO mobile application. Please use the Responder mobile app to continue.',
+    ]);
+});
+
+test('resident cannot authenticate on web and receives mobile-only message', function () {
+    $resident = User::factory()->create(['role' => 'resident']);
+
+    $response = $this->post(route('login.store'), [
+        'email' => $resident->email,
+        'password' => 'password',
+    ]);
+
+    $this->assertGuest();
+    $response->assertSessionHasErrors([
+        'email' => 'Resident accounts can only access the MDRRMO mobile application. Please use the Resident mobile app to continue.',
+    ]);
 });
 
 test('users with two factor enabled are redirected to two factor challenge', function () {
@@ -54,7 +94,7 @@ test('users can not authenticate with invalid password', function () {
 });
 
 test('users can logout', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->create(['role' => 'admin']);
 
     $response = $this->actingAs($user)->post(route('logout'));
 

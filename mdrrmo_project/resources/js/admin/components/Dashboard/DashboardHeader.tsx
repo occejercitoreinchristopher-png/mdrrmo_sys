@@ -40,7 +40,7 @@ export default function DashboardHeader() {
                         Command Overview
                     </span>
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+                <h1 suppressHydrationWarning className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
                     {greeting},{' '}
                     <span className="text-slate-900 dark:text-white">
                         {adminName}
@@ -56,10 +56,10 @@ export default function DashboardHeader() {
                 <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 shadow-sm text-right">
                     <Clock className="w-4 h-4 text-slate-400" />
                     <div>
-                        <p className="text-xs font-mono font-bold text-slate-900 dark:text-white tabular-nums leading-none">
+                        <p suppressHydrationWarning className="text-xs font-mono font-bold text-slate-900 dark:text-white tabular-nums leading-none">
                             {timeStr}
                         </p>
-                        <p className="text-[10px] text-slate-400 mt-0.5 leading-none">
+                        <p suppressHydrationWarning className="text-[10px] text-slate-400 mt-0.5 leading-none">
                             {dateStr}
                         </p>
                     </div>

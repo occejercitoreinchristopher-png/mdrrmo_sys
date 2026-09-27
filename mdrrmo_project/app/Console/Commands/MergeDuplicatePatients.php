@@ -59,17 +59,17 @@ class MergeDuplicatePatients extends Command
             DB::transaction(function () use ($master, $duplicates, &$mergedCount) {
                 $updates = [];
                 foreach ($duplicates as $dup) {
-                    if (empty($master->birthdate) && ! empty($dup->birthdate)) {
-                        $master->birthdate = $dup->birthdate;
-                        $updates['birthdate'] = $dup->birthdate;
+                    if (empty($master->patient_birthdate) && ! empty($dup->patient_birthdate)) {
+                        $master->patient_birthdate = $dup->patient_birthdate;
+                        $updates['patient_birthdate'] = $dup->patient_birthdate;
                     }
                     if (empty($master->street) && ! empty($dup->street)) {
                         $master->street = $dup->street;
                         $updates['street'] = $dup->street;
                     }
-                    if (empty($master->gender) && ! empty($dup->gender)) {
-                        $master->gender = $dup->gender;
-                        $updates['gender'] = $dup->gender;
+                    if (empty($master->patient_gender) && ! empty($dup->patient_gender)) {
+                        $master->patient_gender = $dup->patient_gender;
+                        $updates['patient_gender'] = $dup->patient_gender;
                     }
                     if (empty($master->house_no) && ! empty($dup->house_no)) {
                         $master->house_no = $dup->house_no;

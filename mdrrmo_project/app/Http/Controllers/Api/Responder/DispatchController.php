@@ -20,6 +20,32 @@ use Illuminate\Support\Facades\Auth;
 
 class DispatchController extends Controller
 {
+    public function availableIncidents()
+    {
+        $incidents = Incident::where('incident_status', 'verified')
+            ->with(['incidentType', 'resident.residentProfile.barangay'])
+            ->latest('verified_at')
+            ->take(15)
+            ->get()
+            ->map(function ($inc) {
+                $barangay = $inc->resident?->residentProfile?->barangay?->barangay_name ?? null;
+                return [
+                    'id' => $inc->id,
+                    'incident_code' => 'INC-' . str_pad($inc->id, 5, '0', STR_PAD_LEFT),
+                    'type' => $inc->incidentType?->name ?? 'Emergency',
+                    'priority' => $inc->priority ?? 'Moderate',
+                    'location' => $inc->place_of_incident ?: $inc->incident_address ?: ($barangay ? "Barangay {$barangay}" : 'Opol, Misamis Oriental'),
+                    'barangay' => $barangay,
+                    'description' => $inc->incident_description,
+                    'verified_at' => $inc->verified_at ? $inc->verified_at->toIso8601String() : $inc->created_at->toIso8601String(),
+                    'report_source' => $inc->report_source,
+                    'status' => $inc->incident_status,
+                ];
+            });
+
+        return response()->json(['data' => $incidents]);
+    }
+
     public function index()
     {
         // Get active dispatches assigned to this responder's crew/ambulance
@@ -28,7 +54,9 @@ class DispatchController extends Controller
         $dispatches = Dispatch::where(function ($query) use ($user) {
             $query->where('driver_id', $user->id)
                 ->orWhere('emt_id', $user->id)
-                ->orWhere('team_leader_id', $user->id);
+                ->orWhereHas('crew', function ($cq) use ($user) {
+                    $cq->where('users.id', $user->id);
+                });
         })
             ->whereNotIn('dispatch_status', ['completed', 'cancelled'])
             ->latest('id')
@@ -88,7 +116,9 @@ class DispatchController extends Controller
         $hasActiveMission = Dispatch::where(function ($query) use ($user) {
             $query->where('driver_id', $user->id)
                 ->orWhere('emt_id', $user->id)
-                ->orWhere('team_leader_id', $user->id);
+                ->orWhereHas('crew', function ($cq) use ($user) {
+                    $cq->where('users.id', $user->id);
+                });
         })
             ->whereIn('dispatch_status', ['assigned', 'accepted', 'en_route', 'arrived_on_scene'])
             ->exists();
@@ -100,8 +130,8 @@ class DispatchController extends Controller
         }
 
         $incidentType = IncidentType::firstOrCreate(
-            ['name' => 'Medical Emergency'],
-            ['description' => 'General Medical Emergency']
+            ['incident_type_name' => 'Medical Emergency'],
+            ['type_description' => 'General Medical Emergency']
         );
 
         $ambulance = Ambulance::withTrashed()->where('plate_number', 'WALK-IN')->first();
@@ -137,7 +167,7 @@ class DispatchController extends Controller
             'resident_id' => $user->id, // Responder self-reporting
             'incident_type_id' => $incidentTypeId,
             'description' => 'Walk-In / Direct Citizen Emergency Request',
-            'place_of_incident' => $placeOfIncident,
+            'incident_address' => $placeOfIncident,
             'incident_latitude' => $lat,
             'incident_longitude' => $lng,
             'reporter_latitude' => $lat,
@@ -227,7 +257,6 @@ class DispatchController extends Controller
             $assignedUserIds = array_unique(array_filter(array_merge($crewUserIds, [
                 $dispatch->driver_id,
                 $dispatch->emt_id,
-                $dispatch->team_leader_id,
             ])));
             if (! empty($assignedUserIds)) {
                 ResponderProfile::whereIn('user_id', $assignedUserIds)->update(['availability' => 'available']);
@@ -268,8 +297,7 @@ class DispatchController extends Controller
         $isAssigned = in_array($user->id, array_filter([
             $dispatch->driver_id,
             $dispatch->emt_id,
-            $dispatch->team_leader_id,
-        ]));
+        ])) || $dispatch->crew()->where('users.id', $user->id)->exists();
 
         if (! $isAssigned && ! in_array($user->role, ['admin', 'dispatcher', 'responder'])) {
             return response()->json([
@@ -393,7 +421,6 @@ class DispatchController extends Controller
             $assignedUserIds = array_unique(array_filter(array_merge($crewUserIds, [
                 $dispatch->driver_id,
                 $dispatch->emt_id,
-                $dispatch->team_leader_id,
             ])));
             if (! empty($assignedUserIds)) {
                 ResponderProfile::whereIn('user_id', $assignedUserIds)->update(['availability' => 'available']);

@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('incidents', function (Blueprint $table) {
-            //
+        Schema::table('dispatch_crews', function (Blueprint $table) {
+            $table->string('role', 50)->default('emt')->change();
         });
     }
 
@@ -21,8 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('incidents', function (Blueprint $table) {
-            //
+        Schema::table('dispatch_crews', function (Blueprint $table) {
+            $table->enum('role', ['driver', 'emt'])->default('emt')->change();
         });
     }
 };

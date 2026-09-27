@@ -186,9 +186,9 @@ class ImportElectricPostsCommand extends Command
             if (isset($postsByCoord[$coordKey])) {
                 // Exact same location already processed!
                 $prevIndex = $postsByCoord[$coordKey];
-                $prevDesc = $rowsToInsert[$prevIndex]['description'];
+                $prevDesc = $rowsToInsert[$prevIndex]['location_description'];
                 if ($poleDescription && ! str_contains($prevDesc, $poleDescription)) {
-                    $rowsToInsert[$prevIndex]['description'] .= " | Also: {$poleDescription} (#{$postNumber})";
+                    $rowsToInsert[$prevIndex]['location_description'] .= " | Also: {$poleDescription} (#{$postNumber})";
                 }
                 $mergedDuplicatesCount++;
 
@@ -233,9 +233,9 @@ class ImportElectricPostsCommand extends Command
                 'location_code' => $finalCode,
                 'location_type' => 'Post / Streetlight',
                 'location_name' => $locationName,
-                'description' => $cleanDesc,
-                'latitude' => $latitude,
-                'longitude' => $longitude,
+                'location_description' => $cleanDesc,
+                'location_latitude' => $latitude,
+                'location_longitude' => $longitude,
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -262,7 +262,7 @@ class ImportElectricPostsCommand extends Command
             DB::table('location_codes')->upsert(
                 $chunk,
                 ['location_code'],
-                ['barangay_id', 'location_type', 'location_name', 'description', 'latitude', 'longitude', 'updated_at']
+                ['barangay_id', 'location_type', 'location_name', 'location_description', 'location_latitude', 'location_longitude', 'updated_at']
             );
             $totalInserted += count($chunk);
             $bar->advance();

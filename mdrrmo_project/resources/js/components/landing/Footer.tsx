@@ -12,8 +12,8 @@ export default function Footer() {
                     {/* Brand & Mission */}
                     <div className="md:col-span-6 space-y-3">
                         <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-600 to-orange-600 flex items-center justify-center shadow-md shadow-rose-500/20 border border-rose-400/30">
-                                <ShieldAlert className="w-4 h-4 text-white" />
+                            <div className="w-9 h-9 flex items-center justify-center flex-shrink-0">
+                                <img src="/images/opol-logo.png" alt="MDRRMO Opol" className="w-full h-full object-contain drop-shadow-md" />
                             </div>
                             <div>
                                 <span className="font-extrabold text-base tracking-tight text-white block leading-none">

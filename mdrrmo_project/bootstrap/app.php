@@ -36,4 +36,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        $exceptions->render(function (\Illuminate\Validation\ValidationException $e, Request $request) {
+            \Illuminate\Support\Facades\Log::warning('[422 Validation Error] ' . $request->method() . ' ' . $request->fullUrl(), [
+                'errors' => $e->errors(),
+                'payload' => $request->except(['password', 'password_confirmation']),
+            ]);
+        });
     })->create();

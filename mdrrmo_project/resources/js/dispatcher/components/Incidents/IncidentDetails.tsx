@@ -62,6 +62,13 @@ export default function IncidentDetails({
     const [address, setAddress] = useState<string | null>(null);
     const [loadingAddress, setLoadingAddress] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [selectedPriority, setSelectedPriority] = useState<string>(incident?.priority || 'Moderate');
+
+    useEffect(() => {
+        if (incident?.priority) {
+            setSelectedPriority(incident.priority);
+        }
+    }, [incident]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -134,7 +141,19 @@ export default function IncidentDetails({
         router.post(
             url,
             payload,
-            { onFinish: () => { setProcessing(false); onClose(); } },
+            { 
+                onSuccess: () => {
+                    setProcessing(false);
+                    onClose();
+                },
+                onError: (errs) => {
+                    console.error('Failed to update incident status:', errs);
+                    setProcessing(false);
+                },
+                onFinish: () => {
+                    setProcessing(false);
+                }
+            },
         );
     };
 
@@ -208,10 +227,10 @@ export default function IncidentDetails({
                                 <UserCheck className="w-3 h-3" />
                                 Walk-In
                             </span>
-                        ) : incident.report_source === 'dispatcher' || incident.location_source === 'location_code' ? (
+                        ) : incident.report_source === 'dispatcher' || incident.report_source === 'phone_sim' || incident.location_source === 'location_code' ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
                                 <PhoneCall className="w-3 h-3" />
-                                Dispatcher / Web
+                                Phone / SIM Call
                             </span>
                         ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -419,7 +438,7 @@ export default function IncidentDetails({
                                 </div>
                             ) : (
                                 <div className="mt-1 p-3.5 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-white/5 text-xs">
-                                    {incident.report_source === 'dispatcher' || incident.location_source === 'location_code' ? (
+                                    {incident.report_source === 'dispatcher' || incident.report_source === 'phone_sim' || incident.location_source === 'location_code' ? (
                                         <div className="flex items-start gap-2.5 text-slate-400">
                                             <PhoneCall className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
                                             <div>
@@ -535,24 +554,49 @@ export default function IncidentDetails({
                 {/* Fixed Action Footer */}
                 <div className="p-4 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-10px_20px_rgba(0,0,0,0.5)]">
                     {incident.incident_status === 'pending' && (
-                        <div className="flex gap-2">
-                            <Button
-                                variant="primary"
-                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                                loading={processing}
-                                onClick={() => updateStatus('verified')}
-                            >
-                                <CheckCircle className="w-4 h-4" />
-                                Verify Incident
-                            </Button>
-                            <Button
-                                variant="destructive"
-                                className="w-auto px-4"
-                                title="Reject Incident (Prank / False Alarm)"
-                                onClick={() => setShowRejectModal(true)}
-                            >
-                                <XCircle className="w-4 h-4" />
-                            </Button>
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                                <span className="font-semibold">Priority Level:</span>
+                                <div className="flex gap-1.5">
+                                    {(['Moderate', 'High', 'Critical'] as const).map((p) => (
+                                        <button
+                                            key={p}
+                                            type="button"
+                                            onClick={() => setSelectedPriority(p)}
+                                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                                                selectedPriority === p
+                                                    ? p === 'Critical'
+                                                        ? 'bg-red-600 text-white shadow-sm'
+                                                        : p === 'High'
+                                                        ? 'bg-amber-600 text-white shadow-sm'
+                                                        : 'bg-emerald-600 text-white shadow-sm'
+                                                    : 'bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-white/20'
+                                            }`}
+                                        >
+                                            {p}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="primary"
+                                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    loading={processing}
+                                    onClick={() => updateStatus('verified', { priority: selectedPriority || incident.priority || 'Moderate' })}
+                                >
+                                    <CheckCircle className="w-4 h-4" />
+                                    Verify Incident
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    className="w-auto px-4"
+                                    title="Reject Incident (Prank / False Alarm)"
+                                    onClick={() => setShowRejectModal(true)}
+                                >
+                                    <XCircle className="w-4 h-4" />
+                                </Button>
+                            </div>
                         </div>
                     )}
 

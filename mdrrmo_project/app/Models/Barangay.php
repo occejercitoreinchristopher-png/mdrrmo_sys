@@ -16,4 +16,12 @@ class Barangay extends Model
     {
         return $this->hasMany(LocationCode::class);
     }
+
+    /**
+     * Relationship with DispatchLog.
+     */
+    public function dispatchLogs(): HasMany
+    {
+        return $this->hasMany(DispatchLog::class);
+    }
 }

@@ -3,7 +3,7 @@ import { ComponentProps } from 'react';
 
 interface TextareaProps extends ComponentProps<'textarea'> {
     label?: string;
-    id: string;
+    id?: string;
     error?: string;
     className?: string;
     required?: boolean;

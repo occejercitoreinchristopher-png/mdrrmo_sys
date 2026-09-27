@@ -1,11 +1,32 @@
 import { Users, AlertTriangle, Ambulance, CheckCircle2, Clock, Truck } from 'lucide-react';
 import DispatcherStatCard from './DispatcherStatCard';
 
-export default function DashboardCards({ stats = {} }) {
+export interface DashboardStats {
+    active_incidents?: number;
+    pending_incidents?: number;
+    pending_dispatch?: number;
+    active_dispatches?: number;
+    resolved_today?: number;
+    completed_dispatches_today?: number;
+    available_ambulances?: number;
+    available_responders?: number;
+    total_dispatches?: number;
+    total_users?: number;
+    pending_leave_requests?: number;
+    incidents_trend?: number | null;
+    users_trend?: number | null;
+    [key: string]: any;
+}
+
+interface DashboardCardsProps {
+    stats?: DashboardStats;
+}
+
+export default function DashboardCards({ stats = {} }: DashboardCardsProps) {
     const cards = [
         {
             title: 'Active Incidents',
-            value: stats.active_incidents ?? 0,
+            value: stats.active_incidents ?? stats.pending_incidents ?? 0,
             icon: AlertTriangle,
             color: 'crimson',
             trend: stats.incidents_trend,
@@ -13,13 +34,13 @@ export default function DashboardCards({ stats = {} }) {
         },
         {
             title: 'Pending Dispatch',
-            value: stats.pending_dispatch ?? 0,
+            value: stats.pending_dispatch ?? stats.active_dispatches ?? 0,
             icon: Clock,
             color: 'orange',
         },
         {
             title: 'Resolved Today',
-            value: stats.resolved_today ?? 0,
+            value: stats.resolved_today ?? stats.completed_dispatches_today ?? 0,
             icon: CheckCircle2,
             color: 'emerald',
             trend: null,
@@ -33,13 +54,13 @@ export default function DashboardCards({ stats = {} }) {
         },
         {
             title: 'Total Dispatches',
-            value: stats.total_dispatches ?? 0,
+            value: stats.total_dispatches ?? stats.active_dispatches ?? 0,
             icon: Truck,
             color: 'orange',
         },
         {
             title: 'Total Responders',
-            value: stats.total_users ?? 0,
+            value: stats.total_users ?? stats.available_responders ?? 0,
             icon: Users,
             color: 'violet',
             trend: stats.users_trend,

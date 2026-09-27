@@ -1,10 +1,17 @@
 import DashboardHeader from './DashboardHeader';
-import DashboardCards from './DashboardCards';
+import DashboardCards, { DashboardStats } from './DashboardCards';
 import DashboardCharts from './DashboardCharts';
 import RecentIncidentsTable from './RecentIncidentsTable';
 import RecentDispatchTable from './RecentDispatchTable';
 
-export default function Dashboard({ stats = {}, charts = {}, recentIncidents = [], recentDispatches = [] }) {
+interface DashboardProps {
+    stats?: DashboardStats;
+    charts?: any;
+    recentIncidents?: any[];
+    recentDispatches?: any[];
+}
+
+export default function Dashboard({ stats = {}, charts = {}, recentIncidents = [], recentDispatches = [] }: DashboardProps) {
     return (
         <div>
             <DashboardHeader />

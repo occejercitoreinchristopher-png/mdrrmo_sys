@@ -236,6 +236,10 @@ class UserController extends Controller
                 'position' => $request->position,
                 'team' => $isReliever ? null : ($request->team ?? 'Alpha'),
             ]);
+        } else {
+            if ($user->responderProfile) {
+                $user->responderProfile->delete();
+            }
         }
 
         return back()->with('success', 'User updated successfully.');
@@ -247,11 +251,17 @@ class UserController extends Controller
             return;
         }
 
+        $baseQuery = fn () => ResponderProfile::where('team', $team)
+            ->where('is_reliever', false)
+            ->whereHas('user', function ($uq) use ($ignoreUserId) {
+                $uq->whereNull('deleted_at')
+                    ->where('role', 'responder')
+                    ->when($ignoreUserId, fn ($q) => $q->where('id', '!=', $ignoreUserId));
+            });
+
         if ($position === 'driver') {
-            $existingDrivers = ResponderProfile::where('team', $team)
-                ->where('is_reliever', false)
+            $existingDrivers = $baseQuery()
                 ->where('position', 'driver')
-                ->when($ignoreUserId, fn ($q) => $q->where('user_id', '!=', $ignoreUserId))
                 ->count();
 
             if ($existingDrivers >= 1) {
@@ -260,10 +270,8 @@ class UserController extends Controller
                 ]);
             }
         } elseif ($position === 'emt') {
-            $existingEmts = ResponderProfile::where('team', $team)
-                ->where('is_reliever', false)
+            $existingEmts = $baseQuery()
                 ->where('position', 'emt')
-                ->when($ignoreUserId, fn ($q) => $q->where('user_id', '!=', $ignoreUserId))
                 ->count();
 
             if ($existingEmts >= 3) {
@@ -273,10 +281,7 @@ class UserController extends Controller
             }
         }
 
-        $totalPermanent = ResponderProfile::where('team', $team)
-            ->where('is_reliever', false)
-            ->when($ignoreUserId, fn ($q) => $q->where('user_id', '!=', $ignoreUserId))
-            ->count();
+        $totalPermanent = $baseQuery()->count();
 
         if ($totalPermanent >= 4) {
             throw \Illuminate\Validation\ValidationException::withMessages([
@@ -301,6 +306,7 @@ class UserController extends Controller
 
         if ($user->responderProfile) {
             $user->responderProfile->update(['availability' => 'off_duty']);
+            $user->responderProfile->delete();
         }
 
         $user->delete();

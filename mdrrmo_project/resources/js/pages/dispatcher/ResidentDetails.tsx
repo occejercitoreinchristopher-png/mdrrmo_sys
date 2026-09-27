@@ -151,7 +151,7 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
                             }));
                         }
                     })
-                    .catch(() => {});
+                    .catch(() => { });
             }
         });
     }, [incidents]);
@@ -176,18 +176,18 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
 
     const formattedRegisteredDate = resident.created_at
         ? new Date(resident.created_at).toLocaleDateString('en-PH', {
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric',
-          })
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+        })
         : '—';
 
     const formattedBirthdate = profile?.birthdate
         ? new Date(profile.birthdate).toLocaleDateString('en-PH', {
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric',
-          })
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+        })
         : null;
 
     const calculatedAge = profile?.birthdate
@@ -225,7 +225,7 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
             document.body.removeChild(textarea);
             setCopiedPhone(true);
             setTimeout(() => setCopiedPhone(false), 2000);
-        } catch {}
+        } catch { }
     };
 
     // Quick calculations
@@ -453,12 +453,12 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
                                             const activeDispatch = incident.dispatches?.[0];
                                             const reportedDate = incident.reported_at
                                                 ? new Date(incident.reported_at).toLocaleString('en-PH', {
-                                                      month: 'short',
-                                                      day: 'numeric',
-                                                      year: 'numeric',
-                                                      hour: '2-digit',
-                                                      minute: '2-digit',
-                                                  })
+                                                    month: 'short',
+                                                    day: 'numeric',
+                                                    year: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                })
                                                 : '—';
 
                                             const incidentTypeName = toPascalCase(incident.incident_type?.name || 'Emergency');

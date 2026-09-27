@@ -12,8 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('incidents', function (Blueprint $table) {
-            $table->string('rejection_category')->nullable()->after('rejection_reason');
-            $table->boolean('is_prank')->default(false)->index()->after('rejection_category');
+            $table->string('caller_phone_number', 30)->nullable()->change();
         });
     }
 
@@ -23,7 +22,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('incidents', function (Blueprint $table) {
-            $table->dropColumn(['rejection_category', 'is_prank']);
+            $table->string('caller_phone_number', 11)->nullable()->change();
         });
     }
 };

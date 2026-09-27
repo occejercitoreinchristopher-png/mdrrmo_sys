@@ -44,6 +44,7 @@ class ProfileController extends Controller
                 'phone_number' => $user->phone_number,
                 'birthdate' => $user->birthdate ? Carbon::parse($user->birthdate)->format('Y-m-d') : null,
                 'age' => $user->age,
+                'gender' => $user->gender,
                 'role' => $user->role,
                 'profile_photo_url' => $user->profile_photo_url,
             ],
@@ -80,6 +81,7 @@ class ProfileController extends Controller
             'last_name' => $validated['last_name'],
             'birthdate' => $birthdate,
             'age' => $age,
+            'gender' => $validated['gender'] ?? null,
             'phone_number' => $validated['phone_number'] ?? null,
         ]);
 
@@ -88,7 +90,6 @@ class ProfileController extends Controller
             $profile = new ResidentProfile(['user_id' => $user->id]);
         }
 
-        $profile->gender = $validated['gender'] ?? null;
         $profile->barangay_id = $validated['barangay_id'] ?? null;
         $profile->house_no = $validated['house_no'] ?? null;
         $profile->street = $validated['street'] ?? null;
@@ -167,11 +168,35 @@ class ProfileController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Profile photo updated successfully.',
-                'photo_url' => asset('storage/'.$path),
+                'photo_url' => $user->profile_photo_url,
+                'user' => $user->fresh(),
             ]);
         }
 
         return response()->json(['message' => 'No photo provided.'], 400);
+    }
+
+    /**
+     * Remove profile avatar.
+     */
+    public function deletePhoto(Request $request)
+    {
+        $user = Auth::user();
+
+        if ($user->profile_photo_path) {
+            Storage::disk('public')->delete($user->profile_photo_path);
+            $user->profile_photo_path = null;
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile photo removed successfully.',
+                'photo_url' => null,
+                'user' => $user->fresh(),
+            ]);
+        }
+
+        return response()->json(['message' => 'No profile photo found.'], 404);
     }
 
     /**

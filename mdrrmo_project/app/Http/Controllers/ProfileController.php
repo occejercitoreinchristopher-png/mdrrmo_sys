@@ -7,6 +7,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -39,6 +41,7 @@ class ProfileController extends Controller
                 'role' => $user->role,
                 'position' => $user->position,
                 'status' => $user->status,
+                'profile_photo_url' => $user->profile_photo_url,
                 'created_at' => $user->created_at?->toIso8601String(),
                 'updated_at' => $user->updated_at?->toIso8601String(),
             ],
@@ -84,13 +87,16 @@ class ProfileController extends Controller
             'gender' => $validated['gender'] ?? null,
             'birthdate' => $validated['birthdate'] ?? null,
             'age' => $validated['age'] ?? null,
-            'position' => $validated['position'] ?? null,
             'address' => $validated['address'] ?? null,
             'zip_code' => $validated['zip_code'] ?? null,
             'phone_number' => $validated['phone_number'],
         ]);
 
         $user->save();
+
+        if ($user->role === 'responder' && isset($validated['position'])) {
+            $user->responderProfile?->update(['position' => $validated['position']]);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Profile updated successfully.']);
 
@@ -120,5 +126,60 @@ class ProfileController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Password changed successfully.']);
 
         return back()->with('success', 'Password changed successfully.');
+    }
+
+    /**
+     * Upload or update profile photo.
+     */
+    public function updatePhoto(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'photo' => ['required', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
+        ], [
+            'photo.required' => 'Please select an image to upload.',
+            'photo.image' => 'The uploaded file must be an image.',
+            'photo.mimes' => 'Allowed image formats: jpeg, png, jpg, webp.',
+            'photo.max' => 'Image size cannot exceed 5MB.',
+        ]);
+
+        $user = $request->user();
+
+        if ($request->hasFile('photo')) {
+            $file = $request->file('photo');
+            $filename = 'profile_' . $user->id . '_' . Str::random(10) . '.' . $file->getClientOriginalExtension();
+
+            // Delete old photo if exists
+            if ($user->profile_photo_path) {
+                Storage::disk('public')->delete($user->profile_photo_path);
+            }
+
+            $path = $file->storeAs('profile-photos', $filename, 'public');
+            $user->update(['profile_photo_path' => $path]);
+
+            Inertia::flash('toast', ['type' => 'success', 'message' => 'Profile photo updated successfully.']);
+
+            return back()->with('success', 'Profile photo updated successfully.');
+        }
+
+        return back()->with('error', 'No photo was uploaded.');
+    }
+
+    /**
+     * Remove the current profile photo.
+     */
+    public function deletePhoto(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        if ($user->profile_photo_path) {
+            Storage::disk('public')->delete($user->profile_photo_path);
+            $user->update(['profile_photo_path' => null]);
+
+            Inertia::flash('toast', ['type' => 'success', 'message' => 'Profile photo removed successfully.']);
+
+            return back()->with('success', 'Profile photo removed successfully.');
+        }
+
+        return back();
     }
 }

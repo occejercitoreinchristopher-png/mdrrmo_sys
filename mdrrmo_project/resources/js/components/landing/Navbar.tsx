@@ -38,8 +38,8 @@ export default function Navbar() {
                 <div className="flex items-center justify-between h-18">
                     {/* Brand */}
                     <a href="#hero" className="flex items-center gap-3 group">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-600 to-orange-600 flex items-center justify-center shadow-lg shadow-rose-500/20 border border-rose-400/30 group-hover:scale-105 transition-transform duration-200">
-                            <ShieldAlert className="w-5 h-5 text-white" />
+                        <div className="w-10 h-10 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform duration-200">
+                            <img src="/images/opol-logo.png" alt="MDRRMO Opol" className="w-full h-full object-contain drop-shadow-md" />
                         </div>
                         <div>
                             <div className="flex items-center gap-2">

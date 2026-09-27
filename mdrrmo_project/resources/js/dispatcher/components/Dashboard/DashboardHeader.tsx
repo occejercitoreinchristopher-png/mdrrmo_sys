@@ -43,7 +43,7 @@ export default function DashboardHeader() {
                             Dispatch Central
                         </span>
                     </div>
-                    <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                    <h2 suppressHydrationWarning className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
                         {greeting},{' '}
                         <span className="text-[#F61509]">
                             {dispatcherName}
@@ -56,9 +56,9 @@ export default function DashboardHeader() {
                 <div className="flex flex-col sm:items-end bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 px-4 py-2.5 rounded-2xl shadow-sm">
                     <div className="flex items-center gap-1.5 text-lg sm:text-xl font-bold text-slate-900 dark:text-white font-mono tabular-nums">
                         <Clock className="w-4 h-4 text-[#F61509]" />
-                        <span>{timeStr}</span>
+                        <span suppressHydrationWarning>{timeStr}</span>
                     </div>
-                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">{dateStr}</p>
+                    <p suppressHydrationWarning className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">{dateStr}</p>
                 </div>
             </div>
         </div>

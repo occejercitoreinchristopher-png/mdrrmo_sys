@@ -19,6 +19,16 @@ beforeEach(function () {
         'description' => 'Near Municipal Hall',
         'is_active' => true,
     ]);
+    $brgy = Barangay::firstOrCreate(['barangay_name' => 'Poblacion']);
+    \App\Models\LocationCode::create([
+        'location_code' => 'SL-001',
+        'location_name' => 'Streetlight 001',
+        'location_type' => 'landmark',
+        'barangay_id' => $brgy->id,
+        'location_latitude' => 8.5312000,
+        'location_longitude' => 124.5695000,
+        'description' => 'Near Municipal Hall',
+    ]);
 });
 
 test('dispatcher can lookup an active location code', function () {
@@ -77,7 +87,17 @@ test('dispatcher can successfully create phone emergency incident with normalize
     expect($incident->chief_complaint)->toBe('Cardiac Emergency');
     expect($incident->location_code)->toBe('SL-001');
     expect($incident->location_source)->toBe('location_code');
-    expect($incident->incident_status)->toBe('pending');
+    expect($incident->incident_status)->toBe('verified');
+    expect($incident->report_source)->toBe('phone_sim');
+    expect($incident->verified_by)->toBe($this->dispatcher->id);
+    expect($incident->verified_at)->not->toBeNull();
+
+    $log = \App\Models\DispatchLog::where('incident_id', $incident->id)->first();
+    expect($log)->not->toBeNull();
+    expect($log->action->name)->toBe('Phone/SIM Incident Created');
+    expect($log->new_status)->toBe('verified');
+    expect($log->user_id)->toBe($this->dispatcher->id);
+
     expect((float) $incident->incident_latitude)->toBe(8.5312000);
     expect((float) $incident->incident_longitude)->toBe(124.5695000);
     expect($incident->place_of_incident)->toContain('Streetlight 001');
@@ -97,8 +117,6 @@ test('phone emergency incident automatically links registered resident profile i
         'barangay_id' => $barangay->id,
         'house_no' => '123',
         'street' => 'Main Street',
-        'birthdate' => '1995-05-10',
-        'gender' => 'female',
     ]);
 
     $response = $this->actingAs($this->dispatcher)->post('/dispatcher/incidents/phone-call', [
@@ -131,8 +149,6 @@ test('dispatcher can lookup recognized caller when phone matches registered resi
         'barangay_id' => $barangay->id,
         'house_no' => '456',
         'street' => 'Rizal Street',
-        'birthdate' => '1990-01-01',
-        'gender' => 'male',
     ]);
 
     $response = $this->actingAs($this->dispatcher)->getJson('/dispatcher/callers/lookup?phone=09936062977');
@@ -196,8 +212,6 @@ test('dispatcher can search caller phone numbers for autocomplete dropdown', fun
         'barangay_id' => $barangay->id,
         'house_no' => '789',
         'street' => 'Baybay Road',
-        'birthdate' => '1988-04-12',
-        'gender' => 'male',
     ]);
 
     // Test search by partial phone digits
@@ -214,4 +228,62 @@ test('dispatcher can search caller phone numbers for autocomplete dropdown', fun
     $dataName = $responseName->json('data');
     expect($dataName)->not->toBeEmpty();
     expect($dataName[0]['caller_name'])->toBe('Carlos Mendoza');
+});
+
+test('phone call incident creation does not broadcast IncidentCreated and broadcasts IncidentVerified', function () {
+    \Illuminate\Support\Facades\Event::fake([
+        \App\Events\IncidentCreated::class,
+        \App\Events\IncidentVerified::class,
+    ]);
+
+    $response = $this->actingAs($this->dispatcher)->post('/dispatcher/incidents/phone-call', [
+        'caller_phone_number' => '09171234567',
+        'incident_type_id' => $this->type->id,
+        'chief_complaint' => 'Trauma',
+        'location_code' => 'SL-001',
+        'location_confirmed' => true,
+        'description' => 'Motorcycle fall',
+    ]);
+
+    $response->assertSessionHas('success');
+
+    // Must NOT broadcast IncidentCreated (prevents dispatcher web siren alarm)
+    \Illuminate\Support\Facades\Event::assertNotDispatched(\App\Events\IncidentCreated::class);
+
+    // MUST broadcast IncidentVerified (notifies responder channel and dispatcher verified list)
+    \Illuminate\Support\Facades\Event::assertDispatched(\App\Events\IncidentVerified::class);
+});
+
+test('responder can fetch available verified incidents waiting for dispatch', function () {
+    $responder = User::factory()->create(['role' => 'responder']);
+
+    $incident = Incident::create([
+        'incident_type_id' => $this->type->id,
+        'incident_description' => 'Road accident near bridge',
+        'place_of_incident' => 'Barangay Poblacion, National Highway',
+        'incident_latitude' => 8.5312000,
+        'incident_longitude' => 124.5695000,
+        'incident_status' => 'verified',
+        'priority' => 'High',
+        'reported_at' => now(),
+        'verified_at' => now(),
+        'report_source' => 'phone_sim',
+        'caller_phone_number' => '+639171234567',
+        'caller_name' => 'Secret Caller',
+    ]);
+
+    $response = $this->actingAs($responder)->getJson('/api/responder/incidents/available');
+
+    $response->assertStatus(200);
+    $data = $response->json('data');
+    expect($data)->not->toBeEmpty();
+    $found = collect($data)->firstWhere('id', $incident->id);
+    expect($found)->not->toBeNull();
+    expect($found['type'])->toBe('Medical Emergency');
+    expect($found['priority'])->toBe('High');
+    expect($found['status'])->toBe('verified');
+    expect($found['location'])->toContain('Poblacion');
+    // Ensure caller personal PII is not leaked to responder list
+    expect(isset($found['caller_phone_number']))->toBeFalse();
+    expect(isset($found['caller_name']))->toBeFalse();
 });

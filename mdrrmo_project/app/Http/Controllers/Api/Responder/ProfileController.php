@@ -57,12 +57,34 @@ class ProfileController extends Controller
             $user->save();
 
             return response()->json([
+                'success' => true,
                 'message' => 'Profile photo updated successfully',
-                'photo_url' => asset('storage/'.$path),
+                'photo_url' => $user->profile_photo_url,
+                'user' => $user->fresh(),
             ]);
         }
 
         return response()->json(['message' => 'No photo provided'], 400);
+    }
+
+    public function deletePhoto(Request $request)
+    {
+        $user = Auth::user();
+
+        if ($user->profile_photo_path) {
+            Storage::disk('public')->delete($user->profile_photo_path);
+            $user->profile_photo_path = null;
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile photo removed successfully',
+                'photo_url' => null,
+                'user' => $user->fresh(),
+            ]);
+        }
+
+        return response()->json(['message' => 'No profile photo found'], 404);
     }
 
     public function changePassword(Request $request)

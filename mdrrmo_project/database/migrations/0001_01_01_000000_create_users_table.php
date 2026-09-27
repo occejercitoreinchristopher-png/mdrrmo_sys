@@ -12,18 +12,25 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
-
             $table->id();
-            $table->string('first_name');
-            $table->string('middle_name')->nullable();
-            $table->string('last_name');
+            $table->string('first_name',100);
+            $table->string('middle_name',100)->nullable();
+            $table->string('last_name',100);
+            $table->enum('gender', ['Male', 'Female', 'Other'])->nullable();
+            $table->date('birthdate')->nullable();
+            $table->integer('age')->nullable();
 
-            $table->string('email')->unique();
+            $table->string('email',100);
+            $table->string('profile_photo_path', 255)->nullable();
             $table->timestamp('email_verified_at')->nullable();
 
-            $table->string('phone_number')->unique();
+            $table->string('phone_number', 20)->nullable();
+            $table->string('address',150)->nullable();
+            $table->string('zip_code',10)->nullable();
 
-            $table->string('password');
+            $table->string('password',100);
+            $table->boolean('password_change_required')->default(false);
+            $table->timestamp('temporary_password_expires_at')->nullable();
 
             $table->enum('role', [
                 'admin',
@@ -39,12 +46,14 @@ return new class extends Migration
             ])->default('active');
 
             $table->rememberToken();
+            $table->string('expo_push_token')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
-            $table->string('token');
+            $table->string('email',100)->primary();
+            $table->string('token',100);
             $table->timestamp('created_at')->nullable();
         });
 

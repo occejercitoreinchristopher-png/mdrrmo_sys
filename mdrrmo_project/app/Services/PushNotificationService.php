@@ -54,6 +54,43 @@ class PushNotificationService
     }
 
     /**
+     * Notify available responders when an incident is verified and ready for dispatch.
+     * Light notification (standard chime/vibration, no aggressive siren alarm).
+     */
+    public static function notifyRespondersNewVerifiedIncident(Incident $incident): void
+    {
+        $responders = User::where('role', 'responder')
+            ->whereNotNull('expo_push_token')
+            ->where('expo_push_token', '!=', '')
+            ->get();
+
+        if ($responders->isEmpty()) {
+            return;
+        }
+
+        $incidentType = $incident->incidentType?->name ?? 'Emergency';
+        $barangay = $incident->resident?->residentProfile?->barangay?->barangay_name ?? null;
+        $location = $incident->place_of_incident ?: $incident->incident_address ?: ($barangay ? "Barangay {$barangay}" : 'Opol, Misamis Oriental');
+        $verifiedAt = $incident->verified_at ? $incident->verified_at->toIso8601String() : now()->toIso8601String();
+
+        $title = '🔔 New Verified Incident';
+        $body = "A new {$incidentType} incident has been verified and is ready for dispatch.";
+
+        $data = [
+            'type' => 'verified_incident_available',
+            'incident_id' => $incident->id,
+            'incident_type' => $incidentType,
+            'priority' => $incident->priority ?? 'Moderate',
+            'location' => $location,
+            'barangay' => $barangay,
+            'verified_at' => $verifiedAt,
+            'report_source' => $incident->report_source,
+        ];
+
+        self::sendToUsers($responders, $title, $body, $data);
+    }
+
+    /**
      * Notify resident when incident is verified by Dispatcher.
      */
     public static function notifyIncidentVerified(Incident $incident): void

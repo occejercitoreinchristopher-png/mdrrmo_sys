@@ -15,15 +15,55 @@ class LocationCode extends Model
         'location_code',
         'location_type',
         'location_name',
-        'description',
-        'latitude',
-        'longitude',
+        'location_description',
+        'location_latitude',
+        'location_longitude',
     ];
 
+    protected $appends = ['code', 'marker_name', 'barangay_name', 'description', 'latitude', 'longitude'];
+
     protected $casts = [
-        'latitude' => 'float',
-        'longitude' => 'float',
+        'location_latitude' => 'float',
+        'location_longitude' => 'float',
     ];
+
+    public function getDescriptionAttribute(): ?string
+    {
+        return $this->attributes['location_description'] ?? null;
+    }
+
+    public function getLatitudeAttribute(): ?float
+    {
+        return isset($this->attributes['location_latitude']) ? (float) $this->attributes['location_latitude'] : null;
+    }
+
+    public function getLongitudeAttribute(): ?float
+    {
+        return isset($this->attributes['location_longitude']) ? (float) $this->attributes['location_longitude'] : null;
+    }
+
+    public function setDescriptionAttribute($value): void
+    {
+        $this->attributes['location_description'] = $value;
+    }
+
+    public function setLatitudeAttribute($value): void
+    {
+        $this->attributes['location_latitude'] = $value;
+    }
+
+    public function setLongitudeAttribute($value): void
+    {
+        $this->attributes['location_longitude'] = $value;
+    }
+
+    /**
+     * Relationship with Incidents.
+     */
+    public function incidents(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Incident::class, 'location_code_id');
+    }
 
     /**
      * Relationship with Barangay.

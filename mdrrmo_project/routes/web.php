@@ -42,7 +42,34 @@ Route::middleware(['auth', 'verified'])->group(function () {
         if ($user?->role === 'dispatcher') {
             return redirect()->route('dispatcher.dashboard');
         }
-        return Inertia::render('dashboard');
+
+        if ($user?->role === 'responder') {
+            auth()->logout();
+            request()->session()->invalidate();
+            request()->session()->regenerateToken();
+
+            return redirect()->route('login')->withErrors([
+                'email' => 'Responder accounts can only access the MDRRMO mobile application. Please use the Responder mobile app to continue.',
+            ]);
+        }
+
+        if ($user?->role === 'resident') {
+            auth()->logout();
+            request()->session()->invalidate();
+            request()->session()->regenerateToken();
+
+            return redirect()->route('login')->withErrors([
+                'email' => 'Resident accounts can only access the MDRRMO mobile application. Please use the Resident mobile app to continue.',
+            ]);
+        }
+
+        auth()->logout();
+        request()->session()->invalidate();
+        request()->session()->regenerateToken();
+
+        return redirect()->route('login')->withErrors([
+            'email' => 'This account is not authorized to access the web application.',
+        ]);
     })->name('dashboard');
 });
 
@@ -50,6 +77,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 Route::middleware(['auth', 'role:admin,dispatcher'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'show'])->name('admin.profile');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('admin.profile.update');
+    Route::post('/profile/photo', [ProfileController::class, 'updatePhoto'])->name('admin.profile.photo.update');
+    Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto'])->name('admin.profile.photo.destroy');
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('admin.profile.password.update');
 });
 
@@ -73,6 +102,11 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::patch('/location-codes/{locationCode}', [LocationCodeController::class, 'update'])->name('location-codes.update');
     Route::delete('/location-codes/{locationCode}', [LocationCodeController::class, 'destroy'])->name('location-codes.destroy');
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
+
+    // Dispatch Logs (Admin)
+    Route::get('/dispatch-logs/api/fetch', [\App\Http\Controllers\Admin\DispatchLogController::class, 'fetchLogs'])->name('admin.dispatch-logs.fetch');
+    Route::get('/dispatch-logs', [\App\Http\Controllers\Admin\DispatchLogController::class, 'index'])->name('admin.dispatch-logs.index');
+    Route::get('/dispatch-logs/{incident}', [\App\Http\Controllers\Admin\DispatchLogController::class, 'show'])->name('admin.dispatch-logs.show');
 });
 
 // Dispatcher Routes
@@ -115,6 +149,11 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
     // PCRs
     Route::get('/patient-care-records', [PatientCareRecordController::class, 'index'])->name('patient-care-records');
     Route::get('/patient-care-records/{record}', [PatientCareRecordController::class, 'show'])->name('patient-care-records.show');
+
+    // Dispatch Logs
+    Route::get('/dispatch-logs/api/fetch', [\App\Http\Controllers\Admin\DispatchLogController::class, 'fetchLogs'])->name('dispatch-logs.fetch');
+    Route::get('/dispatch-logs', [\App\Http\Controllers\Admin\DispatchLogController::class, 'index'])->name('dispatch-logs.index');
+    Route::get('/dispatch-logs/{incident}', [\App\Http\Controllers\Admin\DispatchLogController::class, 'show'])->name('dispatch-logs.show');
 });
 
 require __DIR__.'/settings.php';

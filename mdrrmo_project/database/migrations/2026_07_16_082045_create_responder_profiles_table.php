@@ -16,16 +16,11 @@ return new class extends Migration
             $table->foreignId('user_id')
                 ->constrained('users')
                 ->cascadeOnDelete();
-
-            $table->string('badge_number')->unique();
-
-            $table->string('team');
-
-            $table->enum('availability', [
-                'available',
-                'busy',
-                'offline',
-            ])->default('available');
+            $table->string('badge_number', 50)->nullable();
+            $table->boolean('is_reliever')->default(false);
+            $table->string('team', 50)->nullable();
+            $table->string('position', 100)->default('driver');
+            $table->string('availability', 50)->default('available');
             $table->timestamps();
         });
     }

@@ -314,7 +314,7 @@ export default function CreateDispatchModal({
                         ) : (
                             <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
                                 <AlertTriangle className="w-4 h-4" /> 
-                                {!ambulanceId ? 'Select an ambulance' : (!team ? 'Select a response team' : 'Select at least 1 crew member')}
+                                {!ambulanceId ? 'Select an ambulance unit above' : (!team ? 'Select a response team' : 'Select at least 1 crew member')}
                             </span>
                         )}
                     </div>
@@ -372,6 +372,11 @@ export default function CreateDispatchModal({
                         options={ambulanceOptions}
                         placeholder="Select an available ambulance..."
                     />
+                    {filteredAmbulances.length === 0 && (
+                        <p className="text-[11px] text-amber-500 flex items-center gap-1 mt-1">
+                            <AlertTriangle className="w-3.5 h-3.5" /> No ambulances found in database. Seed or create an ambulance to deploy.
+                        </p>
+                    )}
                 </div>
 
                 {/* Team Selection */}
@@ -398,10 +403,10 @@ export default function CreateDispatchModal({
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
                                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                                    <Shield className="w-3.5 h-3.5 text-blue-500" /> Team {team} Permanent Members (1 Driver, 3 EMTs)
+                                    <Shield className="w-3.5 h-3.5 text-blue-500" /> Team {team} Permanent Members
                                 </span>
                                 <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                                    {permanentMembers.length} permanent members
+                                    {permanentMembers.length} member{permanentMembers.length === 1 ? '' : 's'} (min. 1 to deploy)
                                 </span>
                             </div>
 

@@ -19,18 +19,17 @@ return new class extends Migration
                 ->cascadeOnDelete();
 
             $table->foreignId('barangay_id')
+                ->nullable()
                 ->constrained('barangays')
                 ->restrictOnDelete();
 
-            $table->string('house_no')->nullable();
-            $table->string('street')->nullable();
+            $table->string('house_no',100)->nullable();
+            $table->string('street',100)->nullable();
 
-            $table->date('birthdate');
+            $table->string('emergency_contact_name',100)->nullable();
+            $table->string('emergency_contact_number', 20)->nullable();
+            $table->string('emergency_contact_relationship',100)->nullable();
 
-            $table->enum('gender', [
-                'male',
-                'female',
-            ]);
             $table->timestamps();
         });
     }

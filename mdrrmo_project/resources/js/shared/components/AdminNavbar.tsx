@@ -52,8 +52,12 @@ export default function AdminNavbar({ collapsed, onToggle }: { collapsed: boolea
                             {String(user?.role ?? 'Administrator')}
                         </p>
                     </div>
-                    <div className="w-9 h-9 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform ring-1 ring-slate-900/10 dark:ring-white/20">
-                        {initials}
+                    <div className="w-9 h-9 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform ring-1 ring-slate-900/10 dark:ring-white/20 overflow-hidden">
+                        {user?.profile_photo_url ? (
+                            <img src={user.profile_photo_url as string} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                            initials
+                        )}
                     </div>
                 </Link>
 

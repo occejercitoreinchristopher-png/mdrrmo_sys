@@ -18,6 +18,7 @@ interface ModalProps {
     children: ReactNode;
     size?: keyof typeof sizes;
     footer?: ReactNode;
+    zIndex?: string;
 }
 
 export default function Modal({
@@ -28,14 +29,16 @@ export default function Modal({
     children,
     size = 'md',
     footer,
+    zIndex = 'z-50',
 }: ModalProps) {
     return (
         <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
             <Dialog.Portal>
-                <Dialog.Overlay className="fixed inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+                <Dialog.Overlay className={clsx("fixed inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0", zIndex)} />
                 <Dialog.Content
                     className={clsx(
-                        'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full z-50',
+                        'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full',
+                        zIndex,
                         'bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl text-slate-900 dark:text-white',
                         'max-h-[90vh] flex flex-col',
                         'data-[state=open]:animate-in data-[state=closed]:animate-out',

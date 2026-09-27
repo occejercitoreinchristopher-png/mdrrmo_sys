@@ -36,7 +36,6 @@ class DispatchStatusUpdated implements ShouldBroadcastNow
         $fallbackUserIds = array_filter([
             $this->dispatch->driver_id,
             $this->dispatch->emt_id,
-            $this->dispatch->team_leader_id,
         ]);
         $allResponderIds = array_unique(array_merge($assignedUserIds, $fallbackUserIds));
 

@@ -24,7 +24,7 @@ class LocationCodeController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('location_code', 'like', "%{$search}%")
                     ->orWhere('location_name', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('location_description', 'like', "%{$search}%");
             });
         }
 
@@ -42,9 +42,9 @@ class LocationCodeController extends Controller
                 'location_code' => $lc->location_code,
                 'location_type' => $lc->location_type,
                 'location_name' => $lc->location_name,
-                'description' => $lc->description,
-                'latitude' => (float) $lc->latitude,
-                'longitude' => (float) $lc->longitude,
+                'description' => $lc->location_description,
+                'latitude' => (float) $lc->location_latitude,
+                'longitude' => (float) $lc->location_longitude,
                 'created_at' => $lc->created_at?->toISOString(),
                 'updated_at' => $lc->updated_at?->toISOString(),
             ];
@@ -102,9 +102,9 @@ class LocationCodeController extends Controller
             'location_code' => $validated['location_code'],
             'location_type' => $validated['location_type'],
             'location_name' => $validated['location_name'],
-            'latitude' => $validated['latitude'],
-            'longitude' => $validated['longitude'],
-            'description' => $validated['description'] ?? null,
+            'location_latitude' => $validated['latitude'],
+            'location_longitude' => $validated['longitude'],
+            'location_description' => $validated['description'] ?? null,
         ]);
 
         return back()->with('success', "Location code {$locationCode->location_code} added successfully.");
@@ -148,9 +148,9 @@ class LocationCodeController extends Controller
             'location_code' => $validated['location_code'],
             'location_type' => $validated['location_type'],
             'location_name' => $validated['location_name'],
-            'latitude' => $validated['latitude'],
-            'longitude' => $validated['longitude'],
-            'description' => $validated['description'] ?? null,
+            'location_latitude' => $validated['latitude'],
+            'location_longitude' => $validated['longitude'],
+            'location_description' => $validated['description'] ?? null,
         ];
 
         if (! empty($validated['barangay_id'])) {

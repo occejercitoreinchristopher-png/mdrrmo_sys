@@ -55,27 +55,27 @@ interface PatientDetailsProps {
 export default function PatientDetailsPage({ patient, care_records = [] }: PatientDetailsProps) {
     const formattedBirthdate = patient.birthdate
         ? new Date(patient.birthdate).toLocaleDateString('en-PH', {
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric',
-          })
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+        })
         : 'Not recorded';
 
     const formattedRegisteredDate = patient.created_at
         ? new Date(patient.created_at).toLocaleDateString('en-PH', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-          })
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+        })
         : '—';
 
     const rawPcrDate = care_records.length > 0 ? (care_records[0].record_date || care_records[0].created_at) : null;
     const latestPcrDate = rawPcrDate
         ? new Date(typeof rawPcrDate === 'string' && rawPcrDate.includes('-') && !rawPcrDate.includes('T') ? rawPcrDate.replace(/-/g, '/') : rawPcrDate).toLocaleDateString('en-PH', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-          })
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+        })
         : 'None';
 
     const [copied, setCopied] = useState(false);
@@ -111,7 +111,7 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
             document.body.removeChild(textarea);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-        } catch {}
+        } catch { }
     };
 
     const formattedPatientName = toPascalCase(patient.full_name || `${patient.first_name} ${patient.last_name}`);

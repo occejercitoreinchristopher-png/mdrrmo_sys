@@ -1,6 +1,16 @@
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { clsx } from 'clsx';
 
+export interface DispatcherStatCardProps {
+    title: string;
+    value?: string | number | null;
+    icon?: React.ComponentType<{ className?: string }> | any;
+    trend?: number | null;
+    trendLabel?: string;
+    color?: 'crimson' | 'orange' | 'emerald' | 'teal' | 'violet' | string;
+    loading?: boolean;
+}
+
 // Dispatcher-themed stat card with emergency color palette
 export default function DispatcherStatCard({
     title,
@@ -10,7 +20,7 @@ export default function DispatcherStatCard({
     trendLabel,
     color = 'crimson',
     loading = false,
-}) {
+}: DispatcherStatCardProps) {
     const colorMap = {
         crimson: {
             bg: 'from-rose-600 to-red-700',
@@ -51,11 +61,11 @@ export default function DispatcherStatCard({
 
     const c = colorMap[color] || colorMap.crimson;
 
-    const TrendIcon = trend > 0 ? TrendingUp : trend < 0 ? TrendingDown : Minus;
+    const TrendIcon = (trend ?? 0) > 0 ? TrendingUp : (trend ?? 0) < 0 ? TrendingDown : Minus;
     const trendColor =
-        trend > 0
+        (trend ?? 0) > 0
             ? 'text-emerald-500 dark:text-emerald-400'
-            : trend < 0
+            : (trend ?? 0) < 0
               ? 'text-red-500 dark:text-red-400'
               : 'text-slate-400';
 
@@ -107,7 +117,7 @@ export default function DispatcherStatCard({
                     <div className="flex items-center gap-1.5 mt-4 pt-3.5 border-t border-slate-100 dark:border-white/5">
                         <TrendIcon className={clsx('w-3.5 h-3.5', trendColor)} />
                         <span className={clsx('text-xs font-semibold', trendColor)}>
-                            {trend > 0 ? '+' : ''}{trend}%
+                            {(trend ?? 0) > 0 ? '+' : ''}{trend}%
                         </span>
                         <span className="text-xs text-slate-500 dark:text-slate-600">{trendLabel}</span>
                     </div>

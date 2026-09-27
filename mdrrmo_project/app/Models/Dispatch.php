@@ -19,7 +19,6 @@ class Dispatch extends Model
     {
         return [
             'crew_snapshot' => 'array',
-            'borrowed_crew' => 'array',
             'assigned_at' => 'datetime',
             'accepted_at' => 'datetime',
             'en_route_at' => 'datetime',
@@ -65,7 +64,12 @@ class Dispatch extends Model
 
     public function teamLeader()
     {
-        return $this->belongsTo(User::class, 'team_leader_id');
+        return $this->belongsTo(User::class, 'emt_id');
+    }
+
+    public function getTeamLeaderIdAttribute()
+    {
+        return $this->attributes['team_leader_id'] ?? $this->emt_id;
     }
 
     public function emt()
@@ -76,7 +80,7 @@ class Dispatch extends Model
     public function crew()
     {
         return $this->belongsToMany(User::class, 'dispatch_crews')
-            ->withPivot(['role', 'is_reliever'])
+            ->withPivot(['role', 'is_reliever_assignment'])
             ->withTimestamps();
     }
 

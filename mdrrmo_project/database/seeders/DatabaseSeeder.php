@@ -17,9 +17,36 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        User::firstOrCreate(
+            ['email' => 'occ.ejercito.reinchristopher@gmail.com'],
+            [
+                'first_name' => 'Rein Christopher',
+                'middle_name' => '',
+                'last_name' => 'Ejercito',
+                'role' => 'admin',
+                'status' => 'active',
+                'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+                'email_verified_at' => now(),
+                'password_change_required' => false,
+            ]
+        );
+
+        User::firstOrCreate(
+            ['email' => 'test@example.com'],
+            [
+                'first_name' => 'Test',
+                'last_name' => 'User',
+                'role' => 'resident',
+                'status' => 'active',
+                'password' => \Illuminate\Support\Facades\Hash::make('password'),
+                'email_verified_at' => now(),
+            ]
+        );
+
+        $this->call([
+            AmbulanceSeeder::class,
+            ResponderSeeder::class,
+            LocationMarkerSeeder::class,
         ]);
     }
 }

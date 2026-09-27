@@ -1,7 +1,23 @@
 import { Users, AlertTriangle, Ambulance, CheckCircle2, Clock, Truck } from 'lucide-react';
 import StatCard from '@/shared/components/StatCard';
 
-export default function DashboardCards({ stats = {} }) {
+export interface DashboardStats {
+    total_users?: number;
+    active_incidents?: number;
+    resolved_today?: number;
+    pending_dispatch?: number;
+    available_ambulances?: number;
+    total_dispatches?: number;
+    users_trend?: number | null;
+    incidents_trend?: number | null;
+    [key: string]: any;
+}
+
+interface DashboardCardsProps {
+    stats?: DashboardStats;
+}
+
+export default function DashboardCards({ stats = {} }: DashboardCardsProps) {
     const cards = [
         {
             title: 'Total Users',

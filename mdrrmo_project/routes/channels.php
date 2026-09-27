@@ -14,6 +14,10 @@ Broadcast::channel('responder.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;
 });
 
+Broadcast::channel('responders', function ($user) {
+    return in_array($user->role, ['responder', 'admin', 'dispatcher']);
+});
+
 Broadcast::channel('resident.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;
 });

@@ -32,6 +32,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/profile/personal', [ResidentProfileController::class, 'updatePersonal']);
         Route::put('/profile/emergency', [ResidentProfileController::class, 'updateEmergency']);
         Route::post('/profile/photo', [ResidentProfileController::class, 'uploadPhoto']);
+        Route::delete('/profile/photo', [ResidentProfileController::class, 'deletePhoto']);
         Route::put('/profile/password', [ResidentProfileController::class, 'changePassword']);
 
         Route::get('/incidents', [ResidentIncidentController::class, 'index']);
@@ -46,11 +47,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/crew', [CrewController::class, 'index']);
         Route::post('/status', [ProfileController::class, 'updateStatus']);
         Route::post('/profile/photo', [ProfileController::class, 'uploadPhoto']);
+        Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto']);
         Route::put('/profile/password', [ProfileController::class, 'changePassword']);
         Route::get('/patients/search', [PatientController::class, 'search']);
         Route::post('/patients', [PatientController::class, 'store']);
         Route::get('/history', [HistoryController::class, 'index']);
 
+        Route::get('/incidents/available', [ResponderDispatchController::class, 'availableIncidents']);
         Route::get('/dispatches', [ResponderDispatchController::class, 'index']);
         Route::post('/dispatches/walk-in', [ResponderDispatchController::class, 'walkIn']);
         Route::post('/dispatches/{dispatch}/accept', [ResponderDispatchController::class, 'accept']);

@@ -16,12 +16,100 @@ class Incident extends Model
 
     protected static ?array $cachedGeojson = null;
 
-    protected $appends = ['location', 'barangay', 'pcr_chief_complaint', 'pcr_chief_complaints'];
+    protected $appends = [
+        'location', 
+        'barangay', 
+        'pcr_chief_complaint', 
+        'pcr_chief_complaints', 
+        'description', 
+        'chief_complaint', 
+        'place_of_incident',
+        'location_code',
+    ];
+
+    public function getDescriptionAttribute(): ?string
+    {
+        return $this->attributes['incident_description'] ?? null;
+    }
+
+    public function getChiefComplaintAttribute(): ?string
+    {
+        if (! empty($this->pcr_chief_complaint)) {
+            return $this->pcr_chief_complaint;
+        }
+
+        $desc = $this->attributes['incident_description'] ?? null;
+        if ($desc && preg_match('/^\[(.*?)\]/', $desc, $matches)) {
+            return $matches[1];
+        }
+
+        return $desc ?? $this->incidentType?->incident_type_name ?? null;
+    }
+
+    public function getPlaceOfIncidentAttribute(): ?string
+    {
+        return $this->attributes['incident_address'] ?? null;
+    }
+
+    public function setDescriptionAttribute($value): void
+    {
+        $this->attributes['incident_description'] = $value;
+    }
+
+    public function setChiefComplaintAttribute($value): void
+    {
+        $existing = $this->attributes['incident_description'] ?? '';
+        if (empty($existing)) {
+            $this->attributes['incident_description'] = "[{$value}]";
+        } elseif (! str_contains($existing, "[{$value}]")) {
+            $this->attributes['incident_description'] = "[{$value}] {$existing}";
+        }
+    }
+
+    public function setPlaceOfIncidentAttribute($value): void
+    {
+        if (empty($this->attributes['incident_address'])) {
+            $this->attributes['incident_address'] = $value;
+        }
+    }
+
+    public function locationCode()
+    {
+        return $this->belongsTo(LocationCode::class, 'location_code_id');
+    }
+
+    public function getAttribute($key)
+    {
+        if ($key === 'locationCode') {
+            return $this->getRelationValue('locationCode');
+        }
+
+        return parent::getAttribute($key);
+    }
+
+    public function getLocationCodeAttribute(): ?string
+    {
+        return $this->getRelationValue('locationCode')?->location_code;
+    }
+
+    public function setLocationCodeAttribute($value): void
+    {
+        if ($value) {
+            $loc = LocationCode::where('location_code', $value)->first();
+            if ($loc) {
+                $this->attributes['location_code_id'] = $loc->id;
+            }
+        }
+    }
+
+    public function setLocationCodeIdAttribute($value): void
+    {
+        $this->attributes['location_code_id'] = $value;
+    }
 
     public function getLocationAttribute(): ?string
     {
-        return $this->place_of_incident
-            ?: $this->incident_address
+        return $this->incident_address
             ?: ($this->location_code ? "Marker {$this->location_code}" : null)
             ?: $this->resident?->residentProfile?->barangay?->barangay_name
             ?: 'Opol, Misamis Oriental';
@@ -38,7 +126,7 @@ class Incident extends Model
             return $fromCoords;
         }
 
-        $fullText = ($this->place_of_incident ?? '') . ' ' . ($this->incident_address ?? '');
+        $fullText = $this->incident_address ?? '';
         if (!empty($fullText)) {
             foreach (self::OPOL_BARANGAYS as $bName) {
                 if (stripos($fullText, $bName) !== false) {
@@ -218,5 +306,10 @@ class Incident extends Model
     public function images()
     {
         return $this->hasMany(IncidentImage::class);
+    }
+
+    public function dispatchLogs()
+    {
+        return $this->hasMany(DispatchLog::class);
     }
 }

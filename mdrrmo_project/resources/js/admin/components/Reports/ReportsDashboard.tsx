@@ -5,6 +5,7 @@ import ReportsTable, { Incident } from './ReportsTable';
 import ReportFilters, { ReportFiltersState } from './ReportFilters';
 import PageHeader from '@/shared/components/PageHeader';
 import { Download } from 'lucide-react';
+import { toast } from 'sonner';
 
 export interface ReportsDashboardProps {
     stats?: Record<string, any>;
@@ -16,27 +17,82 @@ export default function ReportsDashboard({ stats = {}, charts = {}, incidents = 
     const [filters, setFilters] = useState<ReportFiltersState>({ dateFrom: '', dateTo: '', status: '', type: '' });
 
     const handleExportCSV = () => {
-        if (!incidents.length) return;
-        const headers = ['ID', 'Incident Type', 'Status', 'Reported At', 'Resolved At'];
-        const rows = incidents.map((inc) => [
-            inc.id,
-            inc.incident_type?.name ?? 'General',
-            inc.incident_status,
-            inc.reported_at ? new Date(inc.reported_at).toISOString() : '',
-            inc.resolved_at ? new Date(inc.resolved_at).toISOString() : '',
+        const filteredIncidents = incidents.filter((inc) => {
+            const matchStatus = !filters.status || inc.incident_status === filters.status;
+            const matchType = !filters.type || String(inc.incident_type_id) === String(filters.type);
+            const matchFrom = !filters.dateFrom || (inc.reported_at && new Date(inc.reported_at) >= new Date(filters.dateFrom));
+            const matchTo = !filters.dateTo || (inc.reported_at && new Date(inc.reported_at) <= new Date(filters.dateTo + 'T23:59:59'));
+            return matchStatus && matchType && matchFrom && matchTo;
+        });
+
+        const headers = [
+            'Incident #',
+            'Incident Type',
+            'Priority',
+            'Status',
+            'Caller / Resident',
+            'Contact Number',
+            'Incident Address',
+            'Report Source',
+            'Location Source',
+            'Reported At',
+            'Resolved At',
+        ];
+
+        const escapeCSV = (val: any) => {
+            if (val === null || val === undefined) return '""';
+            const str = String(val).replace(/"/g, '""');
+            return `"${str}"`;
+        };
+
+        if (incidents.length === 0) {
+            // Generate empty CSV template with headers so user has a valid file
+            const csvContent = headers.map(escapeCSV).join(',') + '\r\n';
+            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `MDRRMO_Reports_Template_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            toast.info('No incident records found in the database. Downloaded standard CSV template.');
+            return;
+        }
+
+        if (filteredIncidents.length === 0) {
+            toast.warning('No incidents match the active filter criteria.');
+            return;
+        }
+
+        const rows = filteredIncidents.map((inc) => [
+            escapeCSV(`#${inc.id}`),
+            escapeCSV(inc.incident_type?.name ?? inc.incident_type?.incident_type_name ?? 'General'),
+            escapeCSV(inc.priority ?? 'Moderate'),
+            escapeCSV(inc.incident_status ?? 'pending'),
+            escapeCSV(inc.caller_name ?? (inc.resident ? `${inc.resident.first_name ?? ''} ${inc.resident.last_name ?? ''}`.trim() : 'N/A')),
+            escapeCSV(inc.caller_phone_number ?? inc.resident?.phone_number ?? 'N/A'),
+            escapeCSV(inc.incident_address ?? inc.place_of_incident ?? inc.location ?? 'N/A'),
+            escapeCSV(inc.report_source ?? 'N/A'),
+            escapeCSV(inc.location_source ?? 'N/A'),
+            escapeCSV(inc.reported_at ? new Date(inc.reported_at).toLocaleString('en-PH') : 'N/A'),
+            escapeCSV(inc.resolved_at ? new Date(inc.resolved_at).toLocaleString('en-PH') : 'N/A'),
         ]);
 
-        const csvContent =
-            'data:text/csv;charset=utf-8,' +
-            [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-
-        const encodedUri = encodeURI(csvContent);
+        const csvContent = [headers.map(escapeCSV).join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.setAttribute('href', encodedUri);
-        link.setAttribute('download', `MDRRMO_Reports_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.href = url;
+        link.download = `MDRRMO_Incident_Report_${new Date().toISOString().slice(0, 10)}.csv`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        toast.success(`Successfully exported ${filteredIncidents.length} incident record(s) to CSV.`);
     };
 
     return (

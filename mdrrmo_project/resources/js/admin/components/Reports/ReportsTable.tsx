@@ -9,7 +9,11 @@ import { ReportFiltersState } from './ReportFilters';
 export interface Incident {
     id: number | string;
     incident_type_id?: number | string;
-    incident_type?: { name: string };
+    incident_type?: {
+        name?: string;
+        incident_type_name?: string;
+        [key: string]: any;
+    };
     incident_status: string;
     reported_at: string;
     resolved_at?: string | null;
@@ -43,7 +47,7 @@ export default function ReportsTable({ incidents = [], filters = {} }: ReportsTa
 
     const columns: Column<Incident>[] = [
         { key: 'id', header: '#', render: (v: any) => <span className="font-mono text-xs">#{v}</span> },
-        { key: 'incident_type', header: 'Type', render: (v: any) => v?.name ?? '—' },
+        { key: 'incident_type', header: 'Type', render: (v: any) => v?.name ?? v?.incident_type_name ?? '—' },
         { key: 'incident_status', header: 'Status', sortable: true, render: (v: any) => <StatusBadge status={v} /> },
         { key: 'reported_at', header: 'Reported', sortable: true, render: (v: any) => v ? new Date(v).toLocaleDateString('en-PH') : '—' },
         { key: 'resolved_at', header: 'Resolved', render: (v: any) => v ? new Date(v).toLocaleDateString('en-PH') : '—' },

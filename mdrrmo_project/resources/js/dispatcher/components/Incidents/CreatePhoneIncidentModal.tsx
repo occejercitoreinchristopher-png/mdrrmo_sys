@@ -89,8 +89,10 @@ const DEFAULT_COMPLAINTS = [
 interface CreatePhoneIncidentModalProps {
     open: boolean;
     onClose: () => void;
-    incidentTypes?: Array<{ id: number; name: string }>;
+    incidentTypes?: Array<{ id: number; name?: string; incident_type_name?: string }>;
     chiefComplaints?: string[];
+    dispatchLog?: any | null;
+    onSuccess?: () => void;
 }
 
 export type LocationMethod = 'code' | 'pinpoint';
@@ -114,10 +116,12 @@ export default function CreatePhoneIncidentModal({
     onClose,
     incidentTypes = [],
     chiefComplaints = DEFAULT_COMPLAINTS,
+    dispatchLog = null,
+    onSuccess,
 }: CreatePhoneIncidentModalProps) {
     const { theme } = useAppearance();
-    // Load initial draft if any
-    const initialDraft = useMemo(() => loadDraft(), []);
+    // Load initial draft if any (skip draft if opening for a specific Dispatch Log)
+    const initialDraft = useMemo(() => (!dispatchLog ? loadDraft() : null), [dispatchLog]);
 
     // Form state
     const [phoneNumber, setPhoneNumber] = useState(initialDraft?.phoneNumber ?? '');
@@ -195,6 +199,35 @@ export default function CreatePhoneIncidentModal({
             setIncidentTypeId(incidentTypes[0].id);
         }
     }, [incidentTypes, incidentTypeId]);
+
+    // When opened with a specific Dispatch Log, populate details from the originating Dispatch Log
+    useEffect(() => {
+        if (dispatchLog && open) {
+            if (dispatchLog.caller_phone) {
+                let clean = dispatchLog.caller_phone.replace(/\D/g, '');
+                if (clean.startsWith('639')) clean = '0' + clean.slice(2);
+                else if (clean.startsWith('9')) clean = '0' + clean;
+                setPhoneNumber(clean.slice(0, 11));
+            }
+            if (dispatchLog.caller_name) {
+                setCallerName(dispatchLog.caller_name);
+            }
+            if (dispatchLog.notes || dispatchLog.reason) {
+                setDescription(dispatchLog.notes || dispatchLog.reason);
+            }
+            if (dispatchLog.latitude && dispatchLog.longitude) {
+                setLocationMethod('pinpoint');
+                setPinLocation({
+                    latitude: Number(dispatchLog.latitude),
+                    longitude: Number(dispatchLog.longitude),
+                    placeName: dispatchLog.location || '',
+                });
+                setLocationConfirmed(true);
+            } else if (dispatchLog.location) {
+                setCustomPlaceName(dispatchLog.location);
+            }
+        }
+    }, [dispatchLog, open]);
 
     // Check if user has entered any draft data
     const hasDraftData = Boolean(
@@ -310,25 +343,66 @@ export default function CreatePhoneIncidentModal({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Philippine phone number validation helper
+    // Philippine phone number validation helper (strictly 11 digits starting with 09)
     const isValidPhilippinePhone = useMemo(() => {
-        const cleaned = phoneNumber.replace(/[\s\-\(\)]+/g, '');
-        return /^(\+639|09)\d{9}$/.test(cleaned);
+        return /^09\d{9}$/.test(phoneNumber);
     }, [phoneNumber]);
 
     // Format phone number for preview
     const formattedPhone = useMemo(() => {
-        const cleaned = phoneNumber.replace(/[\s\-\(\)]+/g, '');
-        if (/^09\d{9}$/.test(cleaned)) {
-            return `+63 ${cleaned.slice(1, 4)} ${cleaned.slice(4, 7)} ${cleaned.slice(7)}`;
-        }
-        if (/^\+639\d{9}$/.test(cleaned)) {
-            return `+63 ${cleaned.slice(3, 6)} ${cleaned.slice(6, 9)} ${cleaned.slice(9)}`;
+        if (/^09\d{9}$/.test(phoneNumber)) {
+            return `+63 ${phoneNumber.slice(1, 4)} ${phoneNumber.slice(4, 7)} ${phoneNumber.slice(7)}`;
         }
         return phoneNumber;
     }, [phoneNumber]);
 
-    // Debounced caller recognition lookup
+    // Handle phone number change: numbers only, limit 11 digits, first two digits forced to '09'
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let val = e.target.value.replace(/\D/g, '');
+
+        if (!val) {
+            setPhoneNumber('');
+            setCallerData(null);
+            setLookingUpCaller(false);
+            setSuggestions([]);
+            setSuggestionsOpen(false);
+            setLoadingSuggestions(false);
+            return;
+        }
+
+        // If user typed or pasted '639...'
+        if (val.startsWith('639')) {
+            val = '09' + val.slice(3);
+        } else if (val.startsWith('9')) {
+            // Auto-prepend '0' if they started typing 9 directly
+            val = '09' + val.slice(1);
+        } else if (val.startsWith('0')) {
+            // If they typed '0', but second digit is not '9'
+            if (val.length >= 2 && val[1] !== '9') {
+                val = '09' + val.slice(2);
+            }
+        } else {
+            // If started with any other number, force 09 prefix
+            val = '09' + val.slice(1);
+        }
+
+        // Strictly enforce 11 digits maximum
+        val = val.slice(0, 11);
+
+        setPhoneNumber(val);
+    };
+
+    // Helper to completely clear phone number and reset recognition
+    const handleClearPhone = () => {
+        setPhoneNumber('');
+        setCallerData(null);
+        setLookingUpCaller(false);
+        setSuggestions([]);
+        setSuggestionsOpen(false);
+        setLoadingSuggestions(false);
+    };
+
+    // Fast debounced caller recognition lookup (instant 50ms when 11 digits reached)
     useEffect(() => {
         if (!isValidPhilippinePhone) {
             setCallerData(null);
@@ -337,9 +411,11 @@ export default function CreatePhoneIncidentModal({
         }
 
         let active = true;
-        setLookingUpCaller(true);
 
+        // Instant lookup when valid 11 digits reached
         const timer = setTimeout(async () => {
+            if (!active) return;
+            setLookingUpCaller(true);
             try {
                 const res = await fetch(`/dispatcher/callers/lookup?phone=${encodeURIComponent(phoneNumber)}`);
                 if (!active) return;
@@ -361,27 +437,31 @@ export default function CreatePhoneIncidentModal({
             } finally {
                 if (active) setLookingUpCaller(false);
             }
-        }, 350);
+        }, 50);
 
         return () => {
             active = false;
             clearTimeout(timer);
+            setLookingUpCaller(false);
         };
     }, [phoneNumber, isValidPhilippinePhone, callerName]);
 
-    // Debounced search for phone number autocomplete suggestions
+    // Fast debounced search for phone number autocomplete suggestions
     useEffect(() => {
         const query = phoneNumber.trim();
-        if (query.length < 2) {
+        // Only show autocomplete when 3 to 10 digits are typed (once 11 digits reached, phone is complete)
+        if (query.length < 3 || query.length === 11) {
             setSuggestions([]);
             setSuggestionsOpen(false);
+            setLoadingSuggestions(false);
             return;
         }
 
         let active = true;
-        setLoadingSuggestions(true);
 
         const timer = setTimeout(async () => {
+            if (!active) return;
+            setLoadingSuggestions(true);
             try {
                 const res = await fetch(`/dispatcher/callers/search?q=${encodeURIComponent(query)}`);
                 if (!active) return;
@@ -406,16 +486,23 @@ export default function CreatePhoneIncidentModal({
             } finally {
                 if (active) setLoadingSuggestions(false);
             }
-        }, 250);
+        }, 120);
 
         return () => {
             active = false;
             clearTimeout(timer);
+            setLoadingSuggestions(false);
         };
     }, [phoneNumber]);
 
     const handleSelectSuggestion = (suggestion: PhoneSuggestion) => {
-        setPhoneNumber(suggestion.phone_number);
+        let clean = suggestion.phone_number.replace(/\D/g, '');
+        if (clean.startsWith('639')) {
+            clean = '0' + clean.slice(2);
+        } else if (clean.startsWith('9')) {
+            clean = '0' + clean;
+        }
+        setPhoneNumber(clean.slice(0, 11));
         if (suggestion.caller_name && !callerName) {
             setCallerName(suggestion.caller_name);
         }
@@ -889,6 +976,10 @@ export default function CreatePhoneIncidentModal({
             }
         }
 
+        if (dispatchLog?.id) {
+            payload.dispatch_log_id = dispatchLog.id;
+        }
+
         router.post(
             '/dispatcher/incidents/phone-call',
             payload,
@@ -900,6 +991,7 @@ export default function CreatePhoneIncidentModal({
                         sessionStorage.removeItem(DRAFT_STORAGE_KEY);
                     }
                     handleResetForm();
+                    onSuccess?.();
                     onClose();
                 },
                 onError: (errors) => {
@@ -1000,20 +1092,35 @@ export default function CreatePhoneIncidentModal({
                             </label>
 
                             <div className="relative" ref={phoneInputContainerRef}>
-                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">🇵🇭 +63</span>
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <span className="px-1.5 py-0.5 text-[11px] font-bold tracking-wider rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 font-mono">
+                                        PH
+                                    </span>
                                 </div>
                                 <input
                                     type="tel"
-                                    placeholder="9XX XXX XXXX (or 09XXXXXXXXX)"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    maxLength={11}
+                                    placeholder="09XXXXXXXXX (11 digits)"
                                     value={phoneNumber}
                                     onFocus={() => {
-                                        if (suggestions.length > 0) {
+                                        if (suggestions.length > 0 && phoneNumber.length < 11) {
                                             setSuggestionsOpen(true);
                                         }
                                     }}
-                                    onChange={(e) => setPhoneNumber(e.target.value)}
-                                    className={`w-full pl-16 pr-10 py-2 bg-white dark:bg-slate-900 border rounded-xl text-sm font-mono text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all ${
+                                    onChange={handlePhoneChange}
+                                    onKeyDown={(e) => {
+                                        // Allow navigation and editing keys
+                                        if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) || e.ctrlKey || e.metaKey) {
+                                            return;
+                                        }
+                                        // Prevent any non-digit character (letters, punctuation)
+                                        if (!/[0-9]/.test(e.key)) {
+                                            e.preventDefault();
+                                        }
+                                    }}
+                                    className={`w-full pl-13 pr-10 py-2 bg-white dark:bg-slate-900 border rounded-xl text-sm font-mono text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all ${
                                         phoneNumber && !isValidPhilippinePhone 
                                             ? 'border-rose-500 focus:ring-rose-500/30' 
                                             : isValidPhilippinePhone 
@@ -1021,23 +1128,32 @@ export default function CreatePhoneIncidentModal({
                                                 : 'border-slate-300 dark:border-white/10 focus:ring-primary/50'
                                     }`}
                                 />
-                                {loadingSuggestions && (
-                                    <div className="absolute inset-y-0 right-8 pr-1 flex items-center pointer-events-none text-slate-400">
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                                {isValidPhilippinePhone ? (
+                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-emerald-500 animate-in fade-in zoom-in-75 duration-150">
+                                        <Check className="w-4 h-4 stroke-[2.5]" />
                                     </div>
-                                )}
-                                {isValidPhilippinePhone && (
-                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-emerald-500">
-                                        <Check className="w-4 h-4" />
-                                    </div>
-                                )}
+                                ) : phoneNumber ? (
+                                    <button
+                                        type="button"
+                                        onClick={handleClearPhone}
+                                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer transition-colors"
+                                        title="Clear phone number"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                ) : null}
 
                                 {/* Autocomplete Suggestions Dropdown */}
                                 {suggestionsOpen && suggestions.length > 0 && (
                                     <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/15 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                                         <div className="px-3 py-2 bg-slate-50 dark:bg-slate-950/60 border-b border-slate-100 dark:border-white/10 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                                             <span className="font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                                                <Search className="w-3 h-3 text-primary" /> Matching Phone Numbers
+                                                {loadingSuggestions ? (
+                                                    <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                                                ) : (
+                                                    <Search className="w-3 h-3 text-primary" />
+                                                )}
+                                                Matching Phone Numbers
                                             </span>
                                             <span className="text-[10px]">{suggestions.length} match{suggestions.length === 1 ? '' : 'es'}</span>
                                         </div>
@@ -1119,7 +1235,7 @@ export default function CreatePhoneIncidentModal({
                             {phoneNumber && !isValidPhilippinePhone && (
                                 <p className="text-xs text-rose-500 flex items-center gap-1">
                                     <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                                    ⚠️ Please enter a valid Philippine mobile number (e.g. 09171234567 or +639171234567).
+                                    ⚠️ Mobile number must start with 09 and have exactly 11 digits ({phoneNumber.length}/11).
                                 </p>
                             )}
                             {serverErrors.caller_phone_number && (
@@ -1327,7 +1443,7 @@ export default function CreatePhoneIncidentModal({
                                 <option value="" disabled>Select Incident Type</option>
                                 {incidentTypes.map((type) => (
                                     <option key={type.id} value={type.id}>
-                                        {type.name}
+                                        {type.name || type.incident_type_name}
                                     </option>
                                 ))}
                             </select>
