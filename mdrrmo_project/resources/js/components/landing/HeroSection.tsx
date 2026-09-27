@@ -30,18 +30,15 @@ export default function HeroSection() {
 
                         {/* Main Heading */}
                         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.1]">
-                            Fast Response.<br />
+                            Precision Emergency<br />
                             <span className="bg-gradient-to-r from-blue-400 via-sky-300 to-indigo-300 bg-clip-text text-transparent">
-                                Better Coordination.
+                                Command & Control.
                             </span><br />
-                            <span className="text-slate-100">
-                                Safer Communities.
-                            </span>
                         </h1>
 
                         {/* Supporting Narrative */}
-                        <p className="text-base sm:text-lg text-slate-400 leading-relaxed max-w-2xl mx-auto lg:mx-0 font-normal">
-                            MDRRMO Opol Emergency Medical Services Management System is a centralized platform for receiving emergency reports, coordinating dispatch operations, monitoring responders, and managing emergency medical records.
+                        <p className="text-base sm:text-lg text-slate-400 leading-relaxed max-w-2xl mx-auto lg:mx-0 font-normal mt-2">
+                            A unified, intelligent platform engineered to accelerate emergency response, streamline dispatch coordination, and digitize patient care records for the Municipality of Opol.
                         </p>
 
                         {/* Action Buttons */}
@@ -79,95 +76,91 @@ export default function HeroSection() {
                         </div>
                     </div>
 
-                    {/* Right Column: Abstract Emergency Operations Visualization */}
+                    {/* Right Column: Professional Dashboard UI Mockup */}
                     <div className="lg:col-span-5 relative flex justify-center">
-                        {/* Main Glass Simulation Container */}
-                        <div className="relative w-full max-w-lg aspect-[4/3] rounded-3xl bg-gradient-to-br from-white/[0.07] to-white/[0.02] border border-white/15 p-6 shadow-2xl backdrop-blur-2xl overflow-hidden flex flex-col justify-between">
-                            {/* Abstract Map Grid Lines & Radar Rings */}
-                            <div className="absolute inset-0 pointer-events-none opacity-20">
-                                <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-                                    <defs>
-                                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-blue-300" />
-                                        </pattern>
-                                    </defs>
-                                    <rect width="100%" height="100%" fill="url(#grid)" />
-                                    {/* Dispatch Route Line */}
-                                    <path
-                                        d="M 50 240 Q 150 140, 240 180 T 380 90"
-                                        fill="none"
-                                        stroke="url(#routeGradient)"
-                                        strokeWidth="3"
-                                        strokeDasharray="6 4"
-                                    />
-                                    <defs>
-                                        <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                            <stop offset="0%" stopColor="#f43f5e" />
-                                            <stop offset="100%" stopColor="#3b82f6" />
-                                        </linearGradient>
-                                    </defs>
-                                </svg>
-                            </div>
-
-                            {/* Top Mock Header Inside Visual */}
-                            <div className="relative z-10 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-                                    <span className="font-mono text-xs font-bold text-slate-300 tracking-wider">
-                                        LIVE OPS FEED • OPOL
-                                    </span>
+                        <div className="relative w-full max-w-lg rounded-2xl bg-slate-900/40 border border-slate-700/50 shadow-2xl backdrop-blur-xl overflow-hidden flex flex-col">
+                            {/* Browser/Window Header */}
+                            <div className="h-10 bg-slate-800/80 border-b border-slate-700/50 flex items-center px-4 gap-2">
+                                <div className="flex gap-1.5">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+                                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
                                 </div>
-                                <span className="px-2 py-0.5 rounded text-[10px] font-mono text-blue-300 bg-blue-500/10 border border-blue-500/20">
-                                    GRID: 8.523° N, 124.571° E
-                                </span>
-                            </div>
-
-                            {/* Animated Visual Elements (Map Nodes) */}
-                            <div className="relative z-10 my-auto py-6">
-                                {/* Incident Node (Poblacion) */}
-                                <div className="absolute top-2 left-6 flex items-center gap-2.5 bg-slate-900/80 border border-rose-500/30 rounded-xl px-3 py-1.5 backdrop-blur-md shadow-lg shadow-rose-950/40">
-                                    <div className="relative flex h-3 w-3">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span>
-                                    </div>
-                                    <div>
-                                        <p className="text-[11px] font-bold text-white leading-none">INCIDENT #2026-084</p>
-                                        <p className="text-[9px] text-rose-400 font-mono">Poblacion • Priority High</p>
-                                    </div>
-                                </div>
-
-                                {/* Ambulance Node (En Route) */}
-                                <div className="absolute bottom-4 right-6 flex items-center gap-2.5 bg-slate-900/80 border border-blue-500/30 rounded-xl px-3 py-1.5 backdrop-blur-md shadow-lg shadow-blue-950/40">
-                                    <div className="w-6 h-6 rounded-lg bg-blue-600/30 flex items-center justify-center text-blue-400">
-                                        <Ambulance className="w-3.5 h-3.5" />
-                                    </div>
-                                    <div>
-                                        <p className="text-[11px] font-bold text-white leading-none">AMB-02 OPOL</p>
-                                        <p className="text-[9px] text-emerald-400 font-mono">En Route • ETA 4 mins</p>
-                                    </div>
-                                </div>
-
-                                {/* Responder Unit Node */}
-                                <div className="absolute top-1/2 left-1/3 -translate-y-1/2 flex items-center gap-2 bg-slate-900/60 border border-white/10 rounded-lg px-2.5 py-1 text-[10px] text-slate-300 backdrop-blur-sm">
-                                    <Radio className="w-3 h-3 text-amber-400 animate-pulse" />
-                                    <span>Medic Unit Alpha active</span>
+                                <div className="ml-4 flex-1 h-5 bg-slate-900/50 rounded-md flex items-center justify-center">
+                                    <span className="text-[10px] text-slate-500 font-medium font-mono">mdrrmo-opol.tech/dispatch</span>
                                 </div>
                             </div>
-
-                            {/* Floating Glass Status Card (Required Feature) */}
-                            <div className="relative z-10 w-full rounded-2xl bg-[#080d1a]/85 border border-white/15 p-4 backdrop-blur-xl shadow-xl">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                                        EMERGENCY RESPONSE SYSTEM
-                                    </span>
-                                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-                                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                        <span>SYSTEM OPERATIONAL</span>
+                            
+                            {/* Dashboard Content */}
+                            <div className="p-5 space-y-4">
+                                {/* Top Stats */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Activity className="w-4 h-4 text-rose-400" />
+                                            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Active Incidents</span>
+                                        </div>
+                                        <div className="text-2xl font-bold text-white">4</div>
+                                        <div className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1">
+                                            <ArrowRight className="w-3 h-3 -rotate-45" />
+                                            <span>Normal capacity</span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Ambulance className="w-4 h-4 text-blue-400" />
+                                            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Available Units</span>
+                                        </div>
+                                        <div className="text-2xl font-bold text-white">2 <span className="text-sm text-slate-500 font-normal">/ 5</span></div>
+                                        <div className="text-[10px] text-blue-400 mt-1 flex items-center gap-1">
+                                            <span>3 Units Dispatched</span>
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="mt-2 pt-2 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
-                                    <span className="font-medium text-slate-300">24/7 Emergency Coordination</span>
-                                    <span>Opol, Misamis Oriental</span>
+
+                                {/* Live Map / Incident List Simulation */}
+                                <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <span className="text-xs font-semibold text-slate-300">Live Dispatch Feed</span>
+                                        <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                            Live
+                                        </span>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {/* Incident 1 */}
+                                        <div className="flex items-start gap-3 p-2.5 rounded-lg bg-slate-800/80 border border-slate-700/50">
+                                            <div className="mt-0.5 p-1.5 rounded bg-rose-500/20 text-rose-400">
+                                                <AlertCircle className="w-3.5 h-3.5" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-bold text-slate-200">Medical Emergency</span>
+                                                    <span className="text-[9px] text-slate-500 font-mono">1m ago</span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-400 mt-0.5">Barangay Poblacion</div>
+                                                <div className="mt-2 flex items-center gap-2">
+                                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/20 font-medium">AMB-02 Dispatched</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* Incident 2 */}
+                                        <div className="flex items-start gap-3 p-2.5 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                                            <div className="mt-0.5 p-1.5 rounded bg-amber-500/10 text-amber-500/70">
+                                                <MapPin className="w-3.5 h-3.5" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-bold text-slate-400">Vehicular Accident</span>
+                                                    <span className="text-[9px] text-slate-600 font-mono">12m ago</span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 mt-0.5">Barangay Igpit</div>
+                                                <div className="mt-2 flex items-center gap-2">
+                                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500/70 border border-emerald-500/20 font-medium">Resolved</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
