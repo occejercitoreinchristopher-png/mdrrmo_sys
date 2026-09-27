@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { ShieldAlert, ArrowRight, Ambulance, Activity, Radio, MapPin, CheckCircle2, Siren, Smartphone } from 'lucide-react';
+import { ShieldAlert, ArrowRight, Ambulance, Activity, Radio, MapPin, CheckCircle2, Siren, Smartphone, AlertCircle } from 'lucide-react';
 import { login, register } from '@/routes';
 
 export default function HeroSection() {
