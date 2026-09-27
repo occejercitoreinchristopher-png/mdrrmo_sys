@@ -44,19 +44,21 @@ export default function DispatchLogsIndex() {
     const [searchTerm, setSearchTerm] = useState('');
     const debouncedSearch = useDebounce(searchTerm, 250);
     const [status, setStatus] = useState('');
+    const [dateFilter, setDateFilter] = useState('');
     const [page, setPage] = useState(1);
 
     // Reset page on filter change
     useEffect(() => {
         setPage(1);
-    }, [debouncedSearch, status]);
+    }, [debouncedSearch, status, dateFilter]);
 
     const fetchLogs = async ({ queryKey }: any) => {
-        const [_key, { search, statusFilter, pageNum }] = queryKey;
+        const [_key, { search, statusFilter, date, pageNum }] = queryKey;
         const response = await axios.get(apiEndpoint, {
             params: {
                 search,
                 status: statusFilter,
+                date,
                 page: pageNum,
                 per_page: 15
             }
@@ -65,7 +67,7 @@ export default function DispatchLogsIndex() {
     };
 
     const { data, isLoading, isError, refetch, isFetching } = useQuery({
-        queryKey: ['dispatchLogs', { search: debouncedSearch, statusFilter: status, pageNum: page }],
+        queryKey: ['dispatchLogs', { search: debouncedSearch, statusFilter: status, date: dateFilter, pageNum: page }],
         queryFn: fetchLogs,
         placeholderData: (previousData) => previousData,
         staleTime: 5000,
@@ -75,6 +77,7 @@ export default function DispatchLogsIndex() {
     const clearFilters = () => {
         setSearchTerm('');
         setStatus('');
+        setDateFilter('');
         setPage(1);
     };
 
@@ -83,6 +86,7 @@ export default function DispatchLogsIndex() {
         printDispatchLogsSummaryReport(data.data, {
             search: debouncedSearch,
             status: status,
+            date: dateFilter,
             preparedBy: auth?.user ? `${auth.user.first_name} ${auth.user.last_name}` : (isAdmin ? 'MDRRMO Admin' : 'MDRRMO Dispatcher')
         });
     };
@@ -139,7 +143,7 @@ export default function DispatchLogsIndex() {
                     <select
                         value={status}
                         onChange={(e) => setStatus(e.target.value)}
-                        className="w-full md:w-56 px-4 py-2.5 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 dark:text-white transition-all shadow-sm cursor-pointer appearance-none"
+                        className="w-full md:w-48 px-4 py-2.5 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 dark:text-white transition-all shadow-sm cursor-pointer appearance-none"
                     >
                         <option value="">All Incident Statuses</option>
                         <option value="pending">Pending</option>
@@ -150,6 +154,19 @@ export default function DispatchLogsIndex() {
                         <option value="rejected">Rejected</option>
                     </select>
 
+                    <select
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value)}
+                        className="w-full md:w-48 px-4 py-2.5 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 dark:text-white transition-all shadow-sm cursor-pointer appearance-none"
+                    >
+                        <option value="">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="this_week">This Week</option>
+                        <option value="this_month">This Month</option>
+                        <option value="this_year">This Year</option>
+                    </select>
+
                     <div className="flex gap-2">
                         <button
                             onClick={() => refetch()}
@@ -158,7 +175,7 @@ export default function DispatchLogsIndex() {
                             <RefreshCw className={clsx("w-4 h-4", isFetching && "animate-spin")} /> 
                             Refresh
                         </button>
-                        {(searchTerm || status) && (
+                        {(searchTerm || status || dateFilter) && (
                             <button
                                 onClick={clearFilters}
                                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-semibold transition-colors shadow-sm cursor-pointer"

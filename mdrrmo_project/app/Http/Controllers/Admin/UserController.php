@@ -108,7 +108,7 @@ class UserController extends Controller
             $validatedUser['password'] = Hash::make($request->password);
             $validatedUser['password_change_required'] = false;
         } else {
-            $tempPassword = Str::password(12);
+            $tempPassword = Str::password(12, true, true, false, false);
             $validatedUser['password'] = Hash::make($tempPassword);
             $validatedUser['password_change_required'] = true;
             $validatedUser['temporary_password_expires_at'] = now()->addHours(24);
@@ -145,7 +145,7 @@ class UserController extends Controller
     {
         DB::table('password_reset_tokens')->where('email', $user->email)->delete();
 
-        $tempPassword = Str::password(12);
+        $tempPassword = Str::password(12, true, true, false, false);
 
         $user->update([
             'password' => Hash::make($tempPassword),

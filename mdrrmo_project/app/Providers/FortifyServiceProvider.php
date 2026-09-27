@@ -66,10 +66,11 @@ class FortifyServiceProvider extends ServiceProvider
                 return null;
             }
 
-            $user = \App\Models\User::where('email', $login)
-                ->orWhereRaw('LOWER(email) = ?', [strtolower($login)])
-                ->orWhere('phone_number', $login)
-                ->first();
+            $user = \App\Models\User::where(function ($query) use ($login) {
+                $query->where('email', $login)
+                      ->orWhereRaw('LOWER(email) = ?', [strtolower($login)])
+                      ->orWhere('phone_number', $login);
+            })->first();
 
             if ($user && (\Illuminate\Support\Facades\Hash::check($password, $user->password) || \Illuminate\Support\Facades\Hash::check(trim($password), $user->password))) {
                 if ($user->role === 'responder') {

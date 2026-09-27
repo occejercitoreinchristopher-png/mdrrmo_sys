@@ -34,7 +34,7 @@ const queryClient = new QueryClient({
 });
 
 createInertiaApp({
-    title: (title) => (title ? `${title} - ${appName}` : appName),
+    title: (title) => title || 'MDRRMO',
     layout: (name) => {
         switch (true) {
             case name === 'welcome':

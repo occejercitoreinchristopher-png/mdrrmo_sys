@@ -63,6 +63,22 @@ class DispatchLogController extends Controller
             $query->where('incident_status', $request->input('status'));
         }
 
+        if ($request->filled('date')) {
+            $date = $request->input('date');
+            if ($date === 'today') {
+                $query->whereDate('created_at', \Carbon\Carbon::today());
+            } elseif ($date === 'yesterday') {
+                $query->whereDate('created_at', \Carbon\Carbon::yesterday());
+            } elseif ($date === 'this_week') {
+                $query->whereBetween('created_at', [\Carbon\Carbon::now()->startOfWeek(), \Carbon\Carbon::now()->endOfWeek()]);
+            } elseif ($date === 'this_month') {
+                $query->whereMonth('created_at', \Carbon\Carbon::now()->month)
+                      ->whereYear('created_at', \Carbon\Carbon::now()->year);
+            } elseif ($date === 'this_year') {
+                $query->whereYear('created_at', \Carbon\Carbon::now()->year);
+            }
+        }
+
         $perPage = $request->input('per_page', 15);
         $incidents = $query->latest('created_at')->paginate($perPage);
 
