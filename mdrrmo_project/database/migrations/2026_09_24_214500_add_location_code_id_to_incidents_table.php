@@ -66,13 +66,15 @@ return new class extends Migration
             });
 
             // 3. Link any existing incidents with location_code to the matching location_code_id
-            $incidents = DB::table('incidents')->whereNotNull('location_code')->get();
-            foreach ($incidents as $inc) {
-                $loc = DB::table('location_codes')->where('location_code', $inc->location_code)->first();
-                if ($loc) {
-                    DB::table('incidents')->where('id', $inc->id)->update([
-                        'location_code_id' => $loc->id,
-                    ]);
+            if (Schema::hasColumn('incidents', 'location_code')) {
+                $incidents = DB::table('incidents')->whereNotNull('location_code')->get();
+                foreach ($incidents as $inc) {
+                    $loc = DB::table('location_codes')->where('location_code', $inc->location_code)->first();
+                    if ($loc) {
+                        DB::table('incidents')->where('id', $inc->id)->update([
+                            'location_code_id' => $loc->id,
+                        ]);
+                    }
                 }
             }
         }
