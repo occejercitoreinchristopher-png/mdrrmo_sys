@@ -22,9 +22,7 @@ class UserController extends Controller
     {
         $users = User::withTrashed()
             ->where('role', '!=', 'resident')
-            ->with(['responderProfile' => function ($query) {
-                $query->withTrashed();
-            }])
+            ->with(['responderProfile'])
             ->latest()
             ->paginate(50) // Increased so archived users fit better
             ->withQueryString();
@@ -46,7 +44,6 @@ class UserController extends Controller
         $user->restore();
 
         if ($user->responderProfile) {
-            $user->responderProfile->restore();
             $user->responderProfile->update(['availability' => 'available']);
         }
 
@@ -322,7 +319,6 @@ class UserController extends Controller
 
         if ($user->responderProfile) {
             $user->responderProfile->update(['availability' => 'off_duty']);
-            $user->responderProfile->delete();
         }
 
         $user->delete();
