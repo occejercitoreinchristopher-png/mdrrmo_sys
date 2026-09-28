@@ -69,6 +69,9 @@ test('dispatcher can create responder but not dispatcher or admin', function () 
         'password_confirmation' => 'password123',
         'role' => 'responder',
         'status' => 'active',
+        'is_reliever' => false,
+        'team' => 'Alpha',
+        'position' => 'emt',
     ]);
 
     $response->assertSessionHas('success');
