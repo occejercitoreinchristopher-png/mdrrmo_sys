@@ -40,7 +40,7 @@ export default function IncidentTable({
     statusFilter?: string;
     incidentTypes?: any[];
     chiefComplaints?: string[];
-    pcrChiefComplaints?: string[];
+    chiefComplaints?: string[];
     opolBarangays?: string[];
     barangayGeojson?: any;
     ambulances?: any[];
@@ -55,8 +55,8 @@ export default function IncidentTable({
     // Archive / History filtering states
     const [selectedBarangays, setSelectedBarangays] = useState<string[]>([]);
     const [selectedComplaints, setSelectedComplaints] = useState<string[]>([]);
+    const [selectedComplaints, setSelectedComplaints] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [onlyPranks, setOnlyPranks] = useState(false);
     const [selectedIncident, setSelectedIncident] = useState<any | null>(null);
     const [archiveViewMode, setArchiveViewMode] = useState<'split' | 'map' | 'table'>('split');
 
@@ -78,20 +78,18 @@ export default function IncidentTable({
         return (allHistoryIncidents && allHistoryIncidents.length > 0) ? allHistoryIncidents : incidents;
     }, [allHistoryIncidents, incidents]);
 
-    // Available PCR Chief Complaints recorded in the dataset
-    const availablePcrComplaints = useMemo(() => {
-        if (pcrChiefComplaints && pcrChiefComplaints.length > 0) {
-            return pcrChiefComplaints;
+    // Available Incident Types
+    const availableIncidentTypes = useMemo(() => {
+        if (incidentTypes && incidentTypes.length > 0) {
+            return incidentTypes.map(t => t.name).sort();
         }
         const set = new Set<string>();
         archiveDataset.forEach((inc) => {
-            const list = inc.pcr_chief_complaints || (inc.pcr_chief_complaint ? [inc.pcr_chief_complaint] : []);
-            list.forEach((c: string) => {
-                if (c && c.trim()) set.add(c.trim());
-            });
+            const name = inc.incident_type?.name;
+            if (name && name.trim()) set.add(name.trim());
         });
         return Array.from(set).sort();
-    }, [pcrChiefComplaints, archiveDataset]);
+    }, [incidentTypes, archiveDataset]);
 
     // Barangay counts for badges in sidebar
     const barangayCounts = useMemo(() => {
@@ -104,14 +102,14 @@ export default function IncidentTable({
         return counts;
     }, [archiveDataset]);
 
-    // PCR Chief Complaint counts for badges in sidebar
+    // Incident Type counts for badges in sidebar
     const complaintCounts = useMemo(() => {
         const counts: Record<string, number> = {};
         archiveDataset.forEach((inc) => {
-            const list = inc.pcr_chief_complaints || (inc.pcr_chief_complaint ? [inc.pcr_chief_complaint] : []);
-            list.forEach((c: string) => {
-                counts[c] = (counts[c] || 0) + 1;
-            });
+            const name = inc.incident_type?.name;
+            if (name) {
+                counts[name] = (counts[name] || 0) + 1;
+            }
         });
         return counts;
     }, [archiveDataset]);
@@ -132,20 +130,14 @@ export default function IncidentTable({
                 if (!matches) return false;
             }
 
-            // 2. Chief Complaint Filter (based on PCR chief_complaint, OR logic among selected complaints)
+            // 2. Incident Type Filter (OR logic among selected types)
             if (selectedComplaints.length > 0) {
-                const complaintsList: string[] = inc.pcr_chief_complaints || (inc.pcr_chief_complaint ? [inc.pcr_chief_complaint] : []);
+                const incType = inc.incident_type?.name;
                 const matches = selectedComplaints.some((c) => {
                     const normC = c.toLowerCase().trim();
-                    return complaintsList.some((ic) => (ic || '').toLowerCase().trim() === normC);
+                    return incType && incType.toLowerCase().trim() === normC;
                 });
                 if (!matches) return false;
-            }
-
-            // 3. Prank Calls Filter
-            if (onlyPranks) {
-                const isPrank = inc.is_prank === true || inc.is_prank === 1 || inc.rejection_category === 'prank';
-                if (!isPrank) return false;
             }
 
             // 4. Keyword Search Query
@@ -159,24 +151,18 @@ export default function IncidentTable({
                     (inc.barangay && inc.barangay.toLowerCase().includes(q)) ||
                     (inc.description && inc.description.toLowerCase().includes(q)) ||
                     (inc.incident_type?.name && inc.incident_type.name.toLowerCase().includes(q)) ||
-                    (inc.pcr_chief_complaint && inc.pcr_chief_complaint.toLowerCase().includes(q)) ||
                     (inc.caller_phone_number && inc.caller_phone_number.toLowerCase().includes(q));
                 if (!matchQ) return false;
             }
 
             return true;
         });
-    }, [statusFilter, archiveDataset, incidents, selectedBarangays, selectedComplaints, searchQuery, onlyPranks]);
-
-    const totalPrankCount = useMemo(() => {
-        return archiveDataset.filter((inc) => inc.is_prank === true || inc.is_prank === 1 || inc.rejection_category === 'prank').length;
-    }, [archiveDataset]);
+    }, [statusFilter, archiveDataset, incidents, selectedBarangays, selectedComplaints, searchQuery]);
 
     const handleResetFilters = () => {
         setSelectedBarangays([]);
         setSelectedComplaints([]);
         setSearchQuery('');
-        setOnlyPranks(false);
         setSelectedIncident(null);
     };
 
@@ -233,16 +219,17 @@ export default function IncidentTable({
             ),
         },
         {
-            key: 'pcr_chief_complaint',
-            header: 'PCR Chief Complaint',
-            render: (v) => {
-                if (!v) {
-                    return <span className="text-slate-400 text-xs italic">Not recorded in PCR</span>;
+            key: 'incident_type',
+            header: 'Incident Type',
+            render: (v, row) => {
+                const name = row.incident_type?.name;
+                if (!name) {
+                    return <span className="text-slate-400 text-xs italic">Unclassified</span>;
                 }
                 return (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-500/20">
                         <Activity className="w-3 h-3 text-indigo-500" />
-                        {v}
+                        {name}
                     </span>
                 );
             },
@@ -366,47 +353,26 @@ export default function IncidentTable({
 
             {/* Incident Archive Synchronized Workspace (History Flow) */}
             {statusFilter === 'history' && (
-                <div className="flex flex-col lg:flex-row gap-5 items-start">
-                    {/* Left Sidebar: Barangay & PCR Chief Complaint Filters */}
+                <div className={`flex gap-5 items-start ${archiveViewMode === 'table' ? 'flex-col' : 'flex-col lg:flex-row'}`}>
+                    {/* Filter Sidebar */}
                     <ArchiveFilterSidebar
+                        orientation={archiveViewMode === 'table' ? 'horizontal' : 'vertical'}
                         barangays={availableBarangays}
-                        chiefComplaints={availablePcrComplaints}
+                        chiefComplaints={availableIncidentTypes}
                         selectedBarangays={selectedBarangays}
                         setSelectedBarangays={setSelectedBarangays}
                         selectedComplaints={selectedComplaints}
                         setSelectedComplaints={setSelectedComplaints}
                         searchQuery={searchQuery}
                         setSearchQuery={setSearchQuery}
-                        onlyPranks={onlyPranks}
-                        setOnlyPranks={setOnlyPranks}
-                        prankCount={totalPrankCount}
-                        barangayCounts={barangayCounts}
-                        complaintCounts={complaintCounts}
-                        totalFilteredCount={filteredHistoryIncidents.length}
-                        totalAllCount={archiveDataset.length}
-                        onReset={handleResetFilters}
-                    />
-
-                    {/* Right Workspace: Synchronized Map & Table */}
                     <div className="flex-1 min-w-0 w-full space-y-5">
                         
                         {/* Active Filter Chips Bar */}
-                        {(selectedBarangays.length > 0 || selectedComplaints.length > 0 || searchQuery.trim().length > 0 || onlyPranks) && (
+                        {(selectedBarangays.length > 0 || selectedComplaints.length > 0 || searchQuery.trim().length > 0) && (
                             <div className="flex flex-wrap items-center gap-2 p-3 bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-sm backdrop-blur-md">
                                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mr-1">
                                     Active Filters:
                                 </span>
-
-                                {/* Prank Filter Chip */}
-                                {onlyPranks && (
-                                    <button
-                                        onClick={() => setOnlyPranks(false)}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/20 hover:bg-amber-100 transition-colors cursor-pointer"
-                                    >
-                                        <span>🚨 Prank Calls Only</span>
-                                        <X className="w-3 h-3 ml-0.5" />
-                                    </button>
-                                )}
 
                                 {/* Barangay Chips */}
                                 {selectedBarangays.map((b) => (
@@ -421,7 +387,7 @@ export default function IncidentTable({
                                     </button>
                                 ))}
 
-                                {/* PCR Chief Complaint Chips */}
+                                {/* Incident Type Chips */}
                                 {selectedComplaints.map((c) => (
                                     <button
                                         key={`chip-c-${c}`}

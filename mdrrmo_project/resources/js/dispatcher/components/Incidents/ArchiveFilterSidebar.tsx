@@ -15,9 +15,7 @@ export interface ArchiveFilterSidebarProps {
     totalFilteredCount: number;
     totalAllCount: number;
     onReset: () => void;
-    onlyPranks?: boolean;
-    setOnlyPranks?: (val: boolean) => void;
-    prankCount?: number;
+    orientation?: 'vertical' | 'horizontal';
 }
 
 export default function ArchiveFilterSidebar({
@@ -34,17 +32,15 @@ export default function ArchiveFilterSidebar({
     totalFilteredCount,
     totalAllCount,
     onReset,
-    onlyPranks = false,
-    setOnlyPranks,
-    prankCount = 0,
+    orientation = 'vertical',
 }: ArchiveFilterSidebarProps) {
     const [barangaySearch, setBarangaySearch] = useState('');
     const [complaintSearch, setComplaintSearch] = useState('');
     const [isBarangayOpen, setIsBarangayOpen] = useState(true);
     const [isComplaintOpen, setIsComplaintOpen] = useState(true);
 
-    const hasActiveFilters = selectedBarangays.length > 0 || selectedComplaints.length > 0 || searchQuery.trim().length > 0 || onlyPranks;
-    const totalActiveFiltersCount = selectedBarangays.length + selectedComplaints.length + (searchQuery.trim() ? 1 : 0) + (onlyPranks ? 1 : 0);
+    const hasActiveFilters = selectedBarangays.length > 0 || selectedComplaints.length > 0 || searchQuery.trim().length > 0;
+    const totalActiveFiltersCount = selectedBarangays.length + selectedComplaints.length + (searchQuery.trim() ? 1 : 0);
 
     const toggleBarangay = (name: string) => {
         if (selectedBarangays.includes(name)) {
@@ -91,9 +87,9 @@ export default function ArchiveFilterSidebar({
     }, [chiefComplaints, complaintSearch]);
 
     return (
-        <aside className="w-80 shrink-0 flex flex-col bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-sm overflow-hidden backdrop-blur-md lg:sticky lg:top-4 max-h-[calc(100vh-5.5rem)]">
+        <aside className={`${orientation === 'horizontal' ? 'w-full flex flex-col md:flex-row' : 'w-80 shrink-0 flex flex-col lg:sticky lg:top-4 max-h-[calc(100vh-5.5rem)]'} bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-sm overflow-hidden backdrop-blur-md`}>
             {/* Header & Reset */}
-            <div className="p-3.5 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] shrink-0">
+            <div className={`p-3.5 border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] shrink-0 ${orientation === 'horizontal' ? 'w-full md:w-64 border-b md:border-b-0 md:border-r flex flex-col justify-between' : 'border-b'}`}>
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                         <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400">
@@ -129,8 +125,7 @@ export default function ArchiveFilterSidebar({
                     </button>
                 </div>
 
-                {/* Keyword Search */}
-                <div className="relative">
+                <div className={`relative ${orientation === 'horizontal' ? 'mt-auto' : ''}`}>
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                         type="text"
@@ -151,35 +146,10 @@ export default function ArchiveFilterSidebar({
             </div>
 
             {/* Scrollable Filters Content */}
-            <div className="flex-1 overflow-y-auto p-3.5 space-y-4 min-h-0 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10">
+            <div className={`flex-1 overflow-y-auto p-3.5 min-h-0 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10 ${orientation === 'horizontal' ? 'flex flex-row gap-4 items-start' : 'space-y-4'}`}>
                 
-                {/* 0. PRANK CALLS QUICK FILTER */}
-                {setOnlyPranks && (
-                    <button
-                        type="button"
-                        onClick={() => setOnlyPranks(!onlyPranks)}
-                        className={`w-full p-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-2 border cursor-pointer ${
-                            onlyPranks
-                                ? 'bg-red-500 text-white border-red-500 shadow-md shadow-red-500/20'
-                                : 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/40'
-                        }`}
-                    >
-                        <div className="flex items-center gap-2">
-                            <AlertTriangle className={`w-4 h-4 ${onlyPranks ? 'text-white' : 'text-red-600'}`} />
-                            <span>Prank Calls Only</span>
-                        </div>
-                        {prankCount > 0 && (
-                            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
-                                onlyPranks ? 'bg-white text-red-600 font-black' : 'bg-red-200/80 dark:bg-red-900/80 text-red-800 dark:text-red-200'
-                            }`}>
-                                {prankCount}
-                            </span>
-                        )}
-                    </button>
-                )}
-
                 {/* 1. BARANGAY FILTER */}
-                <div className="rounded-xl border border-slate-200/70 dark:border-white/5 bg-slate-50/30 dark:bg-white/[0.01] p-2.5">
+                <div className={`rounded-xl border border-slate-200/70 dark:border-white/5 bg-slate-50/30 dark:bg-white/[0.01] p-2.5 ${orientation === 'horizontal' ? 'flex-1 min-w-[200px]' : ''}`}>
                     <div className="flex items-center justify-between mb-2">
                         <button
                             onClick={() => setIsBarangayOpen(!isBarangayOpen)}
@@ -271,15 +241,15 @@ export default function ArchiveFilterSidebar({
                     )}
                 </div>
 
-                {/* 2. CHIEF COMPLAINT (PCR) FILTER */}
-                <div className="rounded-xl border border-slate-200/70 dark:border-white/5 bg-slate-50/30 dark:bg-white/[0.01] p-2.5">
+                {/* 2. INCIDENT TYPE FILTER */}
+                <div className={`rounded-xl border border-slate-200/70 dark:border-white/5 bg-slate-50/30 dark:bg-white/[0.01] p-2.5 ${orientation === 'horizontal' ? 'flex-1 min-w-[200px]' : ''}`}>
                     <div className="flex items-center justify-between mb-1.5">
                         <button
                             onClick={() => setIsComplaintOpen(!isComplaintOpen)}
                             className="flex items-center gap-1.5 text-left font-bold text-xs text-slate-900 dark:text-white uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer"
                         >
                             <Activity className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                            <span>PCR Complaint</span>
+                            <span>Incident Type</span>
                             {selectedComplaints.length > 0 && (
                                 <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-800 px-1.5 py-0.2 rounded">
                                     {selectedComplaints.length}
@@ -311,7 +281,7 @@ export default function ArchiveFilterSidebar({
                     </div>
 
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-2 italic">
-                        Filtered strictly by Patient Care Record (PCR) complaint data.
+                        Filtered by standardized incident types.
                     </p>
 
                     {isComplaintOpen && (
@@ -322,7 +292,7 @@ export default function ArchiveFilterSidebar({
                                         type="text"
                                         value={complaintSearch}
                                         onChange={(e) => setComplaintSearch(e.target.value)}
-                                        placeholder="Filter complaint..."
+                                        placeholder="Filter type..."
                                         className="w-full text-[11px] px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
                                     />
                                 </div>
@@ -331,7 +301,7 @@ export default function ArchiveFilterSidebar({
                             <div className="space-y-1 max-h-40 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10">
                                 {filteredComplaintsList.length === 0 ? (
                                     <p className="text-xs text-slate-400 italic py-2 text-center">
-                                        No PCR complaints recorded.
+                                        No incident types available.
                                     </p>
                                 ) : (
                                     filteredComplaintsList.map((name) => {

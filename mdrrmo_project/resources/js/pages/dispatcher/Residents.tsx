@@ -271,6 +271,7 @@ export default function ResidentsPage({ residents, simCallers, barangays = [], f
 
                 {/* Registered Residents Tab */}
                 {activeTab === 'registered' && (
+                <Card padding={false} className="border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#090e1a] shadow-sm rounded-2xl overflow-hidden">
                     <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
                         <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
                             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">

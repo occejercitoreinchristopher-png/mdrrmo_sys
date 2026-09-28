@@ -42,25 +42,10 @@ class IncidentController extends Controller
         $barangayGeojson = null;
 
         if ($status === 'history') {
-            $query->whereIn('incident_status', ['resolved', 'rejected']);
-
-            if ($request->filled('is_prank')) {
-                $query->where('is_prank', $request->boolean('is_prank'));
-            }
-
-            if ($request->filled('rejection_category')) {
-                $query->where('rejection_category', $request->query('rejection_category'));
-            }
+            $query->where('incident_status', 'resolved')
+                  ->where('is_prank', false);
 
             $allHistoryIncidents = (clone $query)->get();
-
-            $pcrChiefComplaints = PatientCareRecord::whereNotNull('clinical_chief_complaint')
-                ->where('clinical_chief_complaint', '!=', '')
-                ->distinct()
-                ->pluck('clinical_chief_complaint')
-                ->sort()
-                ->values()
-                ->all();
 
             $geojsonPath = resource_path('data/opol_barangays.json');
             if (file_exists($geojsonPath)) {
@@ -112,7 +97,6 @@ class IncidentController extends Controller
             'allHistoryIncidents' => $allHistoryIncidents,
             'incidentTypes' => IncidentType::all(),
             'chiefComplaints' => EmergencyComplaints::ALL,
-            'pcrChiefComplaints' => $pcrChiefComplaints,
             'opolBarangays' => Incident::OPOL_BARANGAYS,
             'barangayGeojson' => $barangayGeojson,
             'statusFilter' => $status,
@@ -138,16 +122,9 @@ class IncidentController extends Controller
             'dispatches.driver',
             'dispatches.crew'
         ])
-            ->whereIn('incident_status', ['resolved', 'rejected'])
+            ->where('incident_status', 'resolved')
+            ->where('is_prank', false)
             ->get();
-
-        $pcrChiefComplaints = PatientCareRecord::whereNotNull('clinical_chief_complaint')
-            ->where('clinical_chief_complaint', '!=', '')
-            ->distinct()
-            ->pluck('clinical_chief_complaint')
-            ->sort()
-            ->values()
-            ->all();
 
         $geojsonPath = resource_path('data/opol_barangays.json');
         $barangayGeojson = file_exists($geojsonPath) ? json_decode(file_get_contents($geojsonPath), true) : null;
@@ -156,7 +133,7 @@ class IncidentController extends Controller
             'incidents' => $incidents,
             'selectedIncidentId' => $request->query('incident_id'),
             'opolBarangays' => Incident::OPOL_BARANGAYS,
-            'pcrChiefComplaints' => $pcrChiefComplaints,
+            'incidentTypes' => IncidentType::all(),
             'barangayGeojson' => $barangayGeojson,
         ]);
     }

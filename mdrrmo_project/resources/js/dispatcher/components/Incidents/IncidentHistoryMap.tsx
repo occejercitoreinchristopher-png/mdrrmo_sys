@@ -313,7 +313,7 @@ export default function IncidentHistoryMap({
                         >
                             <div className="w-[310px] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/80 dark:border-white/10 shadow-2xl overflow-hidden flex flex-col text-slate-900 dark:text-slate-100 font-sans">
                                 {/* Header Bar */}
-                                <div className="p-3 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800/90 dark:to-slate-900/90 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between pr-8">
+                                <div className="p-3 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800/90 dark:to-slate-900/90 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between pr-10">
                                     <div className="flex items-center gap-1.5">
                                         <span className="font-mono font-black text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/25 px-2 py-0.5 rounded-md tracking-wider">
                                             #{popupInfo.id}
@@ -405,9 +405,27 @@ export default function IncidentHistoryMap({
                                                 </div>
                                             )}
                                             {popupInfo.dispatches[0].driver && (
-                                                <div className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                                                    <User className="w-3 h-3 text-slate-400" />
-                                                    <span>Driver: {popupInfo.dispatches[0].driver.first_name} {popupInfo.dispatches[0].driver.last_name}</span>
+                                                <div className="flex items-center gap-1.5 mt-1">
+                                                    {popupInfo.dispatches[0].driver.responder_profile?.profile_picture ? (
+                                                        <img
+                                                            src={`/storage/${popupInfo.dispatches[0].driver.responder_profile.profile_picture}`}
+                                                            alt="Responder"
+                                                            className="w-5 h-5 rounded-full object-cover border border-slate-200 dark:border-white/10"
+                                                        />
+                                                    ) : popupInfo.dispatches[0].driver.profile_picture ? (
+                                                        <img
+                                                            src={`/storage/${popupInfo.dispatches[0].driver.profile_picture}`}
+                                                            alt="Responder"
+                                                            className="w-5 h-5 rounded-full object-cover border border-slate-200 dark:border-white/10"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center border border-slate-300 dark:border-white/10">
+                                                            <User className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                                                        </div>
+                                                    )}
+                                                    <span className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                                                        Driver: {popupInfo.dispatches[0].driver.first_name} {popupInfo.dispatches[0].driver.last_name}
+                                                    </span>
                                                 </div>
                                             )}
                                         </div>
