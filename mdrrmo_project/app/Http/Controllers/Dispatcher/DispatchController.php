@@ -185,8 +185,10 @@ class DispatchController extends Controller
             ResponderProfile::whereIn('user_id', $assignedCrewIds)
                 ->update(['availability' => 'busy']);
 
-            event(new DispatchCreated($dispatch));
+            return $dispatch;
         });
+
+        event(new DispatchCreated($dispatch));
 
         return back()->with('success', 'Dispatch created successfully and mission crew notified.');
     }

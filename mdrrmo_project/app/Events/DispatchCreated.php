@@ -30,17 +30,18 @@ class DispatchCreated implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        $channels = [new PrivateChannel('dispatcher')];
+        $channels = [
+            new PrivateChannel('dispatcher'),
+            new PrivateChannel('responders'),
+        ];
 
-        $assignedUserIds = $this->dispatch->crew()->pluck('users.id')->toArray();
-        if (empty($assignedUserIds)) {
-            $assignedUserIds = array_filter([
-                $this->dispatch->driver_id,
-                $this->dispatch->emt_id,
-            ]);
-        }
+        $crewIds = $this->dispatch->crew()->pluck('users.id')->toArray();
+        $assignedUserIds = array_unique(array_filter(array_merge(
+            $crewIds,
+            [$this->dispatch->driver_id, $this->dispatch->emt_id]
+        )));
 
-        foreach (array_unique($assignedUserIds) as $userId) {
+        foreach ($assignedUserIds as $userId) {
             $channels[] = new PrivateChannel('responder.'.$userId);
         }
 
@@ -64,7 +65,15 @@ class DispatchCreated implements ShouldBroadcastNow
     public function broadcastWith(): array
     {
         return [
-            'dispatch' => $this->dispatch->loadMissing(['incident', 'ambulance']),
+            'dispatch' => $this->dispatch->loadMissing([
+                'incident',
+                'incident.incidentType',
+                'incident.resident',
+                'ambulance',
+                'crew',
+                'driver',
+                'emt',
+            ]),
         ];
     }
 }

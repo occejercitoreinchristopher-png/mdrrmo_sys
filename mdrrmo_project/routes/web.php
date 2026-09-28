@@ -157,3 +157,5 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
 });
 
 require __DIR__.'/settings.php';
+
+Route::get('/debug-dispatches', function() { return \App\Models\Dispatch::with('crew')->get(); });

@@ -118,7 +118,7 @@ export function snapToPolyline(
     lon: number, 
     lat: number, 
     coordinates: [number, number][], 
-    maxDistanceMeters = 150
+    maxDistanceMeters = 35
 ): { lng: number; lat: number; bearing: number; segmentIndex: number; isSnapped: boolean } {
     if (!coordinates || coordinates.length < 2) {
         return { lng: lon, lat, bearing: 0, segmentIndex: 0, isSnapped: false };
@@ -444,7 +444,7 @@ export default function LiveMonitoringMap({
 
         // 2. Responder is moving while active route is already established!
         // Snap responder to route polyline and update distance/ETA in-memory WITHOUT re-fetching route!
-        const snapped = snapToPolyline(responderLoc.longitude, responderLoc.latitude, currentRoute.coordinates, 150);
+        const snapped = snapToPolyline(responderLoc.longitude, responderLoc.latitude, currentRoute.coordinates, 35);
 
         if (snapped.isSnapped) {
             // Vehicle is on or near the planned route:
@@ -459,6 +459,20 @@ export default function LiveMonitoringMap({
                 currentRoute.coordinates
             );
 
+            // Dynamically slice the route so the road already passed behind the responder is removed!
+            const remainingCoords: [number, number][] = [
+                [snapped.lng, snapped.lat],
+                ...currentRoute.coordinates.slice(snapped.segmentIndex + 1),
+            ];
+
+            const updatedGeojson = remainingCoords.length >= 2 
+                ? { type: 'LineString', coordinates: remainingCoords }
+                : routeGeojson;
+
+            if (remainingCoords.length >= 2) {
+                setRouteGeojson(updatedGeojson);
+            }
+
             // Calculate ETA proportional to remaining distance
             const speedMps = (currentRoute.distance > 0 && currentRoute.duration > 0)
                 ? (currentRoute.distance / currentRoute.duration)
@@ -472,16 +486,16 @@ export default function LiveMonitoringMap({
                     formattedDistance: formatDistance(remainingMeters),
                     formattedEta: formatDuration(remainingSeconds),
                     isOffRoute: false,
-                    routeGeometry: routeGeojson,
+                    routeGeometry: updatedGeojson,
                 });
             }
         } else {
-            // Responder is genuinely > 150m away from the entire route
+            // Responder is genuinely off-route (> 35m away from the route)
             consecutiveOffRouteCountRef.current += 1;
 
-            // Only recalculate route if sustained off-route for 4+ consecutive location updates AND at least 30s cooldown
-            const OFF_ROUTE_CONSECUTIVE_LIMIT = 4;
-            const RECALC_COOLDOWN_MS = 30000;
+            // Fast recalculate route: 2 consecutive off-route updates and 4s cooldown
+            const OFF_ROUTE_CONSECUTIVE_LIMIT = 2;
+            const RECALC_COOLDOWN_MS = 4000;
             const now = Date.now();
 
             if (
@@ -489,6 +503,7 @@ export default function LiveMonitoringMap({
                 now - lastRouteCalcTimeRef.current >= RECALC_COOLDOWN_MS
             ) {
                 setIsOffRoute(true);
+                consecutiveOffRouteCountRef.current = 0;
                 calculateRoute(responderLoc.longitude, responderLoc.latitude, incLon, incLat, dispatchId, true);
             }
         }
@@ -747,8 +762,8 @@ export default function LiveMonitoringMap({
                                 {/* 🔵 RESPONDER / DRIVER LIVE LOCATION MARKER (Navigation Arrow Only, No Circle Background) */}
                                 {responderLoc && (() => {
                                     // Snap to route polyline if on active mission so it smoothly follows the road!
-                                    const snapped = isSelected && routeGeojson?.coordinates
-                                        ? snapToPolyline(responderLoc.longitude, responderLoc.latitude, routeGeojson.coordinates, 150)
+                                    const snapped = isSelected && activeRouteRef.current?.coordinates
+                                        ? snapToPolyline(responderLoc.longitude, responderLoc.latitude, activeRouteRef.current.coordinates, 35)
                                         : null;
 
                                     const displayLng = snapped?.isSnapped ? snapped.lng : responderLoc.longitude;
@@ -768,19 +783,19 @@ export default function LiveMonitoringMap({
                                                 if (onSelectDispatch) onSelectDispatch(dispatch);
                                             }}
                                         >
-                                            <div className="flex flex-col items-center group cursor-pointer select-none">
-                                                {/* Floating Unit Identifier Pill */}
-                                                <div className={`px-2 py-0.5 rounded-full text-white font-bold text-[9px] font-mono tracking-wider mb-1 flex items-center gap-1 border transition-all whitespace-nowrap shadow-md ${
+                                            <div className="relative flex items-center justify-center cursor-pointer select-none">
+                                                {/* Floating Unit Identifier Pill (positioned above arrow without pushing it down) */}
+                                                <div className={`absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-white font-bold text-[9px] font-mono tracking-wider flex items-center gap-1 border transition-all whitespace-nowrap shadow-md pointer-events-none z-20 ${
                                                     isSelected 
                                                         ? 'bg-blue-600 border-blue-400 scale-105 shadow-blue-500/40 ring-1 ring-blue-400/50' 
-                                                        : 'bg-slate-900/90 border-slate-700 text-slate-300 hover:bg-slate-800'
+                                                        : 'bg-slate-900/90 border-slate-700 text-slate-300'
                                                 }`}>
                                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                                     <span>{dispatch.ambulance?.plate_number || (dispatch.driver ? `${dispatch.driver.first_name} ${dispatch.driver.last_name}` : 'Responder')}</span>
                                                 </div>
 
-                                                {/* Sleek 3D Navigation Arrow (NO Circle Background, Arrow Only!) */}
-                                                <div className="relative flex items-center justify-center">
+                                                {/* Sleek 3D Navigation Arrow (centered directly on coordinates) */}
+                                                <div className="w-[38px] h-[38px] flex items-center justify-center">
                                                     <svg 
                                                         width="38" 
                                                         height="38" 
@@ -789,7 +804,8 @@ export default function LiveMonitoringMap({
                                                         xmlns="http://www.w3.org/2000/svg"
                                                         className="filter drop-shadow-[0_6px_14px_rgba(0,0,0,0.65)] transition-transform duration-300 transform hover:scale-115"
                                                         style={{ 
-                                                            transform: `rotate(${displayHeading}deg)` 
+                                                            transform: `rotate(${displayHeading}deg)`,
+                                                            transformOrigin: '19px 19px'
                                                         }}
                                                     >
                                                         <defs>
@@ -884,6 +900,26 @@ export default function LiveMonitoringMap({
                     >
                         <Navigation className="w-3.5 h-3.5 text-[#F61509]" />
                         <span>Fit View</span>
+                    </button>
+
+                    {/* Manual Recalculate Route button */}
+                    <button
+                        onClick={() => {
+                            if (activeDispatch) {
+                                const incLon = parseFloat(activeDispatch.incident?.incident_longitude);
+                                const incLat = parseFloat(activeDispatch.incident?.incident_latitude);
+                                const responderLoc = getResponderLocation(activeDispatch);
+                                if (responderLoc && incLon && incLat) {
+                                    calculateRoute(responderLoc.longitude, responderLoc.latitude, incLon, incLat, activeDispatch.id, true);
+                                }
+                            }
+                        }}
+                        disabled={isCalculatingRoute}
+                        className="bg-white/95 hover:bg-slate-100 dark:bg-[#090e1a]/95 dark:hover:bg-white/10 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-lg text-xs text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors flex items-center gap-1.5 font-semibold cursor-pointer disabled:opacity-50"
+                        title="Recalculate road route from current responder location"
+                    >
+                        <RotateCw className={`w-3.5 h-3.5 text-blue-600 ${isCalculatingRoute ? 'animate-spin' : ''}`} />
+                        <span>Reroute</span>
                     </button>
 
                     {/* Clear Selection / Return to Fleet View */}
