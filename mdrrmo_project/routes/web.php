@@ -93,6 +93,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::post('/users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
     Route::patch('/users/{user}', [UserController::class, 'update'])->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+    Route::post('/users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
     Route::get('/ambulances', [AmbulanceController::class, 'index'])->name('ambulances');
     Route::post('/ambulances', [AmbulanceController::class, 'store'])->name('ambulances.store');
     Route::patch('/ambulances/{ambulance}', [AmbulanceController::class, 'update'])->name('ambulances.update');

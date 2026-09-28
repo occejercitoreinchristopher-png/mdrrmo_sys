@@ -20,10 +20,13 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $users = User::where('role', '!=', 'resident')
-            ->with(['responderProfile'])
+        $users = User::withTrashed()
+            ->where('role', '!=', 'resident')
+            ->with(['responderProfile' => function ($query) {
+                $query->withTrashed();
+            }])
             ->latest()
-            ->paginate(10)
+            ->paginate(50) // Increased so archived users fit better
             ->withQueryString();
 
         return Inertia::render('admin/Users', [
@@ -35,6 +38,19 @@ class UserController extends Controller
                 'total' => $users->total(),
             ],
         ]);
+    }
+
+    public function restore($id)
+    {
+        $user = User::withTrashed()->findOrFail($id);
+        $user->restore();
+
+        if ($user->responderProfile) {
+            $user->responderProfile->restore();
+            $user->responderProfile->update(['availability' => 'available']);
+        }
+
+        return back()->with('success', 'User account restored successfully.');
     }
 
     public function residents(Request $request)

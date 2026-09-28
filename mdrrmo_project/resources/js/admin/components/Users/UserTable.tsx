@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { KeyRound, Pencil, Trash2, User as UserIcon, Shield, Radio, Ambulance, Users } from 'lucide-react';
 import Button from '@/shared/components/Button';
 import DataTable, { Column } from '@/shared/components/DataTable';
@@ -13,7 +14,9 @@ interface UserTableProps {
     onEdit?: (user: User) => void;
     onResetPassword?: (user: User) => void;
     onDelete?: (user: User) => void;
+    onRestore?: (user: User) => void;
     roleFilter?: string | null;
+    isArchivedTab?: boolean;
 }
 
 const roleConfig: Record<string, { label: string; icon: any; style: string }> = {
@@ -23,7 +26,30 @@ const roleConfig: Record<string, { label: string; icon: any; style: string }> = 
     resident: { label: 'Resident', icon: Users, style: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-500/20' },
 };
 
-export default function UserTable({ users = [], loading = false, onEdit, onResetPassword, onDelete, roleFilter = null }: UserTableProps) {
+export default function UserTable({ users = [], loading = false, onEdit, onResetPassword, onDelete, onRestore, roleFilter = null, isArchivedTab = false }: UserTableProps) {
+    const [resetCooldowns, setResetCooldowns] = useState<Record<number, number>>({});
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setResetCooldowns(prev => {
+                let changed = false;
+                const next = { ...prev };
+                for (const id in next) {
+                    if (next[id] > 0) {
+                        next[id] -= 1;
+                        changed = true;
+                    }
+                    if (next[id] <= 0) {
+                        delete next[id];
+                        changed = true;
+                    }
+                }
+                return changed ? next : prev;
+            });
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
     const filtered = roleFilter
         ? users.filter((u) => u.role === roleFilter)
         : users;
@@ -35,8 +61,12 @@ export default function UserTable({ users = [], loading = false, onEdit, onReset
             sortable: true,
             render: (_, row) => (
                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm ring-1 ring-slate-900/10 dark:ring-white/20">
-                        {((row.first_name?.[0] ?? '') + (row.last_name?.[0] ?? '')).toUpperCase()}
+                    <div className="w-9 h-9 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm ring-1 ring-slate-900/10 dark:ring-white/20 overflow-hidden">
+                        {row.profile_photo_url ? (
+                            <img src={row.profile_photo_url} alt={`${row.first_name}'s profile`} className="w-full h-full object-cover" />
+                        ) : (
+                            ((row.first_name?.[0] ?? '') + (row.last_name?.[0] ?? '')).toUpperCase()
+                        )}
                     </div>
                     <div>
                         <p className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5 capitalize">
@@ -92,7 +122,15 @@ export default function UserTable({ users = [], loading = false, onEdit, onReset
             key: 'status',
             header: 'Account Status',
             sortable: true,
-            render: (v) => {
+            render: (v, row) => {
+                if (row.deleted_at) {
+                    return (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border backdrop-blur-sm bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-200/80 dark:border-slate-500/20 capitalize">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                            Archived
+                        </span>
+                    );
+                }
                 const isAct = v === 'active';
                 return (
                     <span className={clsx(
@@ -127,45 +165,74 @@ export default function UserTable({ users = [], loading = false, onEdit, onReset
         {
             key: 'actions',
             header: 'Manage',
-            render: (_, row) => (
-                <div className="flex items-center gap-1.5">
-                    <Button
-                        size="xs"
-                        variant="secondary"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit?.(row);
-                        }}
-                        className="hover:bg-slate-200 dark:hover:bg-white/15"
-                    >
-                        <Pencil className="w-3 h-3" />
-                        <span>Edit</span>
-                    </Button>
-                    <Button
-                        size="xs"
-                        variant="secondary"
-                        className="text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 border-amber-200/60 dark:border-amber-500/20"
-                        title="Reset Password"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onResetPassword?.(row);
-                        }}
-                    >
-                        <KeyRound className="w-3 h-3" />
-                        <span>Reset</span>
-                    </Button>
-                    <Button
-                        size="xs"
-                        variant="danger"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete?.(row);
-                        }}
-                    >
-                        <Trash2 className="w-3 h-3" />
-                    </Button>
-                </div>
-            ),
+            render: (_, row) => {
+                if (row.role === 'resident') {
+                    return <span className="text-xs text-slate-400 dark:text-slate-500 italic">View Only</span>;
+                }
+                
+                return (
+                    <div className="flex items-center gap-1.5">
+                        {row.deleted_at ? (
+                            <Button
+                                size="xs"
+                                variant="primary"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRestore?.(row);
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                                <span>Restore Account</span>
+                            </Button>
+                        ) : (
+                            <>
+                                <Button
+                                    size="xs"
+                                    variant="secondary"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEdit?.(row);
+                                    }}
+                                    className="hover:bg-slate-200 dark:hover:bg-white/15"
+                                >
+                                    <Pencil className="w-3 h-3" />
+                                    <span>Edit</span>
+                                </Button>
+                                
+                                {row.password_change_required !== false && (
+                                    <Button
+                                        size="xs"
+                                        variant="secondary"
+                                        className="text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 border-amber-200/60 dark:border-amber-500/20 disabled:opacity-50"
+                                        title={resetCooldowns[row.id] > 0 ? `Wait ${resetCooldowns[row.id]}s` : 'Reset Password'}
+                                        disabled={resetCooldowns[row.id] > 0}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (resetCooldowns[row.id] > 0) return;
+                                            onResetPassword?.(row);
+                                            setResetCooldowns(prev => ({ ...prev, [row.id]: 30 }));
+                                        }}
+                                    >
+                                        <KeyRound className="w-3 h-3" />
+                                        <span>{resetCooldowns[row.id] > 0 ? `${resetCooldowns[row.id]}s` : 'Reset'}</span>
+                                    </Button>
+                                )}
+
+                                <Button
+                                    size="xs"
+                                    variant="danger"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onDelete?.(row);
+                                    }}
+                                >
+                                    <Trash2 className="w-3 h-3" />
+                                </Button>
+                            </>
+                        )}
+                    </div>
+                );
+            },
         },
     ];
 

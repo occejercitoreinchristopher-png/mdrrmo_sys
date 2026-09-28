@@ -59,8 +59,10 @@ export default function UserManagement({
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
     const [resetTarget, setResetTarget] = useState<User | null>(null);
+    const [restoreTarget, setRestoreTarget] = useState<User | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [restoring, setRestoring] = useState(false);
     const [resetting, setResetting] = useState(false);
 
     const { errors, flash } = usePage().props as any;
@@ -76,10 +78,11 @@ export default function UserManagement({
                 u.email?.toLowerCase().includes(q) ||
                 u.phone_number?.includes(q);
 
-            const matchRole =
-                roleFilter !== null
-                    ? u.role === roleFilter
-                    : activeTab === 'all' || u.role === activeTab;
+            const matchRole = roleFilter !== null
+                ? (u.role === roleFilter && !u.deleted_at)
+                : (activeTab === 'all' && !u.deleted_at) || 
+                  (activeTab === 'archived' && !!u.deleted_at) || 
+                  (u.role === activeTab && !u.deleted_at);
 
             return matchSearch && matchRole;
         });
@@ -88,11 +91,12 @@ export default function UserManagement({
     // Role Counts for Tab Badges
     const counts = useMemo(() => {
         return {
-            all: users.length,
-            dispatcher: users.filter((u) => u.role === 'dispatcher').length,
-            responder: users.filter((u) => u.role === 'responder').length,
-            admin: users.filter((u) => u.role === 'admin').length,
-            resident: users.filter((u) => u.role === 'resident').length,
+            all: users.filter(u => !u.deleted_at).length,
+            dispatcher: users.filter((u) => u.role === 'dispatcher' && !u.deleted_at).length,
+            responder: users.filter((u) => u.role === 'responder' && !u.deleted_at).length,
+            admin: users.filter((u) => u.role === 'admin' && !u.deleted_at).length,
+            resident: users.filter((u) => u.role === 'resident' && !u.deleted_at).length,
+            archived: users.filter(u => !!u.deleted_at).length,
         };
     }, [users]);
 
@@ -133,14 +137,32 @@ export default function UserManagement({
         if (!deleteTarget) return;
         setDeleting(true);
         router.delete(`${submitUrlPrefix}/${deleteTarget.id}`, {
+            preserveScroll: true,
             onSuccess: () => {
                 setDeleteTarget(null);
                 setDeleting(false);
-                toast.success('User deleted successfully.');
+                toast.success('User archived successfully.');
             },
             onError: () => {
                 setDeleting(false);
-                toast.error('Failed to delete user.');
+                toast.error('Failed to archive user.');
+            },
+        });
+    };
+
+    const handleRestore = () => {
+        if (!restoreTarget) return;
+        setRestoring(true);
+        router.post(`${submitUrlPrefix}/${restoreTarget.id}/restore`, {}, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setRestoreTarget(null);
+                setRestoring(false);
+                toast.success('User restored successfully.');
+            },
+            onError: () => {
+                setRestoring(false);
+                toast.error('Failed to restore user.');
             },
         });
     };
@@ -247,11 +269,11 @@ export default function UserManagement({
                     {/* Role Filter Tabs (Only shown when not locked to a specific role) */}
                     {!roleFilter ? (
                         <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-white/5 self-start overflow-x-auto max-w-full">
-                            {[
                                 { id: 'all', label: 'All Roles', count: counts.all },
                                 { id: 'dispatcher', label: 'Dispatchers', count: counts.dispatcher },
                                 { id: 'responder', label: 'Responders', count: counts.responder },
                                 { id: 'admin', label: 'Admins', count: counts.admin },
+                                { id: 'archived', label: 'Archived', count: counts.archived },
                             ].map((tab) => (
                                 <button
                                     key={tab.id}
@@ -303,6 +325,8 @@ export default function UserManagement({
                         onEdit={openEdit}
                         onResetPassword={setResetTarget}
                         onDelete={setDeleteTarget}
+                        onRestore={setRestoreTarget}
+                        isArchivedTab={activeTab === 'archived'}
                     />
 
                     {pagination && (
@@ -332,13 +356,28 @@ export default function UserManagement({
                 onClose={() => setDeleteTarget(null)}
                 onConfirm={handleDelete}
                 loading={deleting}
-                title="Delete User"
+                title="Archive User"
                 description={
                     deleteTarget
-                        ? `Are you sure you want to delete ${deleteTarget.first_name} ${deleteTarget.last_name}? This action is permanent.`
+                        ? `Are you sure you want to archive ${deleteTarget.first_name} ${deleteTarget.last_name}? They will not be able to log in.`
                         : ''
                 }
-                confirmLabel="Delete"
+                confirmLabel="Archive"
+            />
+
+            <ConfirmDialog
+                open={!!restoreTarget}
+                onClose={() => setRestoreTarget(null)}
+                onConfirm={handleRestore}
+                loading={restoring}
+                title="Restore User"
+                description={
+                    restoreTarget
+                        ? `Are you sure you want to restore ${restoreTarget.first_name} ${restoreTarget.last_name}? They will regain access to the system.`
+                        : ''
+                }
+                confirmLabel="Restore"
+                variant="primary"
             />
 
             <ConfirmDialog
