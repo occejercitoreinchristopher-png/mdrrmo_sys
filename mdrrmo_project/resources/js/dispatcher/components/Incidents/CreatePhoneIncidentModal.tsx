@@ -1892,10 +1892,9 @@ export default function CreatePhoneIncidentModal({
                                                         <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping shrink-0" />
                                                         <span className="truncate">{customPlaceName || 'Drag to fine-tune pin'}</span>
                                                     </div>
-                                                    <div className="relative">
-                                                        <div className="w-9 h-9 rounded-full bg-rose-600 flex items-center justify-center text-white shadow-xl shadow-rose-600/50 ring-4 ring-rose-500/30">
-                                                            <MapPin className="w-5 h-5 fill-white text-rose-600" />
-                                                        </div>
+                                                    <div className="relative flex flex-col items-center">
+                                                        <MapPin className="w-10 h-10 fill-rose-600 text-white drop-shadow-[0_4px_8px_rgba(220,38,38,0.6)]" strokeWidth={1.5} />
+                                                        <div className="w-4 h-1.5 bg-black/30 rounded-[50%] blur-[1px] -mt-1.5" />
                                                     </div>
                                                 </div>
                                             </Marker>
