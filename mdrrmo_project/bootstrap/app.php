@@ -28,6 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
             EnsurePasswordNotExpired::class,
         ]);
 
+        $middleware->api(append: [
+            EnsurePasswordNotExpired::class,
+        ]);
+
         $middleware->alias([
             'role' => EnsureRole::class,
         ]);

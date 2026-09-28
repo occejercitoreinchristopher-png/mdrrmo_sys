@@ -21,6 +21,13 @@ class EnsurePasswordNotExpired
         if ($user && $user->password_change_required) {
             // Check if the temporary password has expired (e.g. 24 hours)
             if ($user->temporary_password_expires_at && $user->temporary_password_expires_at->isPast()) {
+                if ($request->expectsJson()) {
+                    $request->user()->currentAccessToken()->delete();
+                    return response()->json([
+                        'message' => 'Your temporary password has expired. Please contact your administrator for assistance.',
+                    ], 401);
+                }
+
                 Auth::guard('web')->logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
@@ -31,8 +38,20 @@ class EnsurePasswordNotExpired
             }
 
             // Allowed routes when password change is required
-            if (! $request->routeIs('password.change', 'password.change.update', 'logout')) {
-                return redirect()->route('password.change');
+            if ($request->expectsJson()) {
+                // Determine the allowed path for API based on role
+                $isAllowedApiRoute = $request->is('api/auth/logout') || $request->is('api/auth/user') || $request->is('api/*/profile/password');
+                
+                if (! $isAllowedApiRoute) {
+                    return response()->json([
+                        'message' => 'You must change your password before continuing.',
+                        'password_change_required' => true,
+                    ], 403);
+                }
+            } else {
+                if (! $request->routeIs('password.change', 'password.change.update', 'logout')) {
+                    return redirect()->route('password.change');
+                }
             }
         }
 
