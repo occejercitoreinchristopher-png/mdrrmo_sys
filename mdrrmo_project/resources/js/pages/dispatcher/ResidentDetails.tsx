@@ -307,25 +307,29 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
                 {/* 1. HERO & BANNER CARD */}
                 <div className="relative rounded-3xl overflow-hidden bg-white dark:bg-[#0c1220] border border-slate-200/90 dark:border-white/10 shadow-sm">
                     {/* Architectural Ambient Cover Banner */}
-                    <div className="relative h-40 sm:h-48 w-full bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 overflow-hidden">
-                        <div
-                            className="absolute inset-0 opacity-20 pointer-events-none"
+                    <div className="relative h-40 sm:h-48 w-full bg-slate-950 overflow-hidden">
+                        {/* High-tech Professional Grid Pattern */}
+                        <div 
+                            className="absolute inset-0 opacity-[0.15] pointer-events-none"
                             style={{
-                                backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.3) 1px, transparent 0)`,
-                                backgroundSize: '20px 20px',
+                                backgroundImage: `linear-gradient(to right, #808080 1px, transparent 1px), linear-gradient(to bottom, #808080 1px, transparent 1px)`,
+                                backgroundSize: '32px 32px',
                             }}
                         />
-                        <div className="absolute -top-16 -right-16 w-80 h-80 rounded-full bg-blue-500/20 blur-3xl pointer-events-none" />
-                        <div className="absolute -bottom-16 left-1/4 w-80 h-80 rounded-full bg-cyan-500/15 blur-3xl pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/50 to-slate-950 pointer-events-none" />
+                        
+                        {/* Elegant Ambient lighting */}
+                        <div className="absolute -top-24 -right-12 w-96 h-96 rounded-full bg-indigo-500/20 blur-[80px] pointer-events-none" />
+                        <div className="absolute -bottom-24 -left-12 w-96 h-96 rounded-full bg-blue-500/15 blur-[80px] pointer-events-none" />
 
                         {/* Banner Agency Watermark / Title */}
                         <div className="absolute inset-0 px-6 sm:px-8 flex items-center justify-between pointer-events-none">
                             <div className="space-y-1">
-                                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase bg-white/10 text-cyan-200 backdrop-blur-md border border-white/15">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                    Resident Database
+                                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest uppercase bg-white/10 text-white backdrop-blur-md border border-white/20 shadow-sm">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                                    Community Member Profile
                                 </span>
-                                <p className="text-white/60 text-xs sm:text-sm font-medium tracking-wide uppercase">
+                                <p className="text-white/60 text-xs sm:text-sm font-semibold tracking-wide uppercase mt-1">
                                     MDRRMO OPOL • Misamis Oriental Operations Center
                                 </p>
                             </div>
