@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, Head, usePage } from '@inertiajs/react';
 import {
-    ArrowLeft, User, Mail, Phone, MapPin, Calendar, Shield, CheckCircle2, Clock, AlertTriangle, Eye, Copy, Check, Truck, Smartphone, UserCheck, PhoneCall, Home, FileText, Activity, ShieldAlert, ShieldCheck, Hash, Cake
+    ArrowLeft, User as UserIcon, Mail, Phone, MapPin, Calendar, Shield, CheckCircle2, Clock, AlertTriangle, Eye, Copy, Check, Truck, Smartphone, UserCheck, PhoneCall, Home, FileText, Activity, ShieldAlert, ShieldCheck, Hash, Cake
 } from 'lucide-react';
 import DispatcherLayout from '@/dispatcher/layouts/DispatcherLayout';
 import AdminLayout from '@/admin/layouts/AdminLayout';
