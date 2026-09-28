@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Dispatcher;
 
 use App\Http\Controllers\Controller;
 use App\Models\Barangay;
+use App\Models\Incident;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -65,6 +66,22 @@ class ResidentController extends Controller
         $residents = $query->paginate(15)->withQueryString();
         $barangays = Barangay::orderBy('barangay_name')->get(['id', 'barangay_name']);
 
+        // Fetch anonymous SIM/phone callers (incidents with no linked resident)
+        $simCallersQuery = Incident::whereNull('resident_id')
+            ->where('report_source', 'phone_sim')
+            ->with(['incidentType'])
+            ->latest('reported_at');
+
+        if ($request->filled('sim_search')) {
+            $simSearch = trim($request->sim_search);
+            $simCallersQuery->where(function ($q) use ($simSearch) {
+                $q->where('caller_phone_number', 'like', "%{$simSearch}%")
+                  ->orWhere('caller_name', 'like', "%{$simSearch}%");
+            });
+        }
+
+        $simCallers = $simCallersQuery->paginate(15, ['*'], 'sim_page')->withQueryString();
+
         return Inertia::render('dispatcher/Residents', [
             'residents' => $residents,
             'barangays' => $barangays,
@@ -73,7 +90,9 @@ class ResidentController extends Controller
                 'barangay' => $request->barangay ?? '',
                 'sort' => $sort,
                 'direction' => $direction,
+                'sim_search' => $request->sim_search ?? '',
             ],
+            'simCallers' => $simCallers,
         ]);
     }
 
