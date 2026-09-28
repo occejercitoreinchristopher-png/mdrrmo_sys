@@ -89,7 +89,7 @@ export default function ActiveDispatchWorkspace({
             channel.listen('DispatchStatusUpdated', refreshData);
             channel.listen('.DispatchStatusUpdated', refreshData);
 
-            channel.listen('AmbulanceLocationUpdated', (e: any) => {
+            const handleLocationUpdate = (e: any) => {
                 const lat = parseFloat(e.latitude ?? e.ambulance?.latitude);
                 const lng = parseFloat(e.longitude ?? e.ambulance?.longitude);
                 if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
@@ -109,10 +109,14 @@ export default function ActiveDispatchWorkspace({
                         ...(e.ambulance?.id ? { [e.ambulance.id]: locData } : {}),
                     }));
                 }
-            });
+            };
+
+            channel.listen('AmbulanceLocationUpdated', handleLocationUpdate);
+            channel.listen('.AmbulanceLocationUpdated', handleLocationUpdate);
 
             return () => {
                 channel.stopListening('AmbulanceLocationUpdated');
+                channel.stopListening('.AmbulanceLocationUpdated');
                 channel.stopListening('IncidentVerified');
                 channel.stopListening('.IncidentVerified');
                 channel.stopListening('IncidentCreated');

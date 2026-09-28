@@ -39,6 +39,7 @@ export default function DispatcherLayout({ children, title }) {
                 channel.stopListening('DispatchAccepted');
                 channel.stopListening('DispatchStatusUpdated');
                 channel.stopListening('AmbulanceLocationUpdated');
+                channel.stopListening('.AmbulanceLocationUpdated');
                 channel.stopListening('ResponderStatusUpdated');
                 channel.stopListening('LeaveRequestSubmitted');
                 channel.stopListening('LeaveApproved');
