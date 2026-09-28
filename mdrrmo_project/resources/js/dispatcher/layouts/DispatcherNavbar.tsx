@@ -122,24 +122,6 @@ export default function DispatcherNavbar({ collapsed, onToggle }) {
                     )}
                 </div>
 
-                {/* Siren Audio Test Button */}
-                <button
-                    className={`relative p-2 rounded-xl transition-all cursor-pointer ${
-                        isPlaying
-                            ? 'bg-red-500/15 text-red-600 dark:text-red-400 ring-1 ring-red-500/40 animate-pulse'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10'
-                    }`}
-                    onClick={testAlarm}
-                    title={isPlaying ? 'Emergency Siren Sounding (Click to silence)' : 'Test Loud Incident Alarm Sound'}
-                >
-                    <Volume2 className={`w-4 h-4 ${isPlaying ? 'text-red-600 dark:text-red-400 animate-bounce' : ''}`} />
-                    {isPlaying && (
-                        <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-                        </span>
-                    )}
-                </button>
 
                 {/* Theme Mode Toggle (Light / Dark) */}
                 <ThemeToggle />
