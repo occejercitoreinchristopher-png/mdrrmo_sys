@@ -269,6 +269,7 @@ export default function UserManagement({
                     {/* Role Filter Tabs (Only shown when not locked to a specific role) */}
                     {!roleFilter ? (
                         <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-white/5 self-start overflow-x-auto max-w-full">
+                            {[
                                 { id: 'all', label: 'All Roles', count: counts.all },
                                 { id: 'dispatcher', label: 'Dispatchers', count: counts.dispatcher },
                                 { id: 'responder', label: 'Responders', count: counts.responder },
