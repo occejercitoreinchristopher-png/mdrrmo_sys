@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { KeyRound, Pencil, Trash2, User as UserIcon, Shield, Radio, Ambulance, Users } from 'lucide-react';
+import { router } from '@inertiajs/react';
+import { KeyRound, Pencil, Trash2, User as UserIcon, Shield, Radio, Ambulance, Users, Eye } from 'lucide-react';
 import Button from '@/shared/components/Button';
 import DataTable, { Column } from '@/shared/components/DataTable';
 import StatusBadge from '@/shared/components/StatusBadge';
@@ -167,7 +168,21 @@ export default function UserTable({ users = [], loading = false, onEdit, onReset
             header: 'Manage',
             render: (_, row) => {
                 if (row.role === 'resident') {
-                    return <span className="text-xs text-slate-400 dark:text-slate-500 italic">View Only</span>;
+                    return (
+                        <Button
+                            size="xs"
+                            variant="secondary"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                const baseUrl = window.location.pathname.startsWith('/admin') ? '/admin' : '/dispatcher';
+                                router.get(`${baseUrl}/residents/${row.id}`);
+                            }}
+                            className="hover:bg-slate-200 dark:hover:bg-white/15 border border-slate-200/80 dark:border-white/10"
+                        >
+                            <Eye className="w-3 h-3" />
+                            <span>View Profile</span>
+                        </Button>
+                    );
                 }
                 
                 return (

@@ -23,7 +23,9 @@ import {
     Activity,
     ShieldAlert,
 } from 'lucide-react';
+import { usePage } from '@inertiajs/react';
 import DispatcherLayout from '@/dispatcher/layouts/DispatcherLayout';
+import AdminLayout from '@/admin/layouts/AdminLayout';
 import Card from '@/shared/components/Card';
 import Button from '@/shared/components/Button';
 import StatusBadge from '@/shared/components/StatusBadge';
@@ -122,6 +124,9 @@ interface ResidentDetailsProps {
 }
 
 export default function ResidentDetailsPage({ resident, incidents = [] }: ResidentDetailsProps) {
+    const { auth } = usePage().props as any;
+    const Layout = auth?.user?.role === 'admin' ? AdminLayout : DispatcherLayout;
+    
     const [selectedIncident, setSelectedIncident] = useState<IncidentRecord | null>(null);
     const [copiedPhone, setCopiedPhone] = useState(false);
     const [resolvedLocations, setResolvedLocations] = useState<Record<number, string>>({});
@@ -261,12 +266,12 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
     };
 
     return (
-        <DispatcherLayout title={`Resident: ${fullName}`}>
+        <Layout title={`Resident: ${fullName}`}>
             <div className="space-y-6 max-w-7xl mx-auto pb-16">
                 {/* Back button and Top bar */}
                 <div className="flex items-center justify-between">
                     <Link
-                        href="/dispatcher/residents"
+                        href={auth?.user?.role === 'admin' ? '/admin/residents' : '/dispatcher/residents'}
                         className="group inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-950 dark:text-slate-200 dark:hover:text-white bg-white hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200/80 dark:border-white/10 shadow-sm transition-all duration-150 cursor-pointer"
                     >
                         <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:text-slate-900 dark:text-slate-400 dark:group-hover:text-white group-hover:-translate-x-0.5 transition-transform" />
@@ -582,6 +587,6 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
                     />
                 )}
             </div>
-        </DispatcherLayout>
+        </Layout>
     );
 }

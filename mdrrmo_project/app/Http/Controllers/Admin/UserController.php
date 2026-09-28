@@ -69,6 +69,33 @@ class UserController extends Controller
         ]);
     }
 
+    public function showResident(User $resident)
+    {
+        if ($resident->role !== 'resident') {
+            abort(404, 'Resident not found.');
+        }
+
+        $resident->load(['residentProfile.barangay']);
+        $resident->loadCount('reportedIncidents');
+
+        $incidents = $resident->reportedIncidents()
+            ->with([
+                'resident',
+                'incidentType',
+                'images',
+                'dispatches' => function ($q) {
+                    $q->with(['ambulance', 'driver', 'emt', 'teamLeader', 'patientCareRecord']);
+                },
+            ])
+            ->latest('reported_at')
+            ->get();
+
+        return Inertia::render('dispatcher/ResidentDetails', [
+            'resident' => $resident,
+            'incidents' => $incidents,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $isDispatcher = auth()->user()?->role === 'dispatcher';

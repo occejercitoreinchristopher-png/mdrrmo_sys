@@ -7,10 +7,10 @@ export default function IncidentIntelligence({ incidents }) {
     const isDark = theme === 'dark';
 
     // Calculate Trend Data (Reported vs Resolved per month or day based on date span)
-    const trends = {};
-    const typeDistribution = {};
-    const statusDistribution = {};
-    const barangayActivity = {};
+    const trends: Record<string, { reported: number; resolved: number }> = {};
+    const typeDistribution: Record<string, number> = {};
+    const statusDistribution: Record<string, number> = {};
+    const barangayActivity: Record<string, { total: number; resolved: number; rejected: number }> = {};
 
     incidents.forEach(inc => {
         // Trend (group by Month for now, could be Day if span is short)
@@ -59,7 +59,7 @@ export default function IncidentIntelligence({ incidents }) {
         yaxis: { labels: { style: { colors: isDark ? '#94a3b8' : '#64748b', fontSize: '11px' } } },
         grid: { borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', strokeDashArray: 4 },
         dataLabels: { enabled: false },
-        tooltip: { theme: isDark ? 'dark' : 'light' },
+        tooltip: { theme: (isDark ? 'dark' : 'light') as 'dark' | 'light' },
     });
 
     return (
@@ -111,7 +111,7 @@ export default function IncidentIntelligence({ incidents }) {
                                 options={{
                                     chart: { type: 'donut', background: 'transparent' },
                                     labels: typeLabels,
-                                    theme: { mode: isDark ? 'dark' : 'light' },
+                                    theme: { mode: (isDark ? 'dark' : 'light') as 'dark' | 'light' },
                                     dataLabels: { enabled: true, formatter: (val) => `${Number(val).toFixed(1)}%` },
                                     legend: { position: 'bottom' },
                                     stroke: { show: false }
@@ -136,7 +136,7 @@ export default function IncidentIntelligence({ incidents }) {
                                 options={{
                                     chart: { type: 'pie', background: 'transparent' },
                                     labels: statusLabels,
-                                    theme: { mode: isDark ? 'dark' : 'light' },
+                                    theme: { mode: (isDark ? 'dark' : 'light') as 'dark' | 'light' },
                                     colors: ['#64748b', '#3b82f6', '#8b5cf6', '#eab308', '#10b981', '#ef4444'],
                                     dataLabels: { enabled: true, formatter: (val) => `${Number(val).toFixed(1)}%` },
                                     legend: { position: 'bottom' },

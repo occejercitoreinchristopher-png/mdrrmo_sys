@@ -88,6 +88,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
     Route::get('/users', [UserController::class, 'index'])->name('users');
     Route::get('/residents', [UserController::class, 'residents'])->name('residents');
+    Route::get('/residents/{resident}', [UserController::class, 'showResident'])->name('residents.show');
 
     Route::post('/users', [UserController::class, 'store'])->name('users.store');
     Route::post('/users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
