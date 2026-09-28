@@ -66,21 +66,46 @@ class ResidentController extends Controller
         $residents = $query->paginate(15)->withQueryString();
         $barangays = Barangay::orderBy('barangay_name')->get(['id', 'barangay_name']);
 
-        // Fetch anonymous SIM/phone callers (incidents with no linked resident)
-        $simCallersQuery = Incident::whereNull('resident_id')
+        // Fetch anonymous SIM/phone callers grouped by phone number with call count
+        $simSearch = $request->filled('sim_search') ? trim($request->sim_search) : null;
+
+        $simCallersRaw = Incident::whereNull('resident_id')
             ->where('report_source', 'phone_sim')
-            ->with(['incidentType'])
-            ->latest('reported_at');
+            ->whereNotNull('caller_phone_number')
+            ->when($simSearch, function ($q) use ($simSearch) {
+                $q->where(function ($inner) use ($simSearch) {
+                    $inner->where('caller_phone_number', 'like', "%{$simSearch}%")
+                          ->orWhere('caller_name', 'like', "%{$simSearch}%");
+                });
+            })
+            ->selectRaw('
+                caller_phone_number,
+                MAX(caller_name) as caller_name,
+                COUNT(*) as total_calls,
+                MAX(reported_at) as last_called_at,
+                MAX(id) as latest_incident_id
+            ')
+            ->groupBy('caller_phone_number')
+            ->orderByDesc('total_calls')
+            ->orderByDesc('last_called_at')
+            ->paginate(15, ['*'], 'sim_page')
+            ->withQueryString();
 
-        if ($request->filled('sim_search')) {
-            $simSearch = trim($request->sim_search);
-            $simCallersQuery->where(function ($q) use ($simSearch) {
-                $q->where('caller_phone_number', 'like', "%{$simSearch}%")
-                  ->orWhere('caller_name', 'like', "%{$simSearch}%");
-            });
-        }
+        // Attach latest incident type for each grouped caller
+        $latestIncidentIds = $simCallersRaw->pluck('latest_incident_id')->filter()->values();
+        $latestIncidents = Incident::whereIn('id', $latestIncidentIds)
+            ->with('incidentType')
+            ->get()
+            ->keyBy('id');
 
-        $simCallers = $simCallersQuery->paginate(15, ['*'], 'sim_page')->withQueryString();
+        $simCallers = $simCallersRaw->through(function ($row) use ($latestIncidents) {
+            $latest = $latestIncidents->get($row->latest_incident_id);
+            $row->incident_type = $latest?->incidentType;
+            $row->place_of_incident = $latest?->place_of_incident;
+            $row->incident_address = $latest?->incident_address;
+            $row->incident_status = $latest?->incident_status ?? 'verified';
+            return $row;
+        });
 
         return Inertia::render('dispatcher/Residents', [
             'residents' => $residents,

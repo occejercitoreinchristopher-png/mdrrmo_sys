@@ -62,12 +62,14 @@ interface ResidentUser {
 }
 
 interface SimCallerIncident {
-    id: number;
+    id?: number;
     caller_name?: string | null;
     caller_phone_number?: string | null;
     incident_status: string;
     report_source?: string;
     reported_at?: string | null;
+    last_called_at?: string | null;
+    total_calls?: number;
     place_of_incident?: string | null;
     incident_address?: string | null;
     incident_type?: { incident_type_name?: string; name?: string } | null;
@@ -614,10 +616,10 @@ export default function ResidentsPage({ residents, simCallers, barangays = [], f
                                 <tr className="border-b border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.03]">
                                     <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Caller</th>
                                     <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Phone Number</th>
-                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Incident Type</th>
+                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400 text-center">Total Calls</th>
+                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Last Incident Type</th>
                                     <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Location</th>
-                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Status</th>
-                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Reported At</th>
+                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Last Called</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200/80 dark:divide-white/5">
@@ -636,20 +638,22 @@ export default function ResidentsPage({ residents, simCallers, barangays = [], f
                                         </td>
                                     </tr>
                                 ) : (
-                                    simCallerList.map((inc) => {
+                                    simCallerList.map((inc, idx) => {
                                         const callerName = inc.caller_name ? toPascalCase(inc.caller_name) : 'Unknown Caller';
                                         const incidentTypeName = inc.incident_type?.incident_type_name || inc.incident_type?.name || 'General';
                                         const location = inc.place_of_incident || inc.incident_address || 'No location';
-                                        const reportedAt = inc.reported_at
-                                            ? new Date(inc.reported_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                        const lastCalled = (inc.last_called_at || inc.reported_at)
+                                            ? new Date((inc.last_called_at || inc.reported_at)!).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
                                             : '—';
+                                        const callCount = inc.total_calls ?? 1;
+                                        const isFrequent = callCount >= 3;
 
                                         return (
-                                            <tr key={inc.id} className="hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors group">
+                                            <tr key={inc.caller_phone_number ?? idx} className="hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors group">
                                                 {/* Caller */}
                                                 <td className="px-5 py-4">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-500/20 flex items-center justify-center flex-shrink-0">
+                                                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border ${isFrequent ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-300/40 dark:border-rose-500/20' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-200/60 dark:border-amber-500/20'}`}>
                                                             <UserX className="w-4 h-4" />
                                                         </div>
                                                         <div>
@@ -665,6 +669,20 @@ export default function ResidentsPage({ residents, simCallers, barangays = [], f
                                                 {/* Phone */}
                                                 <td className="px-5 py-4 font-mono text-xs text-slate-700 dark:text-slate-200">
                                                     {inc.caller_phone_number || '—'}
+                                                </td>
+
+                                                {/* Total Calls */}
+                                                <td className="px-5 py-4 text-center">
+                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                                                        callCount >= 5
+                                                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/25'
+                                                            : callCount >= 3
+                                                            ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/25'
+                                                            : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border-slate-200/60 dark:border-white/10'
+                                                    }`}>
+                                                        <PhoneCall className="w-3 h-3" />
+                                                        {callCount}x {callCount >= 5 ? '— Frequent!' : callCount >= 3 ? '— Repeat' : ''}
+                                                    </span>
                                                 </td>
 
                                                 {/* Incident Type */}
@@ -683,16 +701,11 @@ export default function ResidentsPage({ residents, simCallers, barangays = [], f
                                                     </div>
                                                 </td>
 
-                                                {/* Status */}
-                                                <td className="px-5 py-4">
-                                                    <StatusBadge status={inc.incident_status} />
-                                                </td>
-
-                                                {/* Reported At */}
+                                                {/* Last Called */}
                                                 <td className="px-5 py-4 text-xs text-slate-500 dark:text-slate-400">
                                                     <div className="flex items-center gap-1.5">
                                                         <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                                                        {reportedAt}
+                                                        {lastCalled}
                                                     </div>
                                                 </td>
                                             </tr>
