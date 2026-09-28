@@ -35,7 +35,7 @@ class DashboardController extends Controller
 
         // Other key metrics
         $resolvedToday = Incident::where('incident_status', 'resolved')
-            ->whereDate('updated_at', Carbon::today())
+            ->whereDate('resolved_at', Carbon::today())
             ->count();
 
         $pendingDispatch = Incident::whereIn('incident_status', ['verified', 'pending'])->count();
@@ -53,20 +53,22 @@ class DashboardController extends Controller
             'total_dispatches' => $totalDispatches,
         ];
 
-        // Past 7 months timeline
+        // Current Year Monthly Trend (Jan - Dec)
         $months = [];
         $monthlyIncidents = [];
         $monthlyResolved = [];
+        $currentYear = $now->year;
 
-        for ($i = 6; $i >= 0; $i--) {
-            $m = $now->copy()->subMonths($i);
-            $months[] = $m->format('M');
-            $start = $m->copy()->startOfMonth();
-            $end = $m->copy()->endOfMonth();
+        for ($m = 1; $m <= 12; $m++) {
+            $monthDate = Carbon::create($currentYear, $m, 1);
+            $months[] = $monthDate->format('M');
+            
+            $start = $monthDate->copy()->startOfMonth();
+            $end = $monthDate->copy()->endOfMonth();
 
             $monthlyIncidents[] = Incident::whereBetween('created_at', [$start, $end])->count();
             $monthlyResolved[] = Incident::where('incident_status', 'resolved')
-                ->whereBetween('updated_at', [$start, $end])
+                ->whereBetween('resolved_at', [$start, $end])
                 ->count();
         }
 
@@ -124,11 +126,45 @@ class DashboardController extends Controller
                 ];
             });
 
+        // Incident Status Overview
+        $statusOverview = Incident::select('incident_status', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
+            ->groupBy('incident_status')
+            ->pluck('count', 'incident_status')
+            ->toArray();
+
+        // Incidents by Barangay
+        $allIncidentsForBarangay = Incident::with(['resident.residentProfile.barangay'])->get();
+        $barangayCounts = [];
+        foreach ($allIncidentsForBarangay as $inc) {
+            $b = $inc->barangay ?? 'Unknown';
+            if (!isset($barangayCounts[$b])) $barangayCounts[$b] = 0;
+            $barangayCounts[$b]++;
+        }
+        arsort($barangayCounts);
+        
+        $incidentsByBarangay = [];
+        foreach ($barangayCounts as $name => $count) {
+            $incidentsByBarangay[] = ['name' => $name, 'count' => $count];
+        }
+
+        // Ambulance Status
+        $ambulanceStatuses = Ambulance::select('status', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+
+        $extraData = [
+            'status_overview' => $statusOverview,
+            'incidents_by_barangay' => $incidentsByBarangay,
+            'ambulance_status' => $ambulanceStatuses,
+        ];
+
         return Inertia::render('admin/Dashboard', [
             'stats' => $stats,
             'charts' => $charts,
             'recentIncidents' => $recentIncidents,
             'recentDispatches' => $recentDispatches,
+            'extraData' => $extraData,
         ]);
     }
 }

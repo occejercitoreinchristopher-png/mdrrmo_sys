@@ -68,7 +68,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
         },
         stroke: { curve: 'smooth', width: 2 },
         xaxis: {
-            categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+            categories: charts.months ?? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
             labels: { style: { colors: '#64748b' } },
             axisBorder: { show: false },
             axisTicks: { show: false },
