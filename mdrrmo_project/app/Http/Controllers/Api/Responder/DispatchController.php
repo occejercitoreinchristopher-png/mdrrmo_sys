@@ -248,7 +248,11 @@ class DispatchController extends Controller
             'patientCareRecord.images',
         ]);
 
-        broadcast(new DispatchCreated($dispatch));
+        try {
+            broadcast(new DispatchCreated($dispatch));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('DispatchCreated walk-in broadcast error: '.$e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Walk-in dispatch created successfully',
