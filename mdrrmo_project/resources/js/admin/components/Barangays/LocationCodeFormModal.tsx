@@ -592,8 +592,9 @@ export default function LocationCodeFormModal({
                                                     <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
                                                     <span>{code || name || 'Location Marker'}</span>
                                                 </div>
-                                                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white shadow-xl ring-4 ring-primary/30">
-                                                    <MapPin className="w-4 h-4 fill-white text-primary" />
+                                                <div className="relative flex flex-col items-center">
+                                                    <MapPin className="w-10 h-10 fill-rose-600 text-white drop-shadow-md" strokeWidth={1.5} />
+                                                    <div className="w-4 h-1.5 bg-black/30 rounded-[50%] blur-[1px] -mt-1.5" />
                                                 </div>
                                             </div>
                                         </Marker>
