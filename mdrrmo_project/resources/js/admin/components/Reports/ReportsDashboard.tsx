@@ -1,120 +1,123 @@
 import { useState } from 'react';
-import DashboardCards from '@/admin/components/Dashboard/DashboardCards';
-import ReportsCharts, { ChartsData } from './ReportsCharts';
-import ReportsTable, { Incident } from './ReportsTable';
-import ReportFilters, { ReportFiltersState } from './ReportFilters';
 import PageHeader from '@/shared/components/PageHeader';
-import { Download } from 'lucide-react';
+import { Download, Printer, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
-export interface ReportsDashboardProps {
-    stats?: Record<string, any>;
-    charts?: ChartsData;
-    incidents?: Incident[];
-}
+import ReportFilters from './ReportFilters';
+import ReportOverview from './ReportOverview';
+import IncidentIntelligence from './IncidentIntelligence';
+import ResponseOperations from './ResponseOperations';
+import PatientCareAnalytics from './PatientCareAnalytics';
+import ReportsGeographic from './ReportsGeographic';
 
-export default function ReportsDashboard({ stats = {}, charts = {}, incidents = [] }: ReportsDashboardProps) {
-    const [filters, setFilters] = useState<ReportFiltersState>({ dateFrom: '', dateTo: '', status: '', type: '' });
-
+export default function ReportsDashboard({ stats = {}, incidents = [], lookups = {}, initialFilters = {} }: any) {
+    
     const handleExportCSV = () => {
-        const filteredIncidents = incidents.filter((inc) => {
-            const matchStatus = !filters.status || inc.incident_status === filters.status;
-            const matchType = !filters.type || String(inc.incident_type_id) === String(filters.type);
-            const matchFrom = !filters.dateFrom || (inc.reported_at && new Date(inc.reported_at) >= new Date(filters.dateFrom));
-            const matchTo = !filters.dateTo || (inc.reported_at && new Date(inc.reported_at) <= new Date(filters.dateTo + 'T23:59:59'));
-            return matchStatus && matchType && matchFrom && matchTo;
-        });
-
         const headers = [
-            'Incident #',
-            'Incident Type',
-            'Priority',
-            'Status',
-            'Caller / Resident',
-            'Contact Number',
-            'Incident Address',
-            'Report Source',
-            'Location Source',
-            'Reported At',
-            'Resolved At',
+            'Incident #', 'Incident Type', 'Priority', 'Status', 'Barangay', 'Reported At', 'Resolved At'
         ];
-
+        
         const escapeCSV = (val: any) => {
             if (val === null || val === undefined) return '""';
-            const str = String(val).replace(/"/g, '""');
-            return `"${str}"`;
+            return `"${String(val).replace(/"/g, '""')}"`;
         };
 
         if (incidents.length === 0) {
-            // Generate empty CSV template with headers so user has a valid file
-            const csvContent = headers.map(escapeCSV).join(',') + '\r\n';
-            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `MDRRMO_Reports_Template_${new Date().toISOString().slice(0, 10)}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-
-            toast.info('No incident records found in the database. Downloaded standard CSV template.');
+            toast.warning('No incidents available to export.');
             return;
         }
 
-        if (filteredIncidents.length === 0) {
-            toast.warning('No incidents match the active filter criteria.');
-            return;
-        }
-
-        const rows = filteredIncidents.map((inc) => [
+        const rows = incidents.map((inc: any) => [
             escapeCSV(`#${inc.id}`),
             escapeCSV(inc.incident_type?.name ?? inc.incident_type?.incident_type_name ?? 'General'),
             escapeCSV(inc.priority ?? 'Moderate'),
             escapeCSV(inc.incident_status ?? 'pending'),
-            escapeCSV(inc.caller_name ?? (inc.resident ? `${inc.resident.first_name ?? ''} ${inc.resident.last_name ?? ''}`.trim() : 'N/A')),
-            escapeCSV(inc.caller_phone_number ?? inc.resident?.phone_number ?? 'N/A'),
-            escapeCSV(inc.incident_address ?? inc.place_of_incident ?? inc.location ?? 'N/A'),
-            escapeCSV(inc.report_source ?? 'N/A'),
-            escapeCSV(inc.location_source ?? 'N/A'),
+            escapeCSV(inc.barangay ?? 'N/A'),
             escapeCSV(inc.reported_at ? new Date(inc.reported_at).toLocaleString('en-PH') : 'N/A'),
             escapeCSV(inc.resolved_at ? new Date(inc.resolved_at).toLocaleString('en-PH') : 'N/A'),
         ]);
 
-        const csvContent = [headers.map(escapeCSV).join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+        const csvContent = [headers.map(escapeCSV).join(','), ...rows.map((r: any) => r.join(','))].join('\r\n');
         const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `MDRRMO_Incident_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.download = `MDRRMO_Report_${new Date().toISOString().slice(0, 10)}.csv`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
 
-        toast.success(`Successfully exported ${filteredIncidents.length} incident record(s) to CSV.`);
+        toast.success(`Exported ${incidents.length} record(s) to CSV.`);
+    };
+
+    const handlePrint = () => {
+        window.print();
     };
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="Reports & Analytics"
-                subtitle="High-level emergency intelligence, resolution rates, and dispatch timelines."
-                actions={
-                    <button
-                        onClick={handleExportCSV}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-semibold text-xs sm:text-sm shadow-sm hover:bg-slate-800 dark:hover:bg-slate-100 transition-all cursor-pointer active:scale-95"
-                    >
-                        <Download className="w-4 h-4" />
-                        <span>Export CSV</span>
-                    </button>
-                }
-            />
+        <div className="space-y-8 print:space-y-4 print:bg-white print:text-black">
+            
+            {/* Header (Hidden in print, replaced by specific print header) */}
+            <div className="print:hidden">
+                <PageHeader
+                    title="Reports & Analytics"
+                    subtitle="Operational performance, incident patterns, dispatch activity, and patient-care statistics"
+                />
+            </div>
 
-            <ReportFilters filters={filters} onChange={setFilters} />
-            <DashboardCards stats={stats} />
-            <ReportsCharts charts={charts} />
-            <ReportsTable incidents={incidents} filters={filters} />
+            {/* Print Only Header */}
+            <div className="hidden print:block mb-8 border-b-2 border-slate-900 pb-4">
+                <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">MDRRMO OPOL</h1>
+                <h2 className="text-xl font-bold text-slate-700">Emergency Medical Services Management System</h2>
+                <h3 className="text-lg font-semibold text-slate-600 mt-2">Operational Report</h3>
+                <div className="mt-4 text-sm text-slate-600 flex flex-col gap-1">
+                    <p><strong>Report Date:</strong> {new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                    <p><strong>Total Records:</strong> {incidents.length} incidents</p>
+                    {/* Display active filters */}
+                    <div className="mt-2 text-xs">
+                        <strong>Filters Applied: </strong>
+                        {Object.entries(initialFilters).filter(([_,v]) => v).length > 0 ? (
+                            Object.entries(initialFilters).filter(([_,v]) => v).map(([k,v]) => `${k.replace('_', ' ').toUpperCase()}: ${v}`).join(' | ')
+                        ) : 'None (All Records)'}
+                    </div>
+                </div>
+            </div>
+
+            {/* Global Filters */}
+            <ReportFilters initialFilters={initialFilters} lookups={lookups} />
+
+            {/* Actions for Web (Hidden in Print) */}
+            <div className="flex flex-wrap items-center gap-3 print:hidden border-b border-slate-200 dark:border-white/10 pb-6">
+                <button
+                    onClick={handleExportCSV}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-semibold text-xs sm:text-sm shadow-sm hover:bg-slate-800 dark:hover:bg-slate-100 transition-all cursor-pointer active:scale-95"
+                >
+                    <FileText className="w-4 h-4" />
+                    <span>Export CSV / Excel</span>
+                </button>
+                <button
+                    onClick={handlePrint}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-xs sm:text-sm shadow-sm hover:bg-indigo-700 transition-all cursor-pointer active:scale-95"
+                >
+                    <Printer className="w-4 h-4" />
+                    <span>Print PDF Report</span>
+                </button>
+            </div>
+
+            {/* Report Sections */}
+            <div className="space-y-12 print:space-y-8">
+                <ReportOverview stats={stats} />
+                <hr className="border-slate-200 dark:border-white/5 print:border-slate-300" />
+                <IncidentIntelligence incidents={incidents} />
+                <hr className="border-slate-200 dark:border-white/5 print:border-slate-300" />
+                <ResponseOperations stats={stats} incidents={incidents} />
+                <hr className="border-slate-200 dark:border-white/5 print:border-slate-300" />
+                <PatientCareAnalytics stats={stats} />
+                <hr className="border-slate-200 dark:border-white/5 print:hidden" />
+                <ReportsGeographic incidents={incidents} />
+            </div>
+            
         </div>
     );
 }
