@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Filter, RotateCcw, MapPin, Activity, Check, Search, X, CheckSquare, Square, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { Filter, RotateCcw, MapPin, Activity, Check, Search, X, CheckSquare, Square, ChevronDown, ChevronUp, AlertTriangle, Calendar } from 'lucide-react';
 
 export interface ArchiveFilterSidebarProps {
     barangays: string[];
@@ -12,6 +12,10 @@ export interface ArchiveFilterSidebarProps {
     setSearchQuery: (query: string) => void;
     barangayCounts?: Record<string, number>;
     complaintCounts?: Record<string, number>;
+    startDate?: string;
+    setStartDate?: (date: string) => void;
+    endDate?: string;
+    setEndDate?: (date: string) => void;
     totalFilteredCount: number;
     totalAllCount: number;
     onReset: () => void;
@@ -29,6 +33,10 @@ export default function ArchiveFilterSidebar({
     setSearchQuery,
     barangayCounts = {},
     complaintCounts = {},
+    startDate = '',
+    setStartDate,
+    endDate = '',
+    setEndDate,
     totalFilteredCount,
     totalAllCount,
     onReset,
@@ -38,9 +46,10 @@ export default function ArchiveFilterSidebar({
     const [complaintSearch, setComplaintSearch] = useState('');
     const [isBarangayOpen, setIsBarangayOpen] = useState(true);
     const [isComplaintOpen, setIsComplaintOpen] = useState(true);
+    const [isDateRangeOpen, setIsDateRangeOpen] = useState(true);
 
-    const hasActiveFilters = selectedBarangays.length > 0 || selectedComplaints.length > 0 || searchQuery.trim().length > 0;
-    const totalActiveFiltersCount = selectedBarangays.length + selectedComplaints.length + (searchQuery.trim() ? 1 : 0);
+    const hasActiveFilters = selectedBarangays.length > 0 || selectedComplaints.length > 0 || searchQuery.trim().length > 0 || !!startDate || !!endDate;
+    const totalActiveFiltersCount = selectedBarangays.length + selectedComplaints.length + (searchQuery.trim() ? 1 : 0) + (startDate ? 1 : 0) + (endDate ? 1 : 0);
 
     const toggleBarangay = (name: string) => {
         if (selectedBarangays.includes(name)) {
@@ -148,7 +157,61 @@ export default function ArchiveFilterSidebar({
             {/* Scrollable Filters Content */}
             <div className={`flex-1 overflow-y-auto p-3.5 min-h-0 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10 ${orientation === 'horizontal' ? 'flex flex-row gap-4 items-start' : 'space-y-4'}`}>
                 
-                {/* 1. BARANGAY FILTER */}
+                {/* 1. DATE RANGE FILTER */}
+                <div className={`rounded-xl border border-slate-200/70 dark:border-white/5 bg-slate-50/30 dark:bg-white/[0.01] p-2.5 ${orientation === 'horizontal' ? 'flex-1 min-w-[200px]' : ''}`}>
+                    <div className="flex items-center justify-between mb-2">
+                        <button
+                            onClick={() => setIsDateRangeOpen(!isDateRangeOpen)}
+                            className="flex items-center gap-1.5 text-left font-bold text-xs text-slate-900 dark:text-white uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer"
+                        >
+                            <Calendar className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                            <span>Date Range</span>
+                            {(startDate || endDate) && (
+                                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-800 px-1.5 py-0.2 rounded">
+                                    Active
+                                </span>
+                            )}
+                            {isDateRangeOpen ? (
+                                <ChevronUp className="w-3.5 h-3.5 text-slate-400 ml-0.5" />
+                            ) : (
+                                <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5" />
+                            )}
+                        </button>
+                        {(startDate || endDate) && (
+                            <button
+                                onClick={() => { setStartDate?.(''); setEndDate?.(''); }}
+                                className="text-[11px] text-slate-500 hover:underline font-medium cursor-pointer"
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
+                    
+                    {isDateRangeOpen && (
+                        <div className="flex flex-col gap-2 mt-2">
+                            <div>
+                                <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Start Date (MM/DD/YYYY)</label>
+                                <input
+                                    type="date"
+                                    value={startDate || ''}
+                                    onChange={(e) => setStartDate?.(e.target.value)}
+                                    className="w-full text-[11px] px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">End Date (MM/DD/YYYY)</label>
+                                <input
+                                    type="date"
+                                    value={endDate || ''}
+                                    onChange={(e) => setEndDate?.(e.target.value)}
+                                    className="w-full text-[11px] px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* 2. BARANGAY FILTER */}
                 <div className={`rounded-xl border border-slate-200/70 dark:border-white/5 bg-slate-50/30 dark:bg-white/[0.01] p-2.5 ${orientation === 'horizontal' ? 'flex-1 min-w-[200px]' : ''}`}>
                     <div className="flex items-center justify-between mb-2">
                         <button
@@ -241,7 +304,7 @@ export default function ArchiveFilterSidebar({
                     )}
                 </div>
 
-                {/* 2. INCIDENT TYPE FILTER */}
+                {/* 3. INCIDENT TYPE FILTER */}
                 <div className={`rounded-xl border border-slate-200/70 dark:border-white/5 bg-slate-50/30 dark:bg-white/[0.01] p-2.5 ${orientation === 'horizontal' ? 'flex-1 min-w-[200px]' : ''}`}>
                     <div className="flex items-center justify-between mb-1.5">
                         <button

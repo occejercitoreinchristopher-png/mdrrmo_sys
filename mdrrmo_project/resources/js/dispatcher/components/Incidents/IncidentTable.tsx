@@ -56,6 +56,8 @@ export default function IncidentTable({
     const [selectedBarangays, setSelectedBarangays] = useState<string[]>([]);
     const [selectedComplaints, setSelectedComplaints] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [startDate, setStartDate] = useState<string>('');
+    const [endDate, setEndDate] = useState<string>('');
     const [selectedIncident, setSelectedIncident] = useState<any | null>(null);
     const [archiveViewMode, setArchiveViewMode] = useState<'split' | 'map' | 'table'>('split');
 
@@ -139,6 +141,20 @@ export default function IncidentTable({
                 if (!matches) return false;
             }
 
+            // 3. Date Range Filter
+            if (startDate) {
+                const incDate = new Date(inc.reported_at || inc.created_at);
+                const sDate = new Date(startDate);
+                sDate.setHours(0, 0, 0, 0);
+                if (incDate < sDate) return false;
+            }
+            if (endDate) {
+                const incDate = new Date(inc.reported_at || inc.created_at);
+                const eDate = new Date(endDate);
+                eDate.setHours(23, 59, 59, 999);
+                if (incDate > eDate) return false;
+            }
+
             // 4. Keyword Search Query
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
@@ -156,12 +172,14 @@ export default function IncidentTable({
 
             return true;
         });
-    }, [statusFilter, archiveDataset, incidents, selectedBarangays, selectedComplaints, searchQuery]);
+    }, [statusFilter, archiveDataset, incidents, selectedBarangays, selectedComplaints, searchQuery, startDate, endDate]);
 
     const handleResetFilters = () => {
         setSelectedBarangays([]);
         setSelectedComplaints([]);
         setSearchQuery('');
+        setStartDate('');
+        setEndDate('');
         setSelectedIncident(null);
     };
 
@@ -364,6 +382,12 @@ export default function IncidentTable({
                         setSelectedComplaints={setSelectedComplaints}
                         searchQuery={searchQuery}
                         setSearchQuery={setSearchQuery}
+                        barangayCounts={barangayCounts}
+                        complaintCounts={complaintCounts}
+                        startDate={startDate}
+                        setStartDate={setStartDate}
+                        endDate={endDate}
+                        setEndDate={setEndDate}
                         totalFilteredCount={filteredHistoryIncidents.length}
                         totalAllCount={archiveDataset.length}
                         onReset={handleResetFilters}
@@ -371,7 +395,7 @@ export default function IncidentTable({
                     <div className="flex-1 min-w-0 w-full space-y-5">
                         
                         {/* Active Filter Chips Bar */}
-                        {(selectedBarangays.length > 0 || selectedComplaints.length > 0 || searchQuery.trim().length > 0) && (
+                        {(selectedBarangays.length > 0 || selectedComplaints.length > 0 || searchQuery.trim().length > 0 || startDate || endDate) && (
                             <div className="flex flex-wrap items-center gap-2 p-3 bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-sm backdrop-blur-md">
                                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mr-1">
                                     Active Filters:
@@ -402,6 +426,26 @@ export default function IncidentTable({
                                         <X className="w-3 h-3 ml-0.5" />
                                     </button>
                                 ))}
+
+                                {/* Date Chips */}
+                                {startDate && (
+                                    <button
+                                        onClick={() => setStartDate('')}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-100 transition-colors cursor-pointer"
+                                    >
+                                        <span>From: {startDate}</span>
+                                        <X className="w-3 h-3 ml-0.5" />
+                                    </button>
+                                )}
+                                {endDate && (
+                                    <button
+                                        onClick={() => setEndDate('')}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-100 transition-colors cursor-pointer"
+                                    >
+                                        <span>To: {endDate}</span>
+                                        <X className="w-3 h-3 ml-0.5" />
+                                    </button>
+                                )}
 
                                 {/* Keyword Chip */}
                                 {searchQuery.trim() && (

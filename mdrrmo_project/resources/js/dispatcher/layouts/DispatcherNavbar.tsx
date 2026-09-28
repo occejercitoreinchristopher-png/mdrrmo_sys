@@ -83,14 +83,44 @@ export default function DispatcherNavbar({ collapsed, onToggle }) {
             {/* Right Section: Alerts, Theme Toggle, Profile & Logout */}
             <div className="flex items-center gap-2 sm:gap-3">
                 {/* Alert bell */}
-                <button
-                    className="relative p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10 transition-colors cursor-pointer"
-                    onClick={() => setNotifOpen(!notifOpen)}
-                    title="Notifications"
-                >
-                    <Bell className="w-4 h-4" />
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#F61509] rounded-full ring-2 ring-white dark:ring-[#090e1a] animate-pulse" />
-                </button>
+                <div className="relative">
+                    <button
+                        className="relative p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        onClick={() => setNotifOpen(!notifOpen)}
+                        title="Notifications"
+                    >
+                        <Bell className="w-4 h-4" />
+                        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#F61509] rounded-full ring-2 ring-white dark:ring-[#090e1a] animate-pulse" />
+                    </button>
+                    {notifOpen && (
+                        <>
+                            <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
+                            <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-black/50 border border-slate-200/80 dark:border-white/10 z-50 overflow-hidden backdrop-blur-xl">
+                                <div className="p-3 border-b border-slate-200/80 dark:border-white/10 flex justify-between items-center bg-slate-50/80 dark:bg-slate-800/80">
+                                    <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                        <Bell className="w-3.5 h-3.5 text-[#F61509]" /> Notifications
+                                    </h4>
+                                    <button 
+                                        onClick={() => setNotifOpen(false)}
+                                        className="text-[10px] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-semibold cursor-pointer"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                                <div className="max-h-80 overflow-y-auto p-2">
+                                    {/* Placeholder Notification */}
+                                    <div className="p-3 rounded-xl bg-slate-100/50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer mb-1">
+                                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-0.5">System Connected</p>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">Live dispatch active. All systems are fully operational.</p>
+                                    </div>
+                                    <div className="p-4 text-center text-slate-400 dark:text-slate-500 text-xs italic">
+                                        No more notifications
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
 
                 {/* Siren Audio Test Button */}
                 <button
