@@ -76,7 +76,45 @@ class DispatchController extends Controller
             ])
             ->get();
 
-        return response()->json(['data' => $dispatches]);
+        $today = Carbon::today();
+
+        $userDispatchesQuery = fn () => Dispatch::where(function ($query) use ($user) {
+            $query->where('driver_id', $user->id)
+                ->orWhere('emt_id', $user->id)
+                ->orWhere('dispatcher_id', $user->id)
+                ->orWhereHas('crew', function ($cq) use ($user) {
+                    $cq->where('users.id', $user->id);
+                });
+        });
+
+        $todayCompletedCount = $userDispatchesQuery()
+            ->where('dispatch_status', 'completed')
+            ->where(function ($q) use ($today) {
+                $q->whereDate('completed_at', $today)
+                    ->orWhere(function ($sq) use ($today) {
+                        $sq->whereNull('completed_at')->whereDate('updated_at', $today);
+                    });
+            })
+            ->count();
+
+        $todayPatientsCount = $userDispatchesQuery()
+            ->where('dispatch_status', 'completed')
+            ->where(function ($q) use ($today) {
+                $q->whereDate('completed_at', $today)
+                    ->orWhere(function ($sq) use ($today) {
+                        $sq->whereNull('completed_at')->whereDate('updated_at', $today);
+                    });
+            })
+            ->whereHas('patientCareRecord')
+            ->count();
+
+        return response()->json([
+            'data' => $dispatches,
+            'today_stats' => [
+                'completed_missions' => $todayCompletedCount,
+                'patients_assisted' => $todayPatientsCount,
+            ],
+        ]);
     }
 
     public function accept(Dispatch $dispatch)
