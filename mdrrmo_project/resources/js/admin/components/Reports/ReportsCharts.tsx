@@ -23,6 +23,7 @@ export default function ReportsCharts({ charts = {} }: ReportsChartsProps) {
 
     const getBaseOptions = (categories: string[], color: string): ApexOptions => ({
         chart: { type: 'bar', background: 'transparent', toolbar: { show: false } },
+        theme: { mode: (isDark ? 'dark' : 'light') as 'dark' | 'light' },
         colors: [color],
         xaxis: {
             categories,

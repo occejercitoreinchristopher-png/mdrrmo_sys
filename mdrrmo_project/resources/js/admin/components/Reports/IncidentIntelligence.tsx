@@ -48,8 +48,9 @@ export default function IncidentIntelligence({ incidents }) {
     const statusLabels = Object.keys(statusDistribution).map(s => s.charAt(0).toUpperCase() + s.slice(1));
     const statusData = Object.values(statusDistribution);
 
-    const getBaseOptions = (categories) => ({
+    const getBaseOptions = (categories: any) => ({
         chart: { background: 'transparent', toolbar: { show: false } },
+        theme: { mode: (isDark ? 'dark' : 'light') as 'dark' | 'light' },
         xaxis: {
             categories,
             labels: { style: { colors: isDark ? '#94a3b8' : '#64748b', fontSize: '10px' } },
@@ -85,6 +86,7 @@ export default function IncidentIntelligence({ incidents }) {
                                 ...getBaseOptions(trendLabels),
                                 colors: ['#3b82f6', '#10b981'],
                                 stroke: { curve: 'smooth', width: 3 },
+                                markers: { size: 4, strokeWidth: 2, hover: { size: 6 } }
                             }}
                             series={[
                                 { name: 'Reported', data: trendReported },
