@@ -145,12 +145,18 @@ class DispatchController extends Controller
 
         $user = Auth::user();
 
-        // Check if user has an active duty profile
-        if (! $user->responderProfile || $user->responderProfile->availability !== 'available') {
-            return response()->json(['message' => 'You must be available/on duty to create a walk-in.'], 403);
+        // 1. Check if user is a responder
+        if (! $user->responderProfile) {
+            return response()->json(['message' => 'No responder profile found for this account.'], 403);
         }
 
-        // Check if user already has an active emergency mission
+        // 2. Check if user is strictly off-duty or on leave
+        $avail = strtolower($user->responderProfile->availability ?? '');
+        if ($avail === 'off_duty' || $avail === 'on_leave' || $avail === 'offline') {
+            return response()->json(['message' => 'You are currently off-duty or offline. Please switch to Available on duty first.'], 403);
+        }
+
+        // 3. Check if user already has an active emergency mission
         $hasActiveMission = Dispatch::where(function ($query) use ($user) {
             $query->where('driver_id', $user->id)
                 ->orWhere('emt_id', $user->id)
@@ -167,97 +173,123 @@ class DispatchController extends Controller
             ], 422);
         }
 
-        $incidentType = IncidentType::firstOrCreate(
-            ['incident_type_name' => 'Medical Emergency'],
-            ['type_description' => 'General Medical Emergency']
-        );
-
-        $ambulance = Ambulance::withTrashed()->where('plate_number', 'WALK-IN')->first();
-        if ($ambulance) {
-            if ($ambulance->trashed()) {
-                $ambulance->restore();
-            }
-            $ambulance->update([
-                'ambulance_code' => 'STATION-WALK-IN',
-                'vehicle_name' => 'MDRRMO Station / Walk-in Clinic',
-                'vehicle_type' => 'Station',
-                'status' => 'available',
-            ]);
-        } else {
-            $ambulance = Ambulance::create([
-                'plate_number' => 'WALK-IN',
-                'ambulance_code' => 'STATION-WALK-IN',
-                'vehicle_name' => 'MDRRMO Station / Walk-in Clinic',
-                'vehicle_type' => 'Station',
-                'status' => 'available',
-            ]);
-        }
-
-        $incidentTypeId = $incidentType->id;
-        $ambulanceId = $ambulance->id;
-
-        $lat = $validated['latitude'] ?? 0;
-        $lng = $validated['longitude'] ?? 0;
-
-        $placeOfIncident = $request->input('place_of_incident') ?: ($request->input('address') ?: 'Direct Scene Response (Citizen Request)');
-
-        $incident = Incident::create([
-            'resident_id' => $user->id, // Responder self-reporting
-            'incident_type_id' => $incidentTypeId,
-            'description' => 'Walk-In / Direct Citizen Emergency Request',
-            'incident_address' => $placeOfIncident,
-            'incident_latitude' => $lat,
-            'incident_longitude' => $lng,
-            'reporter_latitude' => $lat,
-            'reporter_longitude' => $lng,
-            'incident_status' => 'responding',
-            'priority' => 'Moderate',
-            'reported_at' => Carbon::now(),
-            'report_source' => 'walk_in',
-        ]);
-
-        $dispatch = Dispatch::create([
-            'incident_id' => $incident->id,
-            'dispatcher_id' => $user->id,
-            'driver_id' => $user->id,
-            'emt_id' => $user->id,
-            'ambulance_id' => $ambulanceId,
-            'team' => $user->responderProfile?->team ?? 'Station',
-            'dispatch_status' => 'arrived_on_scene', // Already there
-            'assigned_at' => Carbon::now(),
-            'accepted_at' => Carbon::now(),
-            'en_route_at' => Carbon::now(),
-            'arrived_at' => Carbon::now(),
-        ]);
-
-        if ($user->responderProfile) {
-            $user->responderProfile->update(['availability' => 'busy']);
-        }
-
-        // Eager load for frontend
-        $dispatch->load([
-            'incident',
-            'incident.incidentType',
-            'incident.resident',
-            'ambulance',
-            'driver',
-            'emt',
-            'teamLeader',
-            'patientCareRecord',
-            'patientCareRecord.patient',
-            'patientCareRecord.images',
-        ]);
-
         try {
-            broadcast(new DispatchCreated($dispatch));
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('DispatchCreated walk-in broadcast error: '.$e->getMessage());
-        }
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $request, $user) {
+                $incidentType = IncidentType::firstOrCreate(
+                    ['incident_type_name' => 'Medical Emergency'],
+                    ['type_description' => 'General Medical Emergency']
+                );
 
-        return response()->json([
-            'message' => 'Walk-in dispatch created successfully',
-            'data' => $dispatch,
-        ]);
+                $ambulance = Ambulance::withTrashed()->where('plate_number', 'WALK-IN')->first();
+                if ($ambulance) {
+                    if ($ambulance->trashed()) {
+                        $ambulance->restore();
+                    }
+                    $ambulance->update([
+                        'ambulance_code' => 'STATION-WALK-IN',
+                        'vehicle_name' => 'MDRRMO Station / Walk-in Clinic',
+                        'vehicle_type' => 'Station',
+                        'status' => 'available',
+                    ]);
+                } else {
+                    $ambulance = Ambulance::create([
+                        'plate_number' => 'WALK-IN',
+                        'ambulance_code' => 'STATION-WALK-IN',
+                        'vehicle_name' => 'MDRRMO Station / Walk-in Clinic',
+                        'vehicle_type' => 'Station',
+                        'status' => 'available',
+                    ]);
+                }
+
+                $lat = is_numeric($validated['latitude'] ?? null) && (float)$validated['latitude'] != 0 
+                    ? (float)$validated['latitude'] 
+                    : 8.5170;
+                $lng = is_numeric($validated['longitude'] ?? null) && (float)$validated['longitude'] != 0 
+                    ? (float)$validated['longitude'] 
+                    : 124.5710;
+
+                $rawPlace = $request->input('place_of_incident') ?: ($request->input('address') ?: 'Direct Scene Response (Citizen Request)');
+                $placeOfIncident = mb_substr($rawPlace, 0, 95);
+
+                $incident = Incident::create([
+                    'resident_id' => $user->id,
+                    'incident_type_id' => $incidentType->id,
+                    'incident_description' => 'Walk-In / Direct Citizen Emergency Request',
+                    'description' => 'Walk-In / Direct Citizen Emergency Request',
+                    'place_of_incident' => $placeOfIncident,
+                    'incident_address' => mb_substr($rawPlace, 0, 145),
+                    'incident_latitude' => $lat,
+                    'incident_longitude' => $lng,
+                    'reporter_latitude' => $lat,
+                    'reporter_longitude' => $lng,
+                    'incident_status' => 'responding',
+                    'priority' => 'Moderate',
+                    'reported_at' => Carbon::now(),
+                    'report_source' => 'walk_in',
+                ]);
+
+                $driverId = ($user->responderProfile?->position === 'driver') ? $user->id : null;
+                $emtId = ($user->responderProfile?->position === 'emt') ? $user->id : null;
+                if (! $driverId && ! $emtId) {
+                    $driverId = $user->id;
+                }
+
+                $dispatch = Dispatch::create([
+                    'incident_id' => $incident->id,
+                    'dispatcher_id' => $user->id,
+                    'driver_id' => $driverId ?? $user->id,
+                    'emt_id' => $emtId ?? $user->id,
+                    'ambulance_id' => $ambulance->id,
+                    'team' => $user->responderProfile?->team ?? 'Station',
+                    'dispatch_status' => 'arrived_on_scene',
+                    'assigned_at' => Carbon::now(),
+                    'accepted_at' => Carbon::now(),
+                    'en_route_at' => Carbon::now(),
+                    'arrived_at' => Carbon::now(),
+                ]);
+
+                // Ensure user is attached to crew
+                try {
+                    $dispatch->crew()->syncWithoutDetaching([$user->id]);
+                } catch (\Throwable $e) {}
+
+                if ($user->responderProfile) {
+                    $user->responderProfile->update(['availability' => 'busy']);
+                }
+
+                // Eager load for frontend
+                $dispatch->load([
+                    'incident',
+                    'incident.incidentType',
+                    'incident.resident',
+                    'ambulance',
+                    'driver',
+                    'emt',
+                    'teamLeader',
+                    'patientCareRecord',
+                    'patientCareRecord.patient',
+                    'patientCareRecord.images',
+                ]);
+
+                try {
+                    broadcast(new DispatchCreated($dispatch));
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('DispatchCreated walk-in broadcast error: '.$e->getMessage());
+                }
+
+                return response()->json([
+                    'message' => 'Walk-in dispatch created successfully',
+                    'data' => $dispatch,
+                ]);
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Walk-in creation error: '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'message' => 'Failed to create walk-in: '.$e->getMessage(),
+            ], 500);
+        }
     }
 
     public function updateStatus(Request $request, Dispatch $dispatch)
