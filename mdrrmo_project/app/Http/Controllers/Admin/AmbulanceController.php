@@ -51,6 +51,16 @@ class AmbulanceController extends Controller
             'status' => ['required', Rule::in(['available', 'dispatched', 'maintenance'])],
         ]);
 
+        if ($request->status !== $ambulance->status) {
+            $activeDispatches = Dispatch::where('ambulance_id', $ambulance->id)
+                ->whereIn('dispatch_status', ['assigned', 'accepted', 'en_route', 'arrived_on_scene'])
+                ->exists();
+
+            if ($activeDispatches) {
+                return back()->with('error', 'Cannot change ambulance status while it is assigned to an active emergency dispatch. Please resolve or cancel the dispatch first.');
+            }
+        }
+
         $ambulance->update($validated);
 
         return back()->with('success', 'Ambulance updated successfully.');
