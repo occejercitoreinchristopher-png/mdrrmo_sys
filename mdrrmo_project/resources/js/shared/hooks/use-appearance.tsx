@@ -68,7 +68,14 @@ const mediaQuery = (): MediaQueryList | null => {
     return window.matchMedia('(prefers-color-scheme: dark)');
 };
 
-const handleSystemThemeChange = (): void => applyTheme(currentAppearance);
+let isPrinting = false;
+
+const handleSystemThemeChange = (): void => {
+    if (isPrinting || window.matchMedia('print').matches) {
+        return;
+    }
+    applyTheme(currentAppearance);
+};
 
 export function initializeTheme(): void {
     if (typeof window === 'undefined') {
@@ -85,6 +92,17 @@ export function initializeTheme(): void {
 
     // Set up system theme change listener
     mediaQuery()?.addEventListener('change', handleSystemThemeChange);
+
+    // Prevent theme flashing when opening print dialog
+    window.addEventListener('beforeprint', () => {
+        isPrinting = true;
+    });
+    
+    window.addEventListener('afterprint', () => {
+        isPrinting = false;
+        // Re-evaluate theme in case system theme actually changed while printing
+        handleSystemThemeChange();
+    });
 }
 
 export function useAppearance(): UseAppearanceReturn {
