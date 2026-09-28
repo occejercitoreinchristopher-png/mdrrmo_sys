@@ -40,7 +40,7 @@ export default function IncidentTable({
     statusFilter?: string;
     incidentTypes?: any[];
     chiefComplaints?: string[];
-    chiefComplaints?: string[];
+    pcrChiefComplaints?: string[];
     opolBarangays?: string[];
     barangayGeojson?: any;
     ambulances?: any[];
@@ -54,7 +54,6 @@ export default function IncidentTable({
 
     // Archive / History filtering states
     const [selectedBarangays, setSelectedBarangays] = useState<string[]>([]);
-    const [selectedComplaints, setSelectedComplaints] = useState<string[]>([]);
     const [selectedComplaints, setSelectedComplaints] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIncident, setSelectedIncident] = useState<any | null>(null);
@@ -365,6 +364,10 @@ export default function IncidentTable({
                         setSelectedComplaints={setSelectedComplaints}
                         searchQuery={searchQuery}
                         setSearchQuery={setSearchQuery}
+                        totalFilteredCount={filteredHistoryIncidents.length}
+                        totalAllCount={archiveDataset.length}
+                        onReset={handleResetFilters}
+                    />
                     <div className="flex-1 min-w-0 w-full space-y-5">
                         
                         {/* Active Filter Chips Bar */}
