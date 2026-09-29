@@ -205,11 +205,11 @@ export function printPatientCareRecord(record: any): void {
             margin: 0;
             padding: 0;
             line-height: 1.2;
+            width: 816px;
         }
 
         .pcr-page {
-            width: 100%;
-            max-width: 194mm;
+            width: 793px; /* A4 width at 96 DPI */
             margin: 0 auto;
             background: #fff;
         }
@@ -1008,14 +1008,19 @@ export function printPatientCareRecord(record: any): void {
  * in the parent document's global stylesheets, which would crash the renderer.
  */
 async function downloadHtmlAsPdf(html: string, filename: string): Promise<void> {
-    // Create hidden, full-size iframe so the layout renders correctly
+    // The iframe MUST be inside the viewport (not off-screen at -9999px).
+    // Off-screen iframes cause browsers to skip proper font layout/kerning,
+    // resulting in squished/garbled text. We use opacity:0 to hide it visually.
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
-    iframe.style.left = '-9999px';
     iframe.style.top = '0';
-    iframe.style.width = '816px';   // ~8.5in @ 96dpi for letter/A4
-    iframe.style.height = '1200px';
+    iframe.style.left = '0';
+    iframe.style.width = '816px';       // ~8.5in @ 96dpi
+    iframe.style.height = '100vh';
     iframe.style.border = '0';
+    iframe.style.opacity = '0';         // invisible but renders with correct fonts
+    iframe.style.pointerEvents = 'none';
+    iframe.style.zIndex = '99999';
     iframe.setAttribute('title', 'PDF Render Frame');
     document.body.appendChild(iframe);
 
@@ -1034,23 +1039,22 @@ async function downloadHtmlAsPdf(html: string, filename: string): Promise<void> 
         doc.write(html);
         doc.close();
 
-        // Wait a tick for the iframe's DOM to fully render
-        await new Promise(resolve => setTimeout(resolve, 400));
+        // Wait for the iframe's fonts and images to fully render
+        await new Promise(resolve => setTimeout(resolve, 600));
 
         const body = doc.body;
         if (!body) throw new Error('iframe body not found');
 
-        // Capture the iframe's body — html2canvas only sees the iframe's
-        // isolated stylesheets here, NOT the parent's Tailwind oklch vars
+        // Capture iframe body — html2canvas only reads the iframe's isolated
+        // stylesheets (hex/rgb only), not the parent's Tailwind oklch variables.
+        // Do NOT pass windowWidth/windowHeight — let html2canvas use the iframe's
+        // actual layout metrics for accurate text rendering.
         const canvas = await html2canvas(body, {
             scale: 2,
             useCORS: true,
             logging: false,
             backgroundColor: '#ffffff',
-            width: 816,
-            height: body.scrollHeight,
             windowWidth: 816,
-            windowHeight: body.scrollHeight,
         });
 
         const imgData = canvas.toDataURL('image/jpeg', 0.97);
