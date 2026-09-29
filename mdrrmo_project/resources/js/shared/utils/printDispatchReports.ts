@@ -5,6 +5,9 @@
  * and uses official dual-seal letterhead (Opol Municipal Seal left, MDRRMO Rescue Seal right).
  */
 
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+
 interface PrintIncidentOptions {
     preparedBy?: string;
 }
@@ -930,35 +933,39 @@ export function printDispatchLogsSummaryReport(incidents: any[], filters: { sear
         </div>
     </div>
 
-    <script>
-        window.onload = function() {
-            setTimeout(function() {
-                window.focus();
-                window.print();
-            }, 300);
-        };
-    </script>
 </body>
 </html>`;
 
-    printDocumentViaIframe(html);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const safeRef = (incident?.reference_number || ('incident_' + (incident?.id || 'report'))).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = 'Incident_Report_' + safeRef + '_' + dateStr + '.pdf';
+
+    downloadHtmlAsPdf(html, filename);
 }
 
-function printDocumentViaIframe(html: string): void {
+function downloadHtmlAsPdf(html: string, filename: string): void {
+    // Create a hidden full-size iframe so layout renders at proper width,
+    // and html2canvas only sees the iframe's own CSS (hex/rgb only — no oklch).
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
+    iframe.style.left = '-9999px';
+    iframe.style.top = '0';
+    iframe.style.width = '816px';   // ~8.5in @ 96dpi
+    iframe.style.height = '1200px';
     iframe.style.border = '0';
-    iframe.setAttribute('title', 'MDRRMO Report Print');
-
+    iframe.setAttribute('title', 'PDF Render Frame');
     document.body.appendChild(iframe);
+
+    const cleanup = () => {
+        if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+        }
+    };
 
     const doc = iframe.contentWindow?.document || iframe.contentDocument;
     if (!doc) {
-        console.error('Failed to open print iframe');
+        console.error('Failed to access iframe document');
+        cleanup();
         return;
     }
 
@@ -966,9 +973,40 @@ function printDocumentViaIframe(html: string): void {
     doc.write(html);
     doc.close();
 
-    setTimeout(() => {
-        if (document.body.contains(iframe)) {
-            document.body.removeChild(iframe);
+    // Give the iframe DOM time to fully paint before capturing
+    setTimeout(async () => {
+        try {
+            const body = doc.body;
+            if (!body) throw new Error('iframe body not found');
+
+            const canvas = await html2canvas(body, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff',
+                width: 816,
+                height: body.scrollHeight,
+                windowWidth: 816,
+                windowHeight: body.scrollHeight,
+            });
+
+            const imgData = canvas.toDataURL('image/jpeg', 0.97);
+
+            const pdfW = 210; // A4 width in mm
+            const pdfH = (canvas.height * pdfW) / canvas.width;
+
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: [pdfW, Math.max(pdfH, 297)],
+            });
+
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
+            pdf.save(filename);
+            cleanup();
+        } catch (err) {
+            console.error('PDF generation error:', err);
+            cleanup();
         }
-    }, 60000);
+    }, 400);
 }

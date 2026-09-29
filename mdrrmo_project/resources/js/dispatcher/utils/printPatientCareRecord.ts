@@ -1,3 +1,6 @@
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+
 import { BODY_DIAGRAM_BASE64 } from './bodyDiagramBase64';
 
 interface Marker {
@@ -984,51 +987,94 @@ export function printPatientCareRecord(record: any): void {
     </div>
 </div>
 
-<script>
-    window.onload = function() {
-        setTimeout(function() {
-            window.focus();
-            window.print();
-        }, 350);
-    };
-</script>
 </body>
 </html>`;
 
-    // We use native window.print() in a hidden iframe because html2canvas/html2pdf
-    // crashes when parsing modern CSS colors like oklch() used globally by Tailwind v4.
+    // Build filename from patient name and date
+    const patientName = (
+        [patient.first_name, patient.middle_name, patient.last_name]
+            .filter(Boolean)
+            .join('_') || 'Patient'
+    ).replace(/\s+/g, '_');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `PCR_${patientName}_${dateStr}.pdf`;
+
+    downloadHtmlAsPdf(html, filename);
+}
+
+/**
+ * Renders the given HTML string in an isolated iframe and downloads it as PDF.
+ * Using an iframe prevents html2canvas from seeing Tailwind v4's oklch() colors
+ * in the parent document's global stylesheets, which would crash the renderer.
+ */
+async function downloadHtmlAsPdf(html: string, filename: string): Promise<void> {
+    // Create hidden, full-size iframe so the layout renders correctly
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
+    iframe.style.left = '-9999px';
+    iframe.style.top = '0';
+    iframe.style.width = '816px';   // ~8.5in @ 96dpi for letter/A4
+    iframe.style.height = '1200px';
     iframe.style.border = '0';
-    iframe.setAttribute('title', 'PCR Official Form Print');
-
+    iframe.setAttribute('title', 'PDF Render Frame');
     document.body.appendChild(iframe);
 
-    const doc = iframe.contentWindow?.document || iframe.contentDocument;
-    if (!doc) {
-        console.error('Failed to open print frame');
-        return;
-    }
-
-    doc.open();
-    doc.write(html);
-    doc.close();
-
     const cleanup = () => {
-        setTimeout(() => {
-            if (document.body.contains(iframe)) {
-                document.body.removeChild(iframe);
-            }
-        }, 1000);
+        if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+        }
     };
 
-    if (iframe.contentWindow) {
-        iframe.contentWindow.onafterprint = cleanup;
-    } else {
-        setTimeout(cleanup, 60000);
+    try {
+        const doc = iframe.contentWindow?.document || iframe.contentDocument;
+        if (!doc) throw new Error('Failed to access iframe document');
+
+        // Write our clean HTML (uses only hex/rgb colors — no oklch)
+        doc.open();
+        doc.write(html);
+        doc.close();
+
+        // Wait a tick for the iframe's DOM to fully render
+        await new Promise(resolve => setTimeout(resolve, 400));
+
+        const body = doc.body;
+        if (!body) throw new Error('iframe body not found');
+
+        // Capture the iframe's body — html2canvas only sees the iframe's
+        // isolated stylesheets here, NOT the parent's Tailwind oklch vars
+        const canvas = await html2canvas(body, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            width: 816,
+            height: body.scrollHeight,
+            windowWidth: 816,
+            windowHeight: body.scrollHeight,
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.97);
+
+        // A4 in mm
+        const pdfW = 210;
+        const pdfH = (canvas.height * pdfW) / canvas.width;
+
+        const pdf = new jsPDF({
+            orientation: pdfH > pdfW ? 'portrait' : 'landscape',
+            unit: 'mm',
+            format: [pdfW, Math.max(pdfH, 297)],
+        });
+
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
+        pdf.save(filename);
+
+        cleanup();
+    } catch (err) {
+        console.error('PDF download error:', err);
+        cleanup();
+        // Fallback: open print dialog
+        iframe.style.left = '-9999px';
+        document.body.appendChild(iframe);
+        iframe.contentWindow?.print();
     }
 }
