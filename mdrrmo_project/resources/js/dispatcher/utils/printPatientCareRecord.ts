@@ -1,3 +1,4 @@
+import html2pdf from 'html2pdf.js';
 import { BODY_DIAGRAM_BASE64 } from './bodyDiagramBase64';
 
 interface Marker {
@@ -984,50 +985,45 @@ export function printPatientCareRecord(record: any): void {
     </div>
 </div>
 
-<script>
-    window.onload = function() {
-        setTimeout(function() {
-            window.focus();
-            window.print();
-        }, 350);
-    };
-</script>
 </body>
 </html>`;
 
-    // Create isolated invisible iframe to preserve digital modal view on screen
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    iframe.setAttribute('title', 'PCR Official Form Print');
+    // Create a hidden container to render the HTML for pdf conversion
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.style.width = '816px'; // ~8.5in at 96dpi
+    container.innerHTML = html;
+    document.body.appendChild(container);
 
-    document.body.appendChild(iframe);
+    // Build filename from patient name and date
+    const patientName = (
+        [patient.first_name, patient.middle_name, patient.last_name]
+            .filter(Boolean)
+            .join('_') || 'Patient'
+    ).replace(/\s+/g, '_');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `PCR_${patientName}_${dateStr}.pdf`;
 
-    const doc = iframe.contentWindow?.document || iframe.contentDocument;
-    if (!doc) {
-        console.error('Failed to open print frame');
-        return;
-    }
-
-    doc.open();
-    doc.write(html);
-    doc.close();
-
-    const cleanup = () => {
-        setTimeout(() => {
-            if (document.body.contains(iframe)) {
-                document.body.removeChild(iframe);
-            }
-        }, 1000);
+    const opt = {
+        margin: 0,
+        filename,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
     };
 
-    if (iframe.contentWindow) {
-        iframe.contentWindow.onafterprint = cleanup;
-    } else {
-        setTimeout(cleanup, 60000);
-    }
+    const cleanup = () => {
+        if (document.body.contains(container)) {
+            document.body.removeChild(container);
+        }
+    };
+
+    html2pdf()
+        .set(opt)
+        .from(container)
+        .save()
+        .then(cleanup)
+        .catch(cleanup);
 }
