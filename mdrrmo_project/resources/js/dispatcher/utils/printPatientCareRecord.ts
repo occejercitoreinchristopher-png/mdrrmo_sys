@@ -1,5 +1,3 @@
-import html2pdf from 'html2pdf.js';
-import { toast } from 'sonner';
 import { BODY_DIAGRAM_BASE64 } from './bodyDiagramBase64';
 
 interface Marker {
@@ -986,23 +984,33 @@ export function printPatientCareRecord(record: any): void {
     </div>
 </div>
 
+<script>
+    window.onload = function() {
+        setTimeout(function() {
+            window.focus();
+            window.print();
+        }, 350);
+    };
+</script>
 </body>
 </html>`;
 
-    // Create a hidden iframe to isolate from Tailwind CSS oklch variables
-    // html2canvas crashes when it encounters modern oklch() colors in the global stylesheets.
+    // We use native window.print() in a hidden iframe because html2canvas/html2pdf
+    // crashes when parsing modern CSS colors like oklch() used globally by Tailwind v4.
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
-    iframe.style.left = '-9999px';
-    iframe.style.top = '0';
-    iframe.style.width = '816px'; // ~8.5in at 96dpi
-    iframe.style.height = '1056px';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
     iframe.setAttribute('title', 'PCR Official Form Print');
+
     document.body.appendChild(iframe);
 
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
     if (!doc) {
-        toast.error('Failed to create PDF container.', { id: 'pdf-toast' });
+        console.error('Failed to open print frame');
         return;
     }
 
@@ -1010,51 +1018,17 @@ export function printPatientCareRecord(record: any): void {
     doc.write(html);
     doc.close();
 
-    // Build filename from patient name and date
-    const patientName = (
-        [patient.first_name, patient.middle_name, patient.last_name]
-            .filter(Boolean)
-            .join('_') || 'Patient'
-    ).replace(/\s+/g, '_');
-    const dateStr = new Date().toISOString().slice(0, 10);
-    const filename = `PCR_${patientName}_${dateStr}.pdf`;
-
-    const opt = {
-        margin: 0,
-        filename,
-        image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
-    };
-
     const cleanup = () => {
-        if (document.body.contains(iframe)) {
-            document.body.removeChild(iframe);
-        }
+        setTimeout(() => {
+            if (document.body.contains(iframe)) {
+                document.body.removeChild(iframe);
+            }
+        }, 1000);
     };
 
-    try {
-        toast.loading('Generating PDF...', { id: 'pdf-toast' });
-        
-        // Handle Vite/CJS default export differences safely
-        const pdfGen = typeof html2pdf === 'function' ? html2pdf() : (html2pdf as any).default();
-        
-        pdfGen
-            .set(opt)
-            .from(doc.documentElement)
-            .save()
-            .then(() => {
-                toast.success('PDF downloaded successfully!', { id: 'pdf-toast' });
-                cleanup();
-            })
-            .catch((err: any) => {
-                console.error('PDF Generation Error:', err);
-                toast.error('Failed to generate PDF. Check console.', { id: 'pdf-toast' });
-                cleanup();
-            });
-    } catch (err: any) {
-        console.error('PDF Setup Error:', err);
-        toast.error('Error starting PDF generation.', { id: 'pdf-toast' });
-        cleanup();
+    if (iframe.contentWindow) {
+        iframe.contentWindow.onafterprint = cleanup;
+    } else {
+        setTimeout(cleanup, 60000);
     }
 }
