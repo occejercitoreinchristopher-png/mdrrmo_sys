@@ -72,8 +72,8 @@ export function printPatientCareRecord(record: any): void {
 
     // Checkbox Helper: [ ] vs [x]
     const box = (checked: boolean) => checked
-        ? `<span style="display:inline-block; width:14px; height:14px; border:1px solid #000; text-align:center; line-height:14px; font-size:10pt; font-weight:bold; margin-right:4px; vertical-align:middle; overflow:hidden;">&#10003;</span>`
-        : `<span style="display:inline-block; width:14px; height:14px; border:1px solid #000; margin-right:4px; vertical-align:middle;"></span>`;
+        ? `<span style="display:inline-block; width:12px; height:12px; border:1px solid #000; text-align:center; line-height:12px; font-size:9pt; font-weight:bold; margin-right:4px; vertical-align:middle; overflow:hidden; color:#000;">&#10004;</span>`
+        : `<span style="display:inline-block; width:12px; height:12px; border:1px solid #000; margin-right:4px; vertical-align:middle;"></span>`;
 
     // 3. Exact Pinpoint Calculator for Front/Back Body Diagram
     const calculatePinPosition = (m: Marker): { left: string; top: string; isRightSide: boolean } => {
@@ -366,13 +366,15 @@ export function printPatientCareRecord(record: any): void {
             left: 11px;
             background: #fff;
             border: 1px solid #000;
-            padding: 3px 6px;
+            padding: 2px 4px;
             font-size: 7pt;
             font-weight: bold;
             color: #000;
             white-space: nowrap;
-            line-height: 1.2;
+            height: 12px;
+            line-height: 12px;
             display: inline-block;
+            box-sizing: content-box;
         }
         .pin-text-left {
             left: auto;
@@ -725,16 +727,16 @@ export function printPatientCareRecord(record: any): void {
                 <tr>
                     <td style="font-weight: bold;">TIME</td>
                     <td>
-                        <span style="font-weight: bold;">${v1Time.time}</span><br>
-                        <span>${box(v1Time.am)}AM ${box(v1Time.pm)}PM</span>
+                        <div style="font-weight: bold; margin-bottom: 3px;">${v1Time.time}</div>
+                        <div>${box(v1Time.am)}AM &nbsp; ${box(v1Time.pm)}PM</div>
                     </td>
                     <td>
-                        <span style="font-weight: bold;">${v2Time.time}</span><br>
-                        <span>${box(v2Time.am)}AM ${box(v2Time.pm)}PM</span>
+                        <div style="font-weight: bold; margin-bottom: 3px;">${v2Time.time}</div>
+                        <div>${box(v2Time.am)}AM &nbsp; ${box(v2Time.pm)}PM</div>
                     </td>
                     <td>
-                        <span style="font-weight: bold;">${v3Time.time}</span><br>
-                        <span>${box(v3Time.am)}AM ${box(v3Time.pm)}PM</span>
+                        <div style="font-weight: bold; margin-bottom: 3px;">${v3Time.time}</div>
+                        <div>${box(v3Time.am)}AM &nbsp; ${box(v3Time.pm)}PM</div>
                     </td>
                 </tr>
                 <tr>
