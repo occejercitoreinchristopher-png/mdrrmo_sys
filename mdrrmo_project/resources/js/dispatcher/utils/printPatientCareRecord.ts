@@ -70,10 +70,11 @@ export function printPatientCareRecord(record: any): void {
         return { time: cleanDigits || ': ', am: hasAm, pm: hasPm };
     };
 
-    // Checkbox Helper: [ ] vs [x]
-    const box = (checked: boolean) => checked
-        ? `<span style="display:inline-block; width:12px; height:12px; border:1px solid #000; text-align:center; line-height:12px; font-size:9pt; font-weight:bold; margin-right:4px; vertical-align:middle; overflow:hidden; color:#000;">&#10004;</span>`
-        : `<span style="display:inline-block; width:12px; height:12px; border:1px solid #000; margin-right:4px; vertical-align:middle;"></span>`;
+    // Use SVGs for checkboxes to guarantee perfect rendering in html2canvas
+    const checkSvg = `data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Crect x='1.5' y='1.5' width='11' height='11' fill='none' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M 3 7 L 6 10 L 11 3' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E`;
+    const uncheckSvg = `data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Crect x='1.5' y='1.5' width='11' height='11' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E`;
+    const box = (checked: boolean) => 
+        `<img src="${checked ? checkSvg : uncheckSvg}" style="width:11px; height:11px; vertical-align:-1px; margin-right:3px;" />`;
 
     // 3. Exact Pinpoint Calculator for Front/Back Body Diagram
     const calculatePinPosition = (m: Marker): { left: string; top: string; isRightSide: boolean } => {
@@ -235,13 +236,13 @@ export function printPatientCareRecord(record: any): void {
         }
 
         .section-label-italic {
-            font-size: 9pt;
+            font-size: 9.5pt;
             font-style: italic;
             text-decoration: underline;
             font-weight: bold;
             margin-bottom: 2mm;
             display: inline-block;
-            letter-spacing: 0.2px;
+            letter-spacing: 0.3px;
         }
 
         table.form-grid {
@@ -267,7 +268,7 @@ export function printPatientCareRecord(record: any): void {
         }
         .field-data {
             font-size: 8.5pt;
-            font-weight: 600;
+            font-weight: bold;
             color: #000;
             display: inline-block;
         }
@@ -281,7 +282,7 @@ export function printPatientCareRecord(record: any): void {
         .time-digits {
             font-size: 8.5pt;
             font-weight: bold;
-            min-width: 45px;
+            min-width: 40px;
             display: inline-block;
             text-align: center;
         }
@@ -301,7 +302,7 @@ export function printPatientCareRecord(record: any): void {
 
         .box-title-bar {
             background: #fff;
-            border: 1px solid #000;
+            border: 1.5px solid #000;
             border-bottom: none;
             font-size: 9pt;
             font-weight: bold;
@@ -310,7 +311,7 @@ export function printPatientCareRecord(record: any): void {
         }
 
         .assessment-box {
-            border: 1px solid #000;
+            border: 1.5px solid #000;
             padding: 6px;
         }
         .assess-cols {
@@ -352,33 +353,31 @@ export function printPatientCareRecord(record: any): void {
             height: 16px;
             border-radius: 50%;
             background: #dc2626;
-            color: #fff;
-            font-size: 7.5pt;
-            font-weight: 900;
+            border: 1px solid #000;
             text-align: center;
-            line-height: 15px; /* Adjusting for border */
-            border: 1.5px solid #000;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
+        .pin-dot span {
+            color: #fff;
+            font-size: 8pt;
+            font-weight: 900;
+            line-height: 16px;
+            display: inline-block;
         }
         .pin-text {
             position: absolute;
-            top: -9px;
-            left: 11px;
+            top: -8px;
+            left: 12px;
             background: #fff;
             border: 1px solid #000;
             padding: 2px 4px;
-            font-size: 7pt;
+            font-size: 7.5pt;
             font-weight: bold;
             color: #000;
             white-space: nowrap;
-            height: 12px;
-            line-height: 12px;
-            display: inline-block;
-            box-sizing: content-box;
         }
         .pin-text-left {
             left: auto;
-            right: 11px;
+            right: 12px;
         }
 
         .special-box {
@@ -396,7 +395,7 @@ export function printPatientCareRecord(record: any): void {
         table.vitals-grid {
             width: 100%;
             border-collapse: collapse;
-            border: 1px solid #000;
+            border: 1.5px solid #000;
             font-size: 8pt;
             text-align: center;
             margin-bottom: 2mm;
@@ -414,7 +413,7 @@ export function printPatientCareRecord(record: any): void {
         table.gcs-grid {
             width: 100%;
             border-collapse: collapse;
-            border: 1px solid #000;
+            border: 1.5px solid #000;
             font-size: 7.5pt;
             line-height: 1.3;
             table-layout: fixed;
@@ -447,7 +446,7 @@ export function printPatientCareRecord(record: any): void {
         }
         .dispo-box {
             width: 50%;
-            border: 1px solid #000;
+            border: 1.5px solid #000;
             padding: 6px;
         }
         .dispo-cols {
@@ -464,7 +463,7 @@ export function printPatientCareRecord(record: any): void {
 
         .resp-box {
             width: 50%;
-            border: 1px solid #000;
+            border: 1.5px solid #000;
             padding: 6px 8px;
             display: flex;
             flex-direction: column;
@@ -540,21 +539,21 @@ export function printPatientCareRecord(record: any): void {
         <tr>
             <td colspan="4" style="width: 65%;">
                 <span class="field-name">Name of Patient:</span>
-                <span class="field-data">${patientFullName || '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span>
+                <span class="field-data">${patientFullName || '&nbsp;'}</span>
             </td>
             <td colspan="2" style="width: 35%;">
                 <span class="field-name">Date (mo/day/yr):</span>
-                <span class="field-data" style="font-family: monospace;">${formatMoDayYr(record.record_date || record.created_at)}</span>
+                <span class="field-data">${formatMoDayYr(record.record_date || record.created_at)}</span>
             </td>
         </tr>
         <tr>
             <td style="width: 32%;">
                 <span class="field-name">Contact #:</span>
-                <span class="field-data">${patient.contact_number || record.contact_number || ''}</span>
+                <span class="field-data">${patient.contact_number || record.contact_number || '&nbsp;'}</span>
             </td>
             <td style="width: 14%;">
                 <span class="field-name">Age:</span>
-                <span class="field-data">${patient.age ? patient.age : (record.age ? record.age : '')}</span>
+                <span class="field-data">${patient.age ? patient.age : (record.age ? record.age : '&nbsp;')}</span>
             </td>
             <td style="width: 12%;">
                 <span class="field-name">Male</span> ${box(isMale)}
@@ -564,7 +563,7 @@ export function printPatientCareRecord(record: any): void {
             </td>
             <td colspan="2">
                 <span class="field-name">Caller #:</span>
-                <span class="field-data">${record.caller_no || incident.caller_phone_number || ''}</span>
+                <span class="field-data">${record.caller_no || incident.caller_phone_number || '&nbsp;'}</span>
             </td>
         </tr>
         <tr>
@@ -590,7 +589,7 @@ export function printPatientCareRecord(record: any): void {
         <tr>
             <td colspan="4">
                 <span class="field-name">Address:</span>
-                <span class="field-data">${patientAddress || ''}</span>
+                <span class="field-data">${patientAddress || '&nbsp;'}</span>
             </td>
             <td colspan="2">
                 <span class="field-name">En Route Time:</span>
@@ -604,7 +603,7 @@ export function printPatientCareRecord(record: any): void {
         <tr>
             <td colspan="4">
                 <span class="field-name">Place of Incident:</span>
-                <span class="field-data">${incidentPlace || ''}</span>
+                <span class="field-data">${incidentPlace || '&nbsp;'}</span>
             </td>
             <td colspan="2">
                 <span class="field-name">On Scene Time:</span>
@@ -618,7 +617,7 @@ export function printPatientCareRecord(record: any): void {
         <tr>
             <td colspan="4">
                 <span class="field-name">Chief of Complaint:</span>
-                <span class="field-data" style="font-weight: bold;">${chiefComplaint || ''}</span>
+                <span class="field-data">${chiefComplaint || '&nbsp;'}</span>
             </td>
             <td colspan="2">
                 <span class="field-name">Transport Time:</span>
@@ -693,7 +692,7 @@ export function printPatientCareRecord(record: any): void {
         const labelText = m.label || m.type || '';
         return `
                             <div class="pin-marker" style="left: ${pos.left}; top: ${pos.top};" title="${labelText}">
-                                <div class="pin-dot">${idx + 1}</div>
+                                <div class="pin-dot"><span>${idx + 1}</span></div>
                                 ${labelText ? `<div class="pin-text ${pos.isRightSide ? 'pin-text-left' : ''}">${labelText}</div>` : ''}
                             </div>
                         `;
@@ -706,7 +705,7 @@ export function printPatientCareRecord(record: any): void {
 
                 <div class="special-box">
                     <span class="field-name">SPECIAL INSTRUCTIONS:</span>
-                    <span class="field-data" style="margin-left: 4px; font-weight: bold;">
+                    <span class="field-data" style="margin-left: 4px;">
                         ${record.special_instructions || ''}
                     </span>
                     <div class="line-rule"></div>
@@ -727,16 +726,16 @@ export function printPatientCareRecord(record: any): void {
                 <tr>
                     <td style="font-weight: bold;">TIME</td>
                     <td>
-                        <div style="font-weight: bold; margin-bottom: 3px;">${v1Time.time}</div>
-                        <div>${box(v1Time.am)}AM &nbsp; ${box(v1Time.pm)}PM</div>
+                        <div style="font-weight: bold; margin-bottom: 4px;">${v1Time.time}</div>
+                        <div>${box(v1Time.am)} AM &nbsp; ${box(v1Time.pm)} PM</div>
                     </td>
                     <td>
-                        <div style="font-weight: bold; margin-bottom: 3px;">${v2Time.time}</div>
-                        <div>${box(v2Time.am)}AM &nbsp; ${box(v2Time.pm)}PM</div>
+                        <div style="font-weight: bold; margin-bottom: 4px;">${v2Time.time}</div>
+                        <div>${box(v2Time.am)} AM &nbsp; ${box(v2Time.pm)} PM</div>
                     </td>
                     <td>
-                        <div style="font-weight: bold; margin-bottom: 3px;">${v3Time.time}</div>
-                        <div>${box(v3Time.am)}AM &nbsp; ${box(v3Time.pm)}PM</div>
+                        <div style="font-weight: bold; margin-bottom: 4px;">${v3Time.time}</div>
+                        <div>${box(v3Time.am)} AM &nbsp; ${box(v3Time.pm)} PM</div>
                     </td>
                 </tr>
                 <tr>
@@ -771,7 +770,7 @@ export function printPatientCareRecord(record: any): void {
                 </tr>
             </table>
 
-            <div class="box-title-bar" style="border-top: 1px solid #000;">GLASGOW COMA SCALE</div>
+            <div class="box-title-bar" style="border-top: 1.5px solid #000;">GLASGOW COMA SCALE</div>
             <table class="gcs-grid">
                 <tr>
                     <td class="gcs-head-col" rowspan="4">Best eye response (E)</td>
