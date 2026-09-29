@@ -181,7 +181,6 @@ export function printPatientCareRecord(record: any): void {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <base href="${window.location.origin}">
     <title>PCR #${record.id} - ${patientFullName || 'Patient Care Record'}</title>
     <style>
         @page {
@@ -538,7 +537,7 @@ export function printPatientCareRecord(record: any): void {
     <div class="header-wrap">
         <!-- Municipal Official Seal (Left) -->
         <div style="width: 60px; text-align: left;">
-            <img src="/images/opol_seal.jpg" alt="Municipality of Opol" style="width: 55px; height: 55px; object-fit: contain;" />
+            <img src="${window.location.origin}/images/opol_seal.jpg" alt="Opol Seal" style="width: 55px; height: 55px; object-fit: contain;" />
         </div>
 
         <div class="header-title-box">
@@ -549,7 +548,7 @@ export function printPatientCareRecord(record: any): void {
         <!-- Opol Rescue Shield (Right) -->
         <div style="width: 60px; text-align: right; position: relative;">
             <span class="rev-tag">Rev. 2.0</span>
-            <img src="/images/opol_rescue.png" alt="Opol Search and Rescue" style="width: 55px; height: 55px; object-fit: contain; margin-top: 4px;" />
+            <img src="${window.location.origin}/images/drrm_logo.jpg" alt="DRRM Rescue" style="width: 55px; height: 55px; object-fit: contain; margin-top: 4px;" />
         </div>
     </div>
 
