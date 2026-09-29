@@ -72,8 +72,8 @@ export function printPatientCareRecord(record: any): void {
 
     // Checkbox Helper: [ ] vs [x]
     const box = (checked: boolean) => checked
-        ? `<span style="display:inline-block; width:12px; height:12px; border:1px solid #000; text-align:center; line-height:11px; font-size:9pt; font-weight:bold; margin-right:4px; vertical-align:middle;">&#10003;</span>`
-        : `<span style="display:inline-block; width:12px; height:12px; border:1px solid #000; margin-right:4px; vertical-align:middle;"></span>`;
+        ? `<span style="display:inline-block; width:14px; height:14px; border:1px solid #000; text-align:center; line-height:14px; font-size:10pt; font-weight:bold; margin-right:4px; vertical-align:middle; overflow:hidden;">&#10003;</span>`
+        : `<span style="display:inline-block; width:14px; height:14px; border:1px solid #000; margin-right:4px; vertical-align:middle;"></span>`;
 
     // 3. Exact Pinpoint Calculator for Front/Back Body Diagram
     const calculatePinPosition = (m: Marker): { left: string; top: string; isRightSide: boolean } => {
@@ -355,9 +355,8 @@ export function printPatientCareRecord(record: any): void {
             color: #fff;
             font-size: 7.5pt;
             font-weight: 900;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            text-align: center;
+            line-height: 15px; /* Adjusting for border */
             border: 1.5px solid #000;
             box-shadow: 0 1px 3px rgba(0,0,0,0.4);
         }
@@ -367,12 +366,13 @@ export function printPatientCareRecord(record: any): void {
             left: 11px;
             background: #fff;
             border: 1px solid #000;
-            padding: 2px 5px;
+            padding: 3px 6px;
             font-size: 7pt;
             font-weight: bold;
             color: #000;
             white-space: nowrap;
             line-height: 1.2;
+            display: inline-block;
         }
         .pin-text-left {
             left: auto;
