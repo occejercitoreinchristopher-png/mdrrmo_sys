@@ -1,4 +1,5 @@
 import html2pdf from 'html2pdf.js';
+import { toast } from 'sonner';
 import { BODY_DIAGRAM_BASE64 } from './bodyDiagramBase64';
 
 interface Marker {
@@ -1020,10 +1021,28 @@ export function printPatientCareRecord(record: any): void {
         }
     };
 
-    html2pdf()
-        .set(opt)
-        .from(container)
-        .save()
-        .then(cleanup)
-        .catch(cleanup);
+    try {
+        toast.loading('Generating PDF...', { id: 'pdf-toast' });
+        
+        // Handle Vite/CJS default export differences safely
+        const pdfGen = typeof html2pdf === 'function' ? html2pdf() : (html2pdf as any).default();
+        
+        pdfGen
+            .set(opt)
+            .from(container)
+            .save()
+            .then(() => {
+                toast.success('PDF downloaded successfully!', { id: 'pdf-toast' });
+                cleanup();
+            })
+            .catch((err: any) => {
+                console.error('PDF Generation Error:', err);
+                toast.error('Failed to generate PDF. Check console.', { id: 'pdf-toast' });
+                cleanup();
+            });
+    } catch (err: any) {
+        console.error('PDF Setup Error:', err);
+        toast.error('Error starting PDF generation.', { id: 'pdf-toast' });
+        cleanup();
+    }
 }
