@@ -989,14 +989,26 @@ export function printPatientCareRecord(record: any): void {
 </body>
 </html>`;
 
-    // Create a hidden container to render the HTML for pdf conversion
-    const container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.left = '-9999px';
-    container.style.top = '0';
-    container.style.width = '816px'; // ~8.5in at 96dpi
-    container.innerHTML = html;
-    document.body.appendChild(container);
+    // Create a hidden iframe to isolate from Tailwind CSS oklch variables
+    // html2canvas crashes when it encounters modern oklch() colors in the global stylesheets.
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.left = '-9999px';
+    iframe.style.top = '0';
+    iframe.style.width = '816px'; // ~8.5in at 96dpi
+    iframe.style.height = '1056px';
+    iframe.setAttribute('title', 'PCR Official Form Print');
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+        toast.error('Failed to create PDF container.', { id: 'pdf-toast' });
+        return;
+    }
+
+    doc.open();
+    doc.write(html);
+    doc.close();
 
     // Build filename from patient name and date
     const patientName = (
@@ -1016,8 +1028,8 @@ export function printPatientCareRecord(record: any): void {
     };
 
     const cleanup = () => {
-        if (document.body.contains(container)) {
-            document.body.removeChild(container);
+        if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
         }
     };
 
@@ -1029,7 +1041,7 @@ export function printPatientCareRecord(record: any): void {
         
         pdfGen
             .set(opt)
-            .from(container)
+            .from(doc.documentElement)
             .save()
             .then(() => {
                 toast.success('PDF downloaded successfully!', { id: 'pdf-toast' });
