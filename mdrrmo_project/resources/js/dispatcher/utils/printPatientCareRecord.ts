@@ -1,4 +1,5 @@
 import { BODY_DIAGRAM_BASE64 } from './bodyDiagramBase64';
+import { LOGOS } from './logosBase64';
 
 interface Marker {
     x?: number;
@@ -537,7 +538,7 @@ export function printPatientCareRecord(record: any): void {
     <div class="header-wrap">
         <!-- Municipal Official Seal (Left) -->
         <div style="width: 60px; text-align: left;">
-            <img src="${window.location.origin}/images/opol_seal.jpg" alt="Opol Seal" style="width: 55px; height: 55px; object-fit: contain;" />
+            <img src="${LOGOS['media_1790658904237.png']}" style="width: 55px; height: 55px; object-fit: contain;" alt="Opol Seal" />
         </div>
 
         <div class="header-title-box">
@@ -548,7 +549,7 @@ export function printPatientCareRecord(record: any): void {
         <!-- Opol Rescue Shield (Right) -->
         <div style="width: 60px; text-align: right; position: relative;">
             <span class="rev-tag">Rev. 2.0</span>
-            <img src="${window.location.origin}/images/drrm_logo.jpg" alt="DRRM Rescue" style="width: 55px; height: 55px; object-fit: contain; margin-top: 4px;" />
+            <img src="${LOGOS['media_1790658913796.png']}" style="width: 55px; height: 55px; object-fit: contain; margin-top: 4px;" alt="Opol Rescue" />
         </div>
     </div>
 
