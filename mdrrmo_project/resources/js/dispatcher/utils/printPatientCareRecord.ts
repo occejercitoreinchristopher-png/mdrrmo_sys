@@ -1003,78 +1003,29 @@ export function printPatientCareRecord(record: any): void {
 }
 
 /**
- * Renders the given HTML string in an isolated iframe and downloads it as PDF.
- * Using an iframe prevents html2canvas from seeing Tailwind v4's oklch() colors
- * in the parent document's global stylesheets, which would crash the renderer.
+ * Opens the browser's native Print Preview dialog for the PCR.
+ * The user can verify the layout, then choose Print or Save as PDF.
+ * This avoids the blocking "Save As" dialog from the old pdf.save() approach.
  */
-async function downloadHtmlAsPdf(html: string, filename: string): Promise<void> {
-    // Create hidden, full-size iframe so the layout renders correctly
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.left = '-9999px';
-    iframe.style.top = '0';
-    iframe.style.width = '816px';   // ~8.5in @ 96dpi for letter/A4
-    iframe.style.height = '1200px';
-    iframe.style.border = '0';
-    iframe.setAttribute('title', 'PDF Render Frame');
-    document.body.appendChild(iframe);
-
-    const cleanup = () => {
-        if (document.body.contains(iframe)) {
-            document.body.removeChild(iframe);
-        }
-    };
-
-    try {
-        const doc = iframe.contentWindow?.document || iframe.contentDocument;
-        if (!doc) throw new Error('Failed to access iframe document');
-
-        // Write our clean HTML (uses only hex/rgb colors — no oklch)
-        doc.open();
-        doc.write(html);
-        doc.close();
-
-        // Wait a tick for the iframe's DOM to fully render
-        await new Promise(resolve => setTimeout(resolve, 400));
-
-        const body = doc.body;
-        if (!body) throw new Error('iframe body not found');
-
-        // Capture the iframe's body — html2canvas only sees the iframe's
-        // isolated stylesheets here, NOT the parent's Tailwind oklch vars
-        const canvas = await html2canvas(body, {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff',
-            width: 816,
-            height: body.scrollHeight,
-            windowWidth: 816,
-            windowHeight: body.scrollHeight,
-        });
-
-        const imgData = canvas.toDataURL('image/jpeg', 0.97);
-
-        // A4 in mm
-        const pdfW = 210;
-        const pdfH = (canvas.height * pdfW) / canvas.width;
-
-        const pdf = new jsPDF({
-            orientation: pdfH > pdfW ? 'portrait' : 'landscape',
-            unit: 'mm',
-            format: [pdfW, Math.max(pdfH, 297)],
-        });
-
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
-        pdf.save(filename);
-
-        cleanup();
-    } catch (err) {
-        console.error('PDF download error:', err);
-        cleanup();
-        // Fallback: open print dialog
-        iframe.style.left = '-9999px';
-        document.body.appendChild(iframe);
-        iframe.contentWindow?.print();
+function downloadHtmlAsPdf(html: string, _filename: string): void {
+    // Open a new popup window — does NOT block the main page
+    const printWindow = window.open('', '_blank', 'width=900,height=750');
+    if (!printWindow) {
+        alert('Pop-up blocked! Please allow pop-ups for this site and try again.');
+        return;
     }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+
+    // Wait for images/fonts to load, then trigger browser Print Preview
+    printWindow.onload = () => {
+        setTimeout(() => {
+            printWindow.focus();
+            printWindow.print();
+            // Auto-close the popup after user dismisses print dialog
+            printWindow.onafterprint = () => printWindow.close();
+        }, 600);
+    };
 }
