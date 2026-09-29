@@ -87,7 +87,7 @@ export default function IncidentDetails({
         }
 
         const existingPlace = incident.place_of_incident || incident.incident_address;
-        if (existingPlace) {
+        if (existingPlace && existingPlace !== 'Opol, Misamis Oriental') {
             setAddress(existingPlace);
             return;
         }
@@ -308,7 +308,7 @@ export default function IncidentDetails({
                             </p>
                         </div>
 
-                        {incident.place_of_incident && (
+                        {incident.place_of_incident && incident.place_of_incident !== 'Opol, Misamis Oriental' && (
                             <div>
                                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                     Place of Incident (Confirmed Marker)
@@ -340,10 +340,10 @@ export default function IncidentDetails({
                                     <MapPin className="w-4 h-4 text-[#F61509] flex-shrink-0 mt-0.5" />
                                     <div className="flex flex-col">
                                         <span className="font-semibold text-slate-900 dark:text-white capitalize">
-                                            {incident.place_of_incident && distance && distance > 50
+                                            {incident.place_of_incident && incident.place_of_incident !== 'Opol, Misamis Oriental' && distance && distance > 50
                                                 ? 'Reporter Device Position'
-                                                : (incident.place_of_incident 
-                                                    || incident.incident_address 
+                                                : ((incident.place_of_incident && incident.place_of_incident !== 'Opol, Misamis Oriental' ? incident.place_of_incident : null) 
+                                                    || (incident.incident_address && incident.incident_address !== 'Opol, Misamis Oriental' ? incident.incident_address : null) 
                                                     || (incident.location_code ? `Location Marker: ${incident.location_code}` : null) 
                                                     || (loadingAddress ? 'Fetching location name...' : address) 
                                                     || (incident.resident?.resident_profile?.barangay?.barangay_name ? `Brgy. ${incident.resident.resident_profile.barangay.barangay_name}, Opol` : null)
