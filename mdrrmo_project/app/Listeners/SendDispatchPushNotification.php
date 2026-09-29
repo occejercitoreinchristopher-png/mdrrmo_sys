@@ -54,7 +54,7 @@ class SendDispatchPushNotification
                     'type' => 'new_mission',
                 ],
                 'priority' => 'high',
-                'channelId' => 'mission_alarm',
+                'channelId' => 'mission_alarm_v2',
                 'ttl' => 300,
             ];
         }

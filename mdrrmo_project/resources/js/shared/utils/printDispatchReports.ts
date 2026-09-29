@@ -601,7 +601,7 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
     };
 }
 
-export function printDispatchLogsSummaryReport(incidents: any[], filters: { search?: string; status?: string; preparedBy?: string } = {}): void {
+export function printDispatchLogsSummaryReport(incidents: any[], filters: { search?: string; status?: string; date?: string; preparedBy?: string } = {}): void {
     if (!incidents || incidents.length === 0) {
         alert('No dispatch log records available to print.');
         return;
@@ -951,8 +951,8 @@ export function printDispatchLogsSummaryReport(incidents: any[], filters: { sear
 </html>`;
 
     const dateStr = new Date().toISOString().slice(0, 10);
-    const safeRef = (incident?.reference_number || ('incident_' + (incident?.id || 'report'))).replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filename = 'Incident_Report_' + safeRef + '_' + dateStr + '.pdf';
+    const safeStatus = (filters.status || 'all').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `MDRRMO_Dispatch_Summary_${safeStatus}_${dateStr}.pdf`;
 
     downloadHtmlAsPdf(html, filename);
 }

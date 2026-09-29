@@ -101,8 +101,8 @@ class PushNotificationService
             'report_source' => $incident->report_source,
         ];
 
-        // Use mission_alarm channel with alarm.mp3 so it rings even when app is backgrounded
-        self::sendToUsers($responders, $title, $body, $data, 'mission_alarm', 'alarm.mp3');
+        // Use mission_alarm_v2 channel with alarm.mp3 so it rings even when app is backgrounded
+        self::sendToUsers($responders, $title, $body, $data, 'mission_alarm_v2', 'alarm.mp3');
     }
 
     /**
