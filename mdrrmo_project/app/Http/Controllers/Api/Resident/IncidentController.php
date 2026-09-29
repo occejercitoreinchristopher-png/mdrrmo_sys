@@ -24,7 +24,7 @@ class IncidentController extends Controller
             ->get()
             ->map(function ($incident) {
                 $activeDispatch = $incident->dispatches->first(fn ($d) => ! in_array($d->dispatch_status, ['completed', 'cancelled']));
-                $incident->active_dispatch = $activeDispatch;
+                $incident->setAttribute('active_dispatch', $activeDispatch);
 
                 return $incident;
             });
