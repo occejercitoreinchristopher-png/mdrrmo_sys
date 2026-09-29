@@ -44,16 +44,18 @@ class SendDispatchPushNotification
 
         $messages = [];
         foreach ($users as $user) {
-            $messages[] = [
+        $messages[] = [
                 'to' => $user->expo_push_token,
-                'sound' => 'default',
-                'title' => 'New Mission Assigned!',
+                'sound' => 'alarm.mp3',
+                'title' => '🚨 New Mission Assigned!',
                 'body' => 'You have been assigned to a new emergency mission. Open the app to view details.',
                 'data' => [
                     'dispatch_id' => $dispatch->id,
                     'type' => 'new_mission',
                 ],
                 'priority' => 'high',
+                'channelId' => 'mission_alarm',
+                'ttl' => 300,
             ];
         }
 
