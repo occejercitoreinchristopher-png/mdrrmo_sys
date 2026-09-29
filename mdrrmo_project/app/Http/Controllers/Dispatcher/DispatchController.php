@@ -77,7 +77,7 @@ class DispatchController extends Controller
             abort(422, 'Please select at least one crew member (Driver or EMT) to deploy.');
         }
 
-        DB::transaction(function () use ($validated, $request, $driverId, $emtIds) {
+        $dispatch = DB::transaction(function () use ($validated, $request, $driverId, $emtIds) {
             $incident = Incident::findOrFail($validated['incident_id']);
             $ambulance = Ambulance::findOrFail($validated['ambulance_id']);
 
