@@ -60,9 +60,10 @@ class CleanDuplicateUsers extends Command
                         $u->forceDelete();
                     } catch (\Exception $e) {
                         $this->line("   - Force delete failed due to constraints. Anonymizing email and soft-deleting...");
-                        $u->email = 'deleted_' . $u->id . '_' . uniqid() . '_' . $u->email;
-                        $u->save();
-                        $u->delete();
+                        DB::table('users')->where('id', $u->id)->update([
+                            'email' => 'deleted_' . $u->id . '_' . uniqid() . '_' . $u->email,
+                            'deleted_at' => now(),
+                        ]);
                     }
                     $count++;
                 }
