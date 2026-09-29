@@ -536,8 +536,8 @@ export function printPatientCareRecord(record: any): void {
     <!-- TOP HEADER -->
     <div class="header-wrap">
         <!-- Municipal Official Seal (Left) -->
-        <div style="width: 85px; text-align: left;">
-            <img src="/images/opol_logo.png" alt="Opol Logo" style="width: 75px; height: 75px; object-fit: contain;" />
+        <div style="width: 95px; text-align: left;">
+            <img src="/images/opol_logo.png" alt="Opol Logo" style="width: 88px; height: 88px; object-fit: contain;" />
         </div>
 
         <div class="header-title-box">
@@ -546,7 +546,7 @@ export function printPatientCareRecord(record: any): void {
         </div>
 
         <!-- Opol Rescue Shield (Right) -->
-        <div style="width: 85px; text-align: right; position: relative;">
+        <div style="width: 95px; text-align: right; position: relative;">
             <span class="rev-tag" style="top: -5px; right: 0;">Rev. 2.0</span>
             <img src="/images/drrm_logo.png" alt="Opol DRRM Logo" style="width: 75px; height: 75px; object-fit: contain; margin-top: 5px;" />
         </div>
