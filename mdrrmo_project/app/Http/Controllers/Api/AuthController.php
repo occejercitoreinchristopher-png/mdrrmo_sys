@@ -20,7 +20,7 @@ class AuthController extends Controller
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->whereNull('deleted_at')],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')],
             'phone_number' => 'nullable|string|max:20',
             'birthdate' => 'nullable|date|before:today',
             'birthday' => 'nullable|date|before:today',
