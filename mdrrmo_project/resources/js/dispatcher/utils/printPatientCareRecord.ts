@@ -70,13 +70,19 @@ export function printPatientCareRecord(record: any): void {
         return { time: cleanDigits || ': ', am: hasAm, pm: hasPm };
     };
 
-    // Use SVGs for checkboxes to guarantee perfect rendering in html2canvas
-    const checkSvg = `data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Crect x='1.5' y='1.5' width='11' height='11' fill='none' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M 3 7 L 6 10 L 11 3' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E`;
-    const uncheckSvg = `data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Crect x='1.5' y='1.5' width='11' height='11' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E`;
-    const box = (checked: boolean) => 
-        `<img src="${checked ? checkSvg : uncheckSvg}" style="width:11px; height:11px; vertical-align:-1px; margin-right:3px;" />`;
+    // Checkbox Helper: [ ] vs [x]
+    const box = (checked: boolean) => checked
+        ? `<span style="display:inline-block; width:10px; height:10px; border:1px solid #000; text-align:center; line-height:9px; font-size:8pt; font-weight:bold; margin-right:2px; vertical-align:middle;">&#10003;</span>`
+        : `<span style="display:inline-block; width:10px; height:10px; border:1px solid #000; margin-right:2px; vertical-align:middle;"></span>`;
 
-    // 3. Exact Pinpoint Calculator for Front/Back Body Diagram
+    // 3. Exact Pinpoint Calculator for Front/Back Body Diagram (100% Accurate)
+    // In mobile React Native BodyDiagram component:
+    // TouchableOpacity diagramArea: width = 320, height = 550.
+    // The image is 360x360 rendered with resizeMode: 'contain'.
+    // Resulting rendered image dimensions: 320x320, vertically centered at top offset = (550 - 320) / 2 = 115px.
+    // Therefore:
+    // X is in [0, 320]
+    // Y on the body figure is in [115, 435]
     const calculatePinPosition = (m: Marker): { left: string; top: string; isRightSide: boolean } => {
         const rawX = Number(m.x) || 0;
         const rawY = Number(m.y) || 0;
@@ -85,16 +91,20 @@ export function printPatientCareRecord(record: any): void {
         let pctY: number;
 
         if (rawX <= 1 && rawY <= 1 && rawX > 0 && rawY > 0) {
+            // Already 0..1 normalized
             pctX = rawX * 100;
             pctY = rawY * 100;
         } else if (rawY >= 80 && rawY <= 550) {
+            // Mobile touch event with 115px letterbox offset inside 320x550 container
             pctX = (rawX / 320) * 100;
             pctY = ((rawY - 115) / 320) * 100;
         } else {
+            // Direct 320x320 coordinate space
             pctX = (rawX / 320) * 100;
             pctY = (rawY / 320) * 100;
         }
 
+        // Keep inside visible diagram bounds
         pctX = Math.max(2, Math.min(98, pctX));
         pctY = Math.max(2, Math.min(98, pctY));
 
@@ -105,6 +115,7 @@ export function printPatientCareRecord(record: any): void {
         };
     };
 
+    // Patient Demographics
     const patientFullName = [patient.last_name, patient.first_name, patient.middle_name].filter(Boolean).join(', ')
         || patient.full_name
         || record.patient_name
@@ -127,6 +138,7 @@ export function printPatientCareRecord(record: any): void {
     const natureOfCall = (record.nature_of_call || incident.nature_of_call || '').toLowerCase();
     const chiefComplaint = record.chief_complaint || incident.chief_complaint || '';
 
+    // Times parsed
     const tDispatch = parseTimeWithAmPm(record.dispatch_time);
     const tEnRoute = parseTimeWithAmPm(record.en_route_time);
     const tOnScene = parseTimeWithAmPm(record.on_scene_time);
@@ -134,6 +146,7 @@ export function printPatientCareRecord(record: any): void {
     const tArrivedHF = parseTimeWithAmPm(record.arrived_hf_time);
     const tDepartedHF = parseTimeWithAmPm(record.departed_hf_time);
 
+    // Vitals
     const v1 = vitalSigns[0] || {};
     const v2 = vitalSigns[1] || {};
     const v3 = vitalSigns[2] || {};
@@ -141,16 +154,19 @@ export function printPatientCareRecord(record: any): void {
     const v2Time = parseTimeWithAmPm(v2.time);
     const v3Time = parseTimeWithAmPm(v3.time);
 
+    // Assessment Items matching the 12 items in Image 2
     const allAssessments = [
         ...assessmentFindings.map(f => String(f).toLowerCase()),
         ...assessmentMarkers.map(m => String(m.label || m.type || '').toLowerCase())
     ];
     const isAssessed = (name: string) => allAssessments.some(a => a.includes(name.toLowerCase()));
 
+    // Dispositions matching Image 2
     const allDispos = dispositionList.map(d => String(d).toLowerCase());
     const hasDispo = (kw: string) => allDispos.some(d => d.includes(kw.toLowerCase()));
     const isTransported = record.transported || hasDispo('transport');
 
+    // Responders text
     const respondersList = [
         dispatch.team_leader?.name,
         dispatch.driver?.name,
@@ -188,19 +204,17 @@ export function printPatientCareRecord(record: any): void {
             background: #fff;
             margin: 0;
             padding: 0;
-            line-height: 1.3;
-            width: 816px;
-            text-rendering: geometricPrecision;
-            -webkit-font-smoothing: antialiased;
+            line-height: 1.2;
         }
 
         .pcr-page {
-            width: 793px;
+            width: 100%;
+            max-width: 194mm;
             margin: 0 auto;
             background: #fff;
-            padding: 5px;
         }
 
+        /* HEADER */
         .header-wrap {
             display: flex;
             align-items: center;
@@ -218,14 +232,14 @@ export function printPatientCareRecord(record: any): void {
             font-weight: bold;
             letter-spacing: 0.5px;
             text-transform: uppercase;
-            margin: 0 0 4px 0;
+            margin: 0;
         }
         .header-title-main {
             font-size: 14pt;
             font-weight: 900;
             letter-spacing: 1.5px;
             text-transform: uppercase;
-            margin: 0;
+            margin: 2px 0 0 0;
         }
         .rev-tag {
             position: absolute;
@@ -235,58 +249,56 @@ export function printPatientCareRecord(record: any): void {
             color: #333;
         }
 
+        /* SECTION LABEL */
         .section-label-italic {
-            font-size: 9.5pt;
+            font-size: 8.5pt;
             font-style: italic;
             text-decoration: underline;
             font-weight: bold;
-            margin-bottom: 2mm;
-            display: inline-block;
-            letter-spacing: 0.3px;
+            margin-bottom: 1.5mm;
+            display: block;
         }
 
+        /* TABLE GRID */
         table.form-grid {
             width: 100%;
             border-collapse: collapse;
             border: 1.5px solid #000;
             margin-bottom: 2mm;
-            table-layout: fixed;
         }
         table.form-grid td, table.form-grid th {
             border: 1px solid #000;
-            padding: 4px 6px;
+            padding: 2.5px 4px;
             vertical-align: middle;
             font-size: 8pt;
-            overflow: hidden;
-            word-wrap: break-word;
         }
 
         .field-name {
-            font-size: 8pt;
+            font-size: 7.5pt;
             font-weight: bold;
-            margin-right: 4px;
         }
         .field-data {
             font-size: 8.5pt;
-            font-weight: bold;
+            font-weight: 600;
             color: #000;
-            display: inline-block;
         }
 
+        /* TIME CELLS */
         .time-cell {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            font-size: 8pt;
+            gap: 4px;
+            font-size: 7.5pt;
         }
         .time-digits {
             font-size: 8.5pt;
             font-weight: bold;
-            min-width: 40px;
+            min-width: 42px;
             display: inline-block;
             text-align: center;
         }
 
+        /* TWO COLUMNS MIDDLE */
         .mid-columns {
             display: flex;
             gap: 2.5mm;
@@ -302,34 +314,36 @@ export function printPatientCareRecord(record: any): void {
 
         .box-title-bar {
             background: #fff;
-            border: 1.5px solid #000;
+            border: 1px solid #000;
             border-bottom: none;
-            font-size: 9pt;
+            font-size: 8.5pt;
             font-weight: bold;
-            padding: 3px 6px;
+            padding: 2px 5px;
             text-transform: uppercase;
         }
 
+        /* ASSESSMENT CHECKBOXES */
         .assessment-box {
-            border: 1.5px solid #000;
-            padding: 6px;
+            border: 1px solid #000;
+            padding: 4px;
         }
         .assess-cols {
             display: flex;
             justify-content: space-between;
-            font-size: 8pt;
+            font-size: 7.5pt;
             margin-bottom: 2mm;
         }
         .assess-col {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 2px;
         }
 
+        /* BODY DIAGRAM CONTAINER */
         .body-canvas {
             position: relative;
-            width: 220px;
-            height: 220px;
+            width: 200px;
+            height: 200px;
             margin: 0 auto;
             text-align: center;
         }
@@ -353,84 +367,85 @@ export function printPatientCareRecord(record: any): void {
             height: 16px;
             border-radius: 50%;
             background: #dc2626;
-            border: 1px solid #000;
-            text-align: center;
-        }
-        .pin-dot span {
             color: #fff;
-            font-size: 8pt;
+            font-size: 7.5pt;
             font-weight: 900;
-            line-height: 16px;
-            display: inline-block;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1.5px solid #000;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
         }
         .pin-text {
             position: absolute;
-            top: -8px;
-            left: 12px;
+            top: -9px;
+            left: 11px;
             background: #fff;
             border: 1px solid #000;
-            padding: 2px 4px;
-            font-size: 7.5pt;
+            padding: 1px 4px;
+            font-size: 6.8pt;
             font-weight: bold;
             color: #000;
             white-space: nowrap;
+            line-height: 12px;
         }
         .pin-text-left {
             left: auto;
-            right: 12px;
+            right: 11px;
         }
 
+        /* SPECIAL INSTRUCTIONS */
         .special-box {
             border: 1px solid #000;
-            padding: 4px 6px;
+            padding: 3px 5px;
             margin-top: 2mm;
             min-height: 52px;
         }
         .line-rule {
             border-bottom: 1px solid #999;
-            height: 16px;
-            margin-top: 2px;
+            height: 14px;
+            margin-top: 1px;
         }
 
+        /* VITALS TABLE */
         table.vitals-grid {
             width: 100%;
             border-collapse: collapse;
-            border: 1.5px solid #000;
-            font-size: 8pt;
+            border: 1px solid #000;
+            font-size: 7.5pt;
             text-align: center;
             margin-bottom: 2mm;
-            table-layout: fixed;
         }
         table.vitals-grid th, table.vitals-grid td {
             border: 1px solid #000;
-            padding: 4px 3px;
+            padding: 2.5px 3px;
         }
         table.vitals-grid th {
             font-weight: bold;
+            font-size: 7.5pt;
             background: #f8fafc;
         }
 
+        /* GCS TABLE */
         table.gcs-grid {
             width: 100%;
             border-collapse: collapse;
-            border: 1.5px solid #000;
-            font-size: 7.5pt;
-            line-height: 1.3;
-            table-layout: fixed;
+            border: 1px solid #000;
+            font-size: 6.8pt;
+            line-height: 1.15;
         }
         table.gcs-grid td, table.gcs-grid th {
             border: 1px solid #000;
-            padding: 4px 5px;
-            word-wrap: break-word;
+            padding: 1.5px 3px;
         }
         .gcs-head-col {
             font-weight: bold;
-            width: 35%;
+            width: 32%;
             vertical-align: top;
             background: #fafafa;
         }
         .gcs-desc-col {
-            width: 55%;
+            width: 58%;
         }
         .gcs-score-col {
             width: 10%;
@@ -438,6 +453,7 @@ export function printPatientCareRecord(record: any): void {
             font-weight: bold;
         }
 
+        /* LOWER MIDDLE: DISPO & RESPONDERS */
         .lower-mid {
             display: flex;
             gap: 2.5mm;
@@ -446,81 +462,85 @@ export function printPatientCareRecord(record: any): void {
         }
         .dispo-box {
             width: 50%;
-            border: 1.5px solid #000;
-            padding: 6px;
+            border: 1px solid #000;
+            padding: 4px;
         }
         .dispo-cols {
             display: flex;
             justify-content: space-between;
-            font-size: 7.5pt;
+            font-size: 7.2pt;
         }
         .dispo-col {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 2.5px;
             width: 49%;
         }
 
         .resp-box {
             width: 50%;
-            border: 1.5px solid #000;
-            padding: 6px 8px;
+            border: 1px solid #000;
+            padding: 4px 6px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
             font-size: 8pt;
         }
         .resp-line-item {
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         .underline-span {
             border-bottom: 1px solid #000;
             display: inline-block;
             font-weight: bold;
-            padding: 0 4px 2px 4px;
+            min-width: 130px;
+            padding: 0 4px;
         }
 
+        /* WAIVER BOX */
         .waiver-wrapper {
             border: 1.5px solid #000;
-            padding: 6px 8px;
-            font-size: 8pt;
+            padding: 4px 6px;
+            font-size: 7.2pt;
             position: relative;
         }
         .waiver-title {
             text-align: center;
             font-weight: bold;
-            font-size: 9pt;
-            margin-bottom: 4px;
+            font-size: 8.5pt;
+            margin-bottom: 2px;
         }
         .waiver-statement {
-            line-height: 1.4;
+            line-height: 1.3;
             text-align: justify;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
         .waiver-bottom-cols {
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            margin-top: 6px;
+            margin-top: 4px;
         }
         .sig-col {
             width: 48%;
         }
         .sig-holder-img {
-            max-height: 32px;
-            max-width: 150px;
+            max-height: 28px;
+            max-width: 140px;
             object-fit: contain;
             display: block;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
     </style>
 </head>
 <body>
 
 <div class="pcr-page">
+    <!-- TOP HEADER -->
     <div class="header-wrap">
-        <div style="width: 100px; text-align: left;">
-            <img src="/images/opol_logo.png" alt="Opol Logo" style="width: 90px; height: 90px; object-fit: contain;" />
+        <!-- Municipal Official Seal (Left) -->
+        <div style="width: 95px; text-align: left;">
+            <img src="/images/opol_logo.png" alt="Opol Logo" style="width: 88px; height: 88px; object-fit: contain;" />
         </div>
 
         <div class="header-title-box">
@@ -528,110 +548,125 @@ export function printPatientCareRecord(record: any): void {
             <h1 class="header-title-main">PATIENT CARE RECORD</h1>
         </div>
 
-        <div style="width: 100px; text-align: right; position: relative;">
+        <!-- Opol Rescue Shield (Right) -->
+        <div style="width: 95px; text-align: right; position: relative;">
             <span class="rev-tag" style="top: -5px; right: 0;">Rev. 2.0</span>
-            <img src="/images/drrm_logo.png" alt="Opol DRRM Logo" style="width: 80px; height: 80px; object-fit: contain; margin-top: 5px;" />
+            <img src="/images/drrm_logo.png" alt="Opol DRRM Logo" style="width: 75px; height: 75px; object-fit: contain; margin-top: 5px;" />
         </div>
     </div>
 
+    <!-- PATIENT INFORMATION SECTION (Image 2 exact grid) -->
     <span class="section-label-italic">Patient Information</span>
     <table class="form-grid">
+        <!-- Row 1 -->
         <tr>
             <td colspan="4" style="width: 65%;">
                 <span class="field-name">Name of Patient:</span>
-                <span class="field-data">${patientFullName || '&nbsp;'}</span>
+                <span class="field-data" style="margin-left: 6px;">${patientFullName || '__________________________________________'}</span>
             </td>
             <td colspan="2" style="width: 35%;">
                 <span class="field-name">Date (mo/day/yr):</span>
-                <span class="field-data">${formatMoDayYr(record.record_date || record.created_at)}</span>
+                <span class="field-data" style="margin-left: 6px; font-family: monospace;">${formatMoDayYr(record.record_date || record.created_at)}</span>
             </td>
         </tr>
+
+        <!-- Row 2 -->
         <tr>
             <td style="width: 32%;">
                 <span class="field-name">Contact #:</span>
-                <span class="field-data">${patient.contact_number || record.contact_number || '&nbsp;'}</span>
+                <span class="field-data">${patient.contact_number || record.contact_number || '_________________'}</span>
             </td>
             <td style="width: 14%;">
                 <span class="field-name">Age:</span>
-                <span class="field-data">${patient.age ? patient.age : (record.age ? record.age : '&nbsp;')}</span>
+                <span class="field-data">${patient.age ? patient.age : (record.age ? record.age : '___')}</span>
             </td>
-            <td style="width: 12%;">
+            <td style="width: 10%;">
                 <span class="field-name">Male</span> ${box(isMale)}
             </td>
-            <td style="width: 12%;">
+            <td style="width: 10%;">
                 <span class="field-name">Female</span> ${box(isFemale)}
             </td>
             <td colspan="2">
                 <span class="field-name">Caller #:</span>
-                <span class="field-data">${record.caller_no || incident.caller_phone_number || '&nbsp;'}</span>
+                <span class="field-data">${record.caller_no || incident.caller_phone_number || '_________________'}</span>
             </td>
         </tr>
+
+        <!-- Row 3 -->
         <tr>
             <td colspan="4">
                 <span class="field-name">Civil Status:</span>
-                <span>
-                    ${box(civilStatus === 'single')} Single &nbsp;&nbsp;
-                    ${box(civilStatus === 'married')} Married &nbsp;&nbsp;
-                    ${box(civilStatus === 'widowed')} Widowed &nbsp;&nbsp;
-                    ${box(civilStatus === 'child')} Child &nbsp;&nbsp;
+                <span style="margin-left: 4px;">
+                    ${box(civilStatus === 'single')} Single &nbsp;
+                    ${box(civilStatus === 'married')} Married &nbsp;
+                    ${box(civilStatus === 'widowed')} Widowed &nbsp;
+                    ${box(civilStatus === 'child')} Child &nbsp;
                     ${box(civilStatus === 'separated')} Separated
                 </span>
             </td>
             <td colspan="2">
                 <span class="field-name">Dispatch Time:</span>
-                <span class="time-cell">
+                <span class="time-cell" style="margin-left: 6px;">
                     <span class="time-digits">${tDispatch.time}</span>
                     <span>${box(tDispatch.am)} AM</span>
                     <span>${box(tDispatch.pm)} PM</span>
                 </span>
             </td>
         </tr>
+
+        <!-- Row 4 -->
         <tr>
             <td colspan="4">
                 <span class="field-name">Address:</span>
-                <span class="field-data">${patientAddress || '&nbsp;'}</span>
+                <span class="field-data" style="margin-left: 6px;">${patientAddress || '__________________________________________'}</span>
             </td>
             <td colspan="2">
                 <span class="field-name">En Route Time:</span>
-                <span class="time-cell">
+                <span class="time-cell" style="margin-left: 6px;">
                     <span class="time-digits">${tEnRoute.time}</span>
                     <span>${box(tEnRoute.am)} AM</span>
                     <span>${box(tEnRoute.pm)} PM</span>
                 </span>
             </td>
         </tr>
+
+        <!-- Row 5 -->
         <tr>
             <td colspan="4">
                 <span class="field-name">Place of Incident:</span>
-                <span class="field-data">${incidentPlace || '&nbsp;'}</span>
+                <span class="field-data" style="margin-left: 6px;">${incidentPlace || '__________________________________________'}</span>
             </td>
             <td colspan="2">
                 <span class="field-name">On Scene Time:</span>
-                <span class="time-cell">
+                <span class="time-cell" style="margin-left: 6px;">
                     <span class="time-digits">${tOnScene.time}</span>
                     <span>${box(tOnScene.am)} AM</span>
                     <span>${box(tOnScene.pm)} PM</span>
                 </span>
             </td>
         </tr>
+
+        <!-- Row 6 -->
         <tr>
             <td colspan="4">
                 <span class="field-name">Chief of Complaint:</span>
-                <span class="field-data">${chiefComplaint || '&nbsp;'}</span>
+                <span class="field-data" style="margin-left: 6px; font-weight: bold;">${chiefComplaint || '__________________________________________'}</span>
             </td>
             <td colspan="2">
                 <span class="field-name">Transport Time:</span>
-                <span class="time-cell">
+                <span class="time-cell" style="margin-left: 6px;">
                     <span class="time-digits">${tTransport.time}</span>
                     <span>${box(tTransport.am)} AM</span>
                     <span>${box(tTransport.pm)} PM</span>
                 </span>
             </td>
         </tr>
+
+        <!-- Row 7 -->
         <tr>
             <td colspan="4" rowspan="2" style="vertical-align: top;">
-                <span class="field-name" style="display:block; margin-bottom: 4px;">Nature of Call:</span>
-                <div style="line-height: 1.8;">
+                <span class="field-name">Nature of Call:</span>
+                <div style="margin-top: 3px; line-height: 1.6;">
                     ${box(natureOfCall === 'emergency')} Emergency &nbsp;&nbsp;&nbsp;&nbsp;
                     ${box(natureOfCall === 'transport')} Transport &nbsp;&nbsp;&nbsp;&nbsp;
                     ${box(natureOfCall === 'standby')} Standby<br>
@@ -641,17 +676,19 @@ export function printPatientCareRecord(record: any): void {
             </td>
             <td colspan="2">
                 <span class="field-name">Arrived HF:</span>
-                <span class="time-cell">
+                <span class="time-cell" style="margin-left: 6px;">
                     <span class="time-digits">${tArrivedHF.time}</span>
                     <span>${box(tArrivedHF.am)} AM</span>
                     <span>${box(tArrivedHF.pm)} PM</span>
                 </span>
             </td>
         </tr>
+
+        <!-- Row 8 -->
         <tr>
             <td colspan="2">
                 <span class="field-name">Departed HF:</span>
-                <span class="time-cell">
+                <span class="time-cell" style="margin-left: 6px;">
                     <span class="time-digits">${tDepartedHF.time}</span>
                     <span>${box(tDepartedHF.am)} AM</span>
                     <span>${box(tDepartedHF.pm)} PM</span>
@@ -660,10 +697,13 @@ export function printPatientCareRecord(record: any): void {
         </tr>
     </table>
 
+    <!-- MIDDLE SECTION: TWO COLUMNS (ASSESSMENT + VITALS/GCS) -->
     <div class="mid-columns">
+        <!-- LEFT COLUMN: ASSESSMENT & BODY DIAGRAM -->
         <div class="left-col">
             <div class="box-title-bar">ASSESSMENT</div>
             <div class="assessment-box">
+                <!-- 12 Checkboxes in 3 Columns (Image 2) -->
                 <div class="assess-cols">
                     <div class="assess-col">
                         <span>${box(isAssessed('abrasion'))} Abrasion</span>
@@ -685,6 +725,7 @@ export function printPatientCareRecord(record: any): void {
                     </div>
                 </div>
 
+                <!-- BODY DIAGRAM WITH 100% ACCURATE PIN POINTS -->
                 <div class="body-canvas">
                     <img src="${BODY_DIAGRAM_BASE64}" class="body-img" alt="Anatomical Diagram" />
                     ${assessmentMarkers.map((m, idx) => {
@@ -692,28 +733,31 @@ export function printPatientCareRecord(record: any): void {
         const labelText = m.label || m.type || '';
         return `
                             <div class="pin-marker" style="left: ${pos.left}; top: ${pos.top};" title="${labelText}">
-                                <div class="pin-dot"><span>${idx + 1}</span></div>
+                                <div class="pin-dot">${idx + 1}</div>
                                 ${labelText ? `<div class="pin-text ${pos.isRightSide ? 'pin-text-left' : ''}">${labelText}</div>` : ''}
                             </div>
                         `;
     }).join('')}
                 </div>
-                <div style="display: flex; justify-content: space-around; font-size: 8pt; font-weight: bold; margin-top: 4px;">
+                <div style="display: flex; justify-content: space-around; font-size: 7pt; font-weight: bold; margin-top: 1px;">
                     <span>FRONT</span>
                     <span>BACK</span>
                 </div>
 
+                <!-- SPECIAL INSTRUCTIONS (Image 2) -->
                 <div class="special-box">
                     <span class="field-name">SPECIAL INSTRUCTIONS:</span>
-                    <span class="field-data" style="margin-left: 4px;">
+                    <span class="field-data" style="margin-left: 4px; font-weight: bold;">
                         ${record.special_instructions || ''}
                     </span>
+                    <div class="line-rule"></div>
                     <div class="line-rule"></div>
                     <div class="line-rule"></div>
                 </div>
             </div>
         </div>
 
+        <!-- RIGHT COLUMN: VITAL SIGNS & GCS (Image 2) -->
         <div class="right-col">
             <div class="box-title-bar">VITAL SIGNS</div>
             <table class="vitals-grid">
@@ -726,16 +770,16 @@ export function printPatientCareRecord(record: any): void {
                 <tr>
                     <td style="font-weight: bold;">TIME</td>
                     <td>
-                        <div style="font-weight: bold; margin-bottom: 4px;">${v1Time.time}</div>
-                        <div>${box(v1Time.am)} AM &nbsp; ${box(v1Time.pm)} PM</div>
+                        <span style="font-weight: bold;">${v1Time.time}</span><br>
+                        <span>${box(v1Time.am)}AM ${box(v1Time.pm)}PM</span>
                     </td>
                     <td>
-                        <div style="font-weight: bold; margin-bottom: 4px;">${v2Time.time}</div>
-                        <div>${box(v2Time.am)} AM &nbsp; ${box(v2Time.pm)} PM</div>
+                        <span style="font-weight: bold;">${v2Time.time}</span><br>
+                        <span>${box(v2Time.am)}AM ${box(v2Time.pm)}PM</span>
                     </td>
                     <td>
-                        <div style="font-weight: bold; margin-bottom: 4px;">${v3Time.time}</div>
-                        <div>${box(v3Time.am)} AM &nbsp; ${box(v3Time.pm)} PM</div>
+                        <span style="font-weight: bold;">${v3Time.time}</span><br>
+                        <span>${box(v3Time.am)}AM ${box(v3Time.pm)}PM</span>
                     </td>
                 </tr>
                 <tr>
@@ -770,8 +814,10 @@ export function printPatientCareRecord(record: any): void {
                 </tr>
             </table>
 
-            <div class="box-title-bar" style="border-top: 1.5px solid #000;">GLASGOW COMA SCALE</div>
+            <!-- GLASGOW COMA SCALE (Exact Image 2 table) -->
+            <div class="box-title-bar" style="border-top: 1px solid #000;">GLASGOW COMA SCALE</div>
             <table class="gcs-grid">
+                <!-- Eye -->
                 <tr>
                     <td class="gcs-head-col" rowspan="4">Best eye response (E)</td>
                     <td class="gcs-desc-col">Spontaneous - open with blinking at baseline</td>
@@ -790,6 +836,7 @@ export function printPatientCareRecord(record: any): void {
                     <td class="gcs-score-col" style="${gcsEye === 1 ? 'background:#e2e8f0; font-weight:900;' : ''}">1</td>
                 </tr>
 
+                <!-- Verbal -->
                 <tr>
                     <td class="gcs-head-col" rowspan="5">Best verbal response (V)</td>
                     <td class="gcs-desc-col">Oriented</td>
@@ -812,6 +859,7 @@ export function printPatientCareRecord(record: any): void {
                     <td class="gcs-score-col" style="${gcsVerbal === 1 ? 'background:#e2e8f0; font-weight:900;' : ''}">1</td>
                 </tr>
 
+                <!-- Motor -->
                 <tr>
                     <td class="gcs-head-col" rowspan="6">Best motor response (M)</td>
                     <td class="gcs-desc-col">Obeys commands for movement</td>
@@ -838,17 +886,20 @@ export function printPatientCareRecord(record: any): void {
                     <td class="gcs-score-col" style="${gcsMotor === 1 ? 'background:#e2e8f0; font-weight:900;' : ''}">1</td>
                 </tr>
 
+                <!-- TOTAL -->
                 <tr style="background: #f1f5f9;">
-                    <td colspan="2" style="font-weight: 900; text-align: center; font-size: 8.5pt; letter-spacing: 1px;">TOTAL</td>
-                    <td class="gcs-score-col" style="font-size: 9.5pt; font-weight: 900;">${gcsTotal || ''}</td>
+                    <td colspan="2" style="font-weight: 900; text-align: center; font-size: 8pt; letter-spacing: 1px;">TOTAL</td>
+                    <td class="gcs-score-col" style="font-size: 9pt; font-weight: 900;">${gcsTotal || ''}</td>
                 </tr>
             </table>
         </div>
     </div>
 
+    <!-- LOWER MIDDLE: DISPOSITION & RESPONDERS (Image 2) -->
     <div class="lower-mid">
+        <!-- LEFT: DISPOSITION (Image 2 exact checkboxes) -->
         <div class="dispo-box">
-            <span class="field-name" style="margin-bottom: 4px; display: block;">INCIDENT/PATIENT DISPOSITION</span>
+            <span class="field-name" style="margin-bottom: 2px; display: block;">INCIDENT/PATIENT DISPOSITION</span>
             <div class="dispo-cols">
                 <div class="dispo-col">
                     <span>${box(hasDispo('recovered'))} Treated, Recovered</span>
@@ -869,31 +920,33 @@ export function printPatientCareRecord(record: any): void {
             </div>
         </div>
 
+        <!-- RIGHT: RESPONDERS, TRANSPORTED TO, RECEIVED BY (Image 2) -->
         <div class="resp-box">
             <div class="resp-line-item">
                 <span class="field-name">Responders:</span>
-                <span class="underline-span" style="width: calc(100% - 90px);">${respondersText || '&nbsp;'}</span>
+                <span class="underline-span" style="width: calc(100% - 90px);">${respondersText || '__________________________________'}</span>
             </div>
             <div class="resp-line-item">
                 <span class="field-name">Transported to:</span>
-                <span class="underline-span" style="width: calc(100% - 110px);">${record.transported_to || (isTransported ? 'Opol Community Clinic' : '&nbsp;')}</span>
+                <span class="underline-span" style="width: calc(100% - 110px);">${record.transported_to || (isTransported ? 'Opol Community Clinic' : '__________________________________')}</span>
             </div>
             <div class="resp-line-item" style="margin-bottom: 0;">
                 <span class="field-name">Received by:</span>
-                <span class="underline-span" style="width: calc(100% - 90px);">${record.received_by || '&nbsp;'}</span>
+                <span class="underline-span" style="width: calc(100% - 90px);">${record.received_by || '__________________________________'}</span>
             </div>
         </div>
     </div>
 
+    <!-- BOTTOM: WAIVER & WITNESS INFORMATION (Image 2) -->
     <div class="waiver-wrapper">
         <div class="waiver-title">WAIVER</div>
         <div class="waiver-statement">
-            By signing this form, I <b style="text-decoration: underline; padding: 0 4px;">${patientFullName || '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</b> is releasing OPOL RESCUE TEAM of any liability and/or medical claim resulting from my decision to refuse care against medical advice.
+            By signing this form, I <b style="text-decoration: underline; padding: 0 4px;">${patientFullName || '____________________________________'}</b> is releasing OPOL RESCUE TEAM of any liability and/or medical claim resulting from my decision to refuse care against medical advice.
         </div>
 
         <div class="waiver-bottom-cols">
             <div class="sig-col">
-                <div style="min-height: 35px; display: flex; align-items: flex-end;">
+                <div style="min-height: 28px; display: flex; align-items: flex-end;">
                     ${(() => {
             const effectivePatientSig = record.patient_signature || record.waiver_signature;
             const isPatientUnableToSign = record.patient_signature === 'UNABLE_TO_SIGN' || record.waiver_signature === 'UNABLE_TO_SIGN';
@@ -901,12 +954,12 @@ export function printPatientCareRecord(record: any): void {
                 return `<img src="${effectivePatientSig}" class="sig-holder-img" alt="Signature" />`;
             }
             if (isPatientUnableToSign) {
-                return `<span style="font-size: 8pt; font-weight: bold; color: #b91c1c; font-style: italic; margin-bottom: 4px;">[ PATIENT UNABLE TO SIGN / UNCONSCIOUS ]</span>`;
+                return `<span style="font-size: 7.5pt; font-weight: bold; color: #b91c1c; font-style: italic; margin-bottom: 2px;">[ PATIENT UNABLE TO SIGN / UNCONSCIOUS ]</span>`;
             }
             return '';
         })()}
                 </div>
-                <div style="margin-bottom: 4px;">
+                <div style="margin-bottom: 2px;">
                     <span class="field-name">SIGNATURE:</span>
                     <span style="border-bottom: 1px solid #000; display: inline-block; width: 140px;"></span>
                 </div>
@@ -919,14 +972,14 @@ export function printPatientCareRecord(record: any): void {
             </div>
 
             <div class="sig-col">
-                <span class="field-name" style="display: block; margin-bottom: 4px;">WITNESS INFORMATION</span>
-                <div style="margin-bottom: 4px;">
+                <span class="field-name" style="display: block; margin-bottom: 2px;">WITNESS INFORMATION</span>
+                <div style="margin-bottom: 2px;">
                     <span class="field-name">NAME:</span>
                     <span style="border-bottom: 1px solid #000; display: inline-block; width: 190px; font-weight: bold; padding-left: 4px;">
-                        ${record.witness_name || '&nbsp;'}
+                        ${record.witness_name || ''}
                     </span>
                 </div>
-                <div style="min-height: 35px; display: flex; align-items: flex-end;">
+                <div style="min-height: 25px; display: flex; align-items: flex-end;">
                     ${record.witness_signature ? `<img src="${record.witness_signature}" class="sig-holder-img" alt="Witness Signature" />` : ''}
                 </div>
             </div>
@@ -937,6 +990,7 @@ export function printPatientCareRecord(record: any): void {
 </body>
 </html>`;
 
+    // Build filename from patient name and date
     const patientName = (
         [patient.first_name, patient.middle_name, patient.last_name]
             .filter(Boolean)
@@ -948,17 +1002,20 @@ export function printPatientCareRecord(record: any): void {
     downloadHtmlAsPdf(html, filename);
 }
 
+/**
+ * Renders the given HTML string in an isolated iframe and downloads it as PDF.
+ * Using an iframe prevents html2canvas from seeing Tailwind v4's oklch() colors
+ * in the parent document's global stylesheets, which would crash the renderer.
+ */
 async function downloadHtmlAsPdf(html: string, filename: string): Promise<void> {
+    // Create hidden, full-size iframe so the layout renders correctly
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
+    iframe.style.left = '-9999px';
     iframe.style.top = '0';
-    iframe.style.left = '0';
-    iframe.style.width = '816px';
+    iframe.style.width = '816px';   // ~8.5in @ 96dpi for letter/A4
     iframe.style.height = '1200px';
     iframe.style.border = '0';
-    iframe.style.opacity = '0';
-    iframe.style.pointerEvents = 'none';
-    iframe.style.zIndex = '99999';
     iframe.setAttribute('title', 'PDF Render Frame');
     document.body.appendChild(iframe);
 
@@ -972,25 +1029,33 @@ async function downloadHtmlAsPdf(html: string, filename: string): Promise<void> 
         const doc = iframe.contentWindow?.document || iframe.contentDocument;
         if (!doc) throw new Error('Failed to access iframe document');
 
+        // Write our clean HTML (uses only hex/rgb colors — no oklch)
         doc.open();
         doc.write(html);
         doc.close();
 
-        await new Promise(resolve => setTimeout(resolve, 800));
+        // Wait a tick for the iframe's DOM to fully render
+        await new Promise(resolve => setTimeout(resolve, 400));
 
         const body = doc.body;
         if (!body) throw new Error('iframe body not found');
 
+        // Capture the iframe's body — html2canvas only sees the iframe's
+        // isolated stylesheets here, NOT the parent's Tailwind oklch vars
         const canvas = await html2canvas(body, {
             scale: 2,
             useCORS: true,
             logging: false,
             backgroundColor: '#ffffff',
+            width: 816,
+            height: body.scrollHeight,
             windowWidth: 816,
+            windowHeight: body.scrollHeight,
         });
 
         const imgData = canvas.toDataURL('image/jpeg', 0.97);
 
+        // A4 in mm
         const pdfW = 210;
         const pdfH = (canvas.height * pdfW) / canvas.width;
 
@@ -1007,6 +1072,7 @@ async function downloadHtmlAsPdf(html: string, filename: string): Promise<void> 
     } catch (err) {
         console.error('PDF download error:', err);
         cleanup();
+        // Fallback: open print dialog
         iframe.style.left = '-9999px';
         document.body.appendChild(iframe);
         iframe.contentWindow?.print();
