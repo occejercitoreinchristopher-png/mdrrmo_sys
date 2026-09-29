@@ -181,6 +181,7 @@ export function printPatientCareRecord(record: any): void {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <base href="${window.location.origin}">
     <title>PCR #${record.id} - ${patientFullName || 'Patient Care Record'}</title>
     <style>
         @page {
@@ -537,13 +538,7 @@ export function printPatientCareRecord(record: any): void {
     <div class="header-wrap">
         <!-- Municipal Official Seal (Left) -->
         <div style="width: 60px; text-align: left;">
-            <svg width="55" height="55" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="46" fill="#fef3c7" stroke="#b45309" stroke-width="3"/>
-                <circle cx="50" cy="50" r="38" fill="#fff" stroke="#1e3a8a" stroke-width="2"/>
-                <polygon points="50,16 54,28 67,28 56,36 60,48 50,40 40,48 44,36 33,28 46,28" fill="#b45309"/>
-                <text x="50" y="62" font-family="Arial" font-size="8.5" font-weight="bold" fill="#1e3a8a" text-anchor="middle">OPOL</text>
-                <text x="50" y="72" font-family="Arial" font-size="6.5" font-weight="bold" fill="#b91c1c" text-anchor="middle">OFFICIAL SEAL</text>
-            </svg>
+            <img src="/images/opol_seal.jpg" alt="Municipality of Opol" style="width: 55px; height: 55px; object-fit: contain;" />
         </div>
 
         <div class="header-title-box">
@@ -554,14 +549,7 @@ export function printPatientCareRecord(record: any): void {
         <!-- Opol Rescue Shield (Right) -->
         <div style="width: 60px; text-align: right; position: relative;">
             <span class="rev-tag">Rev. 2.0</span>
-            <svg width="55" height="55" viewBox="0 0 100 110" style="margin-top: 4px;">
-                <path d="M50 5 Q95 20 90 70 Q50 105 50 105 Q50 105 10 70 Q5 20 50 5 Z" fill="#0284c7" stroke="#0369a1" stroke-width="3"/>
-                <circle cx="50" cy="52" r="25" fill="#fff"/>
-                <rect x="46" y="34" width="8" height="36" rx="2" fill="#b91c1c"/>
-                <rect x="32" y="48" width="36" height="8" rx="2" fill="#b91c1c"/>
-                <text x="50" y="24" font-family="Arial" font-size="9" font-weight="900" fill="#fff" text-anchor="middle">OPOL</text>
-                <text x="50" y="90" font-family="Arial" font-size="8" font-weight="bold" fill="#fff" text-anchor="middle">RESCUE</text>
-            </svg>
+            <img src="/images/opol_rescue.png" alt="Opol Search and Rescue" style="width: 55px; height: 55px; object-fit: contain; margin-top: 4px;" />
         </div>
     </div>
 
