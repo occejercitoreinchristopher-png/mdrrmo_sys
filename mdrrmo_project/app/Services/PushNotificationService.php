@@ -12,39 +12,53 @@ class PushNotificationService
 {
     /**
      * Send Expo push notification to a single user.
+     * Pass channelId='mission_alarm' and sound='alarm.mp3' for emergency alerts.
      */
-    public static function sendToUser(?User $user, string $title, string $body, array $data = []): void
+    public static function sendToUser(?User $user, string $title, string $body, array $data = [], ?string $channelId = null, string $sound = 'default'): void
     {
         if (! $user || empty($user->expo_push_token)) {
             return;
         }
 
-        self::send([
+        $payload = [
             'to' => $user->expo_push_token,
-            'sound' => 'default',
+            'sound' => $sound,
             'title' => $title,
             'body' => $body,
             'data' => $data,
             'priority' => 'high',
-        ]);
+        ];
+
+        if ($channelId) {
+            $payload['channelId'] = $channelId;
+        }
+
+        self::send($payload);
     }
 
     /**
      * Send push notification to multiple users.
+     * Pass channelId='mission_alarm' and sound='alarm.mp3' for emergency alerts.
      */
-    public static function sendToUsers($users, string $title, string $body, array $data = []): void
+    public static function sendToUsers($users, string $title, string $body, array $data = [], ?string $channelId = null, string $sound = 'default'): void
     {
         $messages = [];
         foreach ($users as $user) {
             if (! empty($user->expo_push_token)) {
-                $messages[] = [
+                $message = [
                     'to' => $user->expo_push_token,
-                    'sound' => 'default',
+                    'sound' => $sound,
                     'title' => $title,
                     'body' => $body,
                     'data' => $data,
                     'priority' => 'high',
                 ];
+
+                if ($channelId) {
+                    $message['channelId'] = $channelId;
+                }
+
+                $messages[] = $message;
             }
         }
 
@@ -55,7 +69,7 @@ class PushNotificationService
 
     /**
      * Notify available responders when an incident is verified and ready for dispatch.
-     * Light notification (standard chime/vibration, no aggressive siren alarm).
+     * Uses mission_alarm channel so Android plays alarm.mp3 even in background.
      */
     public static function notifyRespondersNewVerifiedIncident(Incident $incident): void
     {
@@ -73,7 +87,7 @@ class PushNotificationService
         $location = $incident->place_of_incident ?: $incident->incident_address ?: ($barangay ? "Barangay {$barangay}" : 'Opol, Misamis Oriental');
         $verifiedAt = $incident->verified_at ? $incident->verified_at->toIso8601String() : now()->toIso8601String();
 
-        $title = '🔔 New Verified Incident';
+        $title = '🚨 New Verified Incident';
         $body = "A new {$incidentType} incident has been verified and is ready for dispatch.";
 
         $data = [
@@ -87,7 +101,8 @@ class PushNotificationService
             'report_source' => $incident->report_source,
         ];
 
-        self::sendToUsers($responders, $title, $body, $data);
+        // Use mission_alarm channel with alarm.mp3 so it rings even when app is backgrounded
+        self::sendToUsers($responders, $title, $body, $data, 'mission_alarm', 'alarm.mp3');
     }
 
     /**
