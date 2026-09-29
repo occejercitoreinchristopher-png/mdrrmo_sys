@@ -584,7 +584,21 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
 </body>
 </html>`;
 
-    printDocumentViaIframe(html);
+    const printWindow = window.open('', '_blank', 'width=900,height=750');
+    if (!printWindow) {
+        alert('Pop-up blocked! Please allow pop-ups for this site and try again.');
+        return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.onload = () => {
+        setTimeout(() => {
+            printWindow.focus();
+            printWindow.print();
+            printWindow.onafterprint = () => printWindow.close();
+        }, 400);
+    };
 }
 
 export function printDispatchLogsSummaryReport(incidents: any[], filters: { search?: string; status?: string; preparedBy?: string } = {}): void {
