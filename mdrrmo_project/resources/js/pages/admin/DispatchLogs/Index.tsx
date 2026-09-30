@@ -257,8 +257,8 @@ export default function DispatchLogsIndex() {
                                                 <div className="text-xs text-slate-600 dark:text-slate-300 mt-1 font-semibold">
                                                     {incident.incident_type?.name || 'Emergency'}
                                                 </div>
-                                                <div className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[170px]" title={incident.place_of_incident || incident.location}>
-                                                    {incident.barangay || incident.location}
+                                                <div className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[170px]" title={incident.place_of_incident || (typeof incident.location === 'object' ? incident.location?.location_name || incident.location?.name : incident.location)}>
+                                                    {(typeof incident.barangay === 'object' ? incident.barangay?.barangay_name || incident.barangay?.name : incident.barangay) || (typeof incident.location === 'object' ? incident.location?.location_name || incident.location?.name : incident.location)}
                                                 </div>
                                             </td>
 
