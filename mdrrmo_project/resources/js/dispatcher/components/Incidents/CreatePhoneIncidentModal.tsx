@@ -1205,7 +1205,7 @@ export default function CreatePhoneIncidentModal({
                                                                 )}
                                                                 {item.previous_location_code && (
                                                                     <span className="text-primary font-mono text-[10px]">
-                                                                        • Prev: {item.previous_location_code}
+                                                                        • Prev: {(typeof item.previous_location_code === 'object' ? item.previous_location_code?.location_code || item.previous_location_code?.code : item.previous_location_code)}
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -1391,7 +1391,7 @@ export default function CreatePhoneIncidentModal({
                                                 )}
                                             </div>
                                             <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
-                                                {callerData.previous_location.marker_name}, Barangay {callerData.previous_location.barangay}
+                                                {callerData.previous_location.marker_name}, Barangay {(typeof callerData.previous_location.barangay === 'object' ? callerData.previous_location.barangay?.barangay_name || callerData.previous_location.barangay?.name : callerData.previous_location.barangay)}
                                                 {callerData.previous_location.description && ` — ${callerData.previous_location.description}`}
                                             </p>
                                         </div>
