@@ -220,11 +220,11 @@ export default function CreatePhoneIncidentModal({
                 setPinLocation({
                     latitude: Number(dispatchLog.latitude),
                     longitude: Number(dispatchLog.longitude),
-                    placeName: dispatchLog.location || '',
+                    placeName: (typeof dispatchLog.location === 'object' ? dispatchLog.location?.location_name || dispatchLog.location?.name : dispatchLog.location) || '',
                 });
                 setLocationConfirmed(true);
             } else if (dispatchLog.location) {
-                setCustomPlaceName(dispatchLog.location);
+                setCustomPlaceName((typeof dispatchLog.location === 'object' ? dispatchLog.location?.location_name || dispatchLog.location?.name : dispatchLog.location) || '');
             }
         }
     }, [dispatchLog, open]);
@@ -964,7 +964,7 @@ export default function CreatePhoneIncidentModal({
                 payload.longitude = locationResult.longitude;
             }
             if (locationResult?.marker_name || locationResult?.location_name) {
-                const bName = locationResult?.barangay ? `Barangay ${locationResult.barangay}` : '';
+                const bName = locationResult?.barangay ? `Barangay ${(typeof locationResult.barangay === 'object' ? locationResult.barangay?.barangay_name || locationResult.barangay?.name : locationResult.barangay)}` : '';
                 payload.place_of_incident = `${locationResult.marker_name || locationResult.location_name}${bName ? ', ' + bName : ''}`;
             }
         } else {

@@ -97,7 +97,7 @@ export default function IncidentHistoryMapView({
                 const matchQ =
                     String(inc.id).includes(q) ||
                     (inc.place_of_incident && inc.place_of_incident.toLowerCase().includes(q)) ||
-                    (inc.location && inc.location.toLowerCase().includes(q)) ||
+                    ((typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location) && (typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location).toLowerCase().includes(q)) ||
                     ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) && (typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay).toLowerCase().includes(q)) ||
                     (inc.pcr_chief_complaint && inc.pcr_chief_complaint.toLowerCase().includes(q));
                 if (!matchQ) return false;
