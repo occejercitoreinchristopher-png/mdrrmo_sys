@@ -96,8 +96,8 @@ export default function IncidentTable({
     const barangayCounts = useMemo(() => {
         const counts: Record<string, number> = {};
         archiveDataset.forEach((inc) => {
-            if (inc.barangay) {
-                counts[inc.barangay] = (counts[inc.barangay] || 0) + 1;
+            if ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay)) {
+                counts[(typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay)] = (counts[(typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay)] || 0) + 1;
             }
         });
         return counts;
@@ -123,7 +123,7 @@ export default function IncidentTable({
         return archiveDataset.filter((inc) => {
             // 1. Barangay Filter (OR logic among selected barangays)
             if (selectedBarangays.length > 0) {
-                const incBarangay = (inc.barangay || '').toLowerCase().replace(/[\s-]/g, '');
+                const incBarangay = ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) || '').toLowerCase().replace(/[\s-]/g, '');
                 const matches = selectedBarangays.some((b) => {
                     const normB = b.toLowerCase().replace(/[\s-]/g, '');
                     return incBarangay === normB;
@@ -162,8 +162,8 @@ export default function IncidentTable({
                     String(inc.id).includes(q) ||
                     (inc.place_of_incident && inc.place_of_incident.toLowerCase().includes(q)) ||
                     (inc.incident_address && inc.incident_address.toLowerCase().includes(q)) ||
-                    (inc.location && inc.location.toLowerCase().includes(q)) ||
-                    (inc.barangay && inc.barangay.toLowerCase().includes(q)) ||
+                    ((typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location) && (typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location).toLowerCase().includes(q)) ||
+                    ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) && (typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay).toLowerCase().includes(q)) ||
                     (inc.description && inc.description.toLowerCase().includes(q)) ||
                     (inc.incident_type?.name && inc.incident_type.name.toLowerCase().includes(q)) ||
                     (inc.caller_phone_number && inc.caller_phone_number.toLowerCase().includes(q));
@@ -224,12 +224,12 @@ export default function IncidentTable({
             render: (_, row) => (
                 <div className="flex flex-col max-w-sm">
                     <span className="font-medium text-slate-900 dark:text-white text-xs line-clamp-1">
-                        {row.place_of_incident || row.incident_address || row.location || 'Location Unavailable'}
+                        {row.place_of_incident || row.incident_address || (typeof row.location === 'object' ? row.location?.location_name || row.location?.name : row.location) || 'Location Unavailable'}
                     </span>
-                    {row.barangay && (
+                    {(typeof row.barangay === 'object' ? row.barangay?.barangay_name || row.barangay?.name : row.barangay) && (
                         <div className="flex items-center gap-1 mt-0.5 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
                             <MapPin className="w-3 h-3 flex-shrink-0" />
-                            <span>Brgy. {row.barangay}</span>
+                            <span>Brgy. {(typeof row.barangay === 'object' ? row.barangay?.barangay_name || row.barangay?.name : row.barangay)}</span>
                         </div>
                     )}
                 </div>

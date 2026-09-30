@@ -54,8 +54,8 @@ export default function IncidentHistoryMapView({
     const barangayCounts = useMemo(() => {
         const counts: Record<string, number> = {};
         incidents.forEach((inc) => {
-            if (inc.barangay) {
-                counts[inc.barangay] = (counts[inc.barangay] || 0) + 1;
+            if ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay)) {
+                counts[(typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay)] = (counts[(typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay)] || 0) + 1;
             }
         });
         return counts;
@@ -75,7 +75,7 @@ export default function IncidentHistoryMapView({
     const filteredIncidents = useMemo(() => {
         return incidents.filter((inc) => {
             if (selectedBarangays.length > 0) {
-                const incBarangay = (inc.barangay || '').toLowerCase().replace(/[\s-]/g, '');
+                const incBarangay = ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) || '').toLowerCase().replace(/[\s-]/g, '');
                 const matches = selectedBarangays.some((b) => {
                     const normB = b.toLowerCase().replace(/[\s-]/g, '');
                     return incBarangay === normB;
@@ -98,7 +98,7 @@ export default function IncidentHistoryMapView({
                     String(inc.id).includes(q) ||
                     (inc.place_of_incident && inc.place_of_incident.toLowerCase().includes(q)) ||
                     (inc.location && inc.location.toLowerCase().includes(q)) ||
-                    (inc.barangay && inc.barangay.toLowerCase().includes(q)) ||
+                    ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) && (typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay).toLowerCase().includes(q)) ||
                     (inc.pcr_chief_complaint && inc.pcr_chief_complaint.toLowerCase().includes(q));
                 if (!matchQ) return false;
             }

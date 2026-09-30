@@ -356,7 +356,7 @@ export default function IncidentHistoryMap({
                                         <MapPin className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
                                         <div className="flex flex-col min-w-0">
                                             <span className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">
-                                                {popupInfo.place_of_incident || popupInfo.location || popupInfo.incident_address || 'Location Unspecified'}
+                                                {popupInfo.place_of_incident || (typeof popupInfo.location === 'object' ? popupInfo.location?.location_name || popupInfo.location?.name : popupInfo.location) || popupInfo.incident_address || 'Location Unspecified'}
                                             </span>
                                             {popupInfo.barangay && (
                                                 <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 mt-0.5">
