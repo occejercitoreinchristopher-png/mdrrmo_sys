@@ -1200,7 +1200,7 @@ export default function CreatePhoneIncidentModal({
                                                                 )}
                                                                 {item.barangay && (
                                                                     <span className="text-slate-400 dark:text-slate-500">
-                                                                        • Brgy. {item.barangay}
+                                                                        • Brgy. {(typeof item.barangay === 'object' ? item.barangay?.barangay_name || item.barangay?.name : item.barangay)}
                                                                     </span>
                                                                 )}
                                                                 {item.previous_location_code && (
@@ -1675,7 +1675,7 @@ export default function CreatePhoneIncidentModal({
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs py-1">
                                         <div>
                                             <span className="text-slate-500 dark:text-slate-400">📍 Barangay: </span>
-                                            <span className="font-semibold text-slate-900 dark:text-white">{locationResult.barangay}</span>
+                                            <span className="font-semibold text-slate-900 dark:text-white">{(typeof locationResult.barangay === 'object' ? locationResult.barangay?.barangay_name || locationResult.barangay?.name : locationResult.barangay)}</span>
                                         </div>
                                         <div>
                                             <span className="text-slate-500 dark:text-slate-400">📍 Marker: </span>
@@ -1832,9 +1832,9 @@ export default function CreatePhoneIncidentModal({
                                                             <span className="text-xs font-bold text-slate-100 group-hover:text-rose-400 transition-colors truncate">
                                                                 {place.text}
                                                             </span>
-                                                            {place.barangay && (
+                                                            {(typeof place.barangay === 'object' ? place.barangay?.barangay_name || place.barangay?.name : place.barangay) && (
                                                                 <span className="text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700 px-1.5 py-0.2 rounded">
-                                                                    Brgy. {place.barangay}
+                                                                    Brgy. {(typeof place.barangay === 'object' ? place.barangay?.barangay_name || place.barangay?.name : place.barangay)}
                                                                 </span>
                                                             )}
                                                             {place.category && (

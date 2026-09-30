@@ -358,9 +358,9 @@ export default function IncidentHistoryMap({
                                             <span className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">
                                                 {popupInfo.place_of_incident || (typeof popupInfo.location === 'object' ? popupInfo.location?.location_name || popupInfo.location?.name : popupInfo.location) || popupInfo.incident_address || 'Location Unspecified'}
                                             </span>
-                                            {popupInfo.barangay && (
+                                            {(typeof popupInfo.barangay === 'object' ? popupInfo.barangay?.barangay_name || popupInfo.barangay?.name : popupInfo.barangay) && (
                                                 <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 mt-0.5">
-                                                    Brgy. {popupInfo.barangay}
+                                                    Brgy. {(typeof popupInfo.barangay === 'object' ? popupInfo.barangay?.barangay_name || popupInfo.barangay?.name : popupInfo.barangay)}
                                                 </span>
                                             )}
                                             {popupInfo.incident_latitude && popupInfo.incident_longitude && (

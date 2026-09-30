@@ -342,7 +342,7 @@ export default function DispatchLogShow({ incident }: any) {
                                     )}
                                     <div>{incident.incident_address || (typeof incident.location === 'object' ? incident.location?.location_name || incident.location?.name : incident.location)}</div>
                                     <div className="text-[11px] text-slate-500 mt-0.5">
-                                        Barangay: <strong className="text-slate-700 dark:text-slate-300">{incident.barangay || 'Opol'}</strong>
+                                        Barangay: <strong className="text-slate-700 dark:text-slate-300">{(typeof incident.barangay === 'object' ? incident.barangay?.barangay_name || incident.barangay?.name : incident.barangay) || 'Opol'}</strong>
                                     </div>
                                 </div>
                             </div>
