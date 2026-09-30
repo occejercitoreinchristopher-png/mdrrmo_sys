@@ -123,7 +123,7 @@ export default function IncidentCard({ incident, onClick, selected = false }) {
                         {incident.place_of_incident 
                             || incident.incident_address 
                             || (incident.location_code ? `Marker: ${incident.location_code}` : null) 
-                            || incident.location 
+                            || (typeof incident.location === 'object' ? incident.location?.location_name || incident.location?.name : incident.location)
                             || 'Location unavailable'}
                     </span>
                 </div>
