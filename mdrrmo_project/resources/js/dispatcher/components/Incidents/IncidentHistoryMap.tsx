@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Map, { Marker, Popup, Source, Layer, type MapRef } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { MapPin, AlertCircle, Activity, Calendar, Navigation, ShieldCheck, Truck, User, Clock, ChevronRight, FileText, Stethoscope, AlertTriangle } from 'lucide-react';
+import { MapPin, AlertCircle, Activity, Calendar, Navigation, ShieldCheck, Truck, User, Clock, ChevronRight, FileText, Stethoscope, AlertTriangle, X } from 'lucide-react';
 import { useAppearance } from '@/shared/contexts/ThemeContext';
 import StatusBadge from '@/shared/components/StatusBadge';
 
@@ -109,6 +109,20 @@ export default function IncidentHistoryMap({
         });
     }, [incidents]);
 
+    const getPriorityBadgeClass = (priority?: string) => {
+        const p = (priority || '').toLowerCase();
+        if (p === 'critical') {
+            return 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30';
+        }
+        if (p === 'high') {
+            return 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30';
+        }
+        if (p === 'moderate' || p === 'medium') {
+            return 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30';
+        }
+        return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30';
+    };
+
     return (
         <div 
             ref={containerRef}
@@ -120,23 +134,24 @@ export default function IncidentHistoryMap({
                 .mapboxgl-popup-content { 
                     background: transparent !important; 
                     padding: 0 !important; 
-                    border-radius: 20px !important; 
+                    border-radius: 16px !important; 
                     border: none !important; 
-                    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.45) !important; 
+                    box-shadow: 0 20px 45px -10px rgba(0,0,0,0.5) !important; 
                 }
                 .mapboxgl-popup-close-button {
-                    color: ${isDark ? '#cbd5e1' : '#64748b'} !important;
-                    font-size: 18px !important;
-                    padding: 8px 12px !important;
-                    z-index: 40 !important;
-                    transition: color 0.15s ease !important;
+                    display: none !important;
                 }
-                .mapboxgl-popup-close-button:hover {
-                    color: #f43f5e !important;
-                    background: transparent !important;
+                .mapboxgl-popup-anchor-top .mapboxgl-popup-tip { 
+                    border-bottom-color: ${isDark ? '#0f172a' : '#ffffff'} !important; 
                 }
-                .mapboxgl-popup-tip { 
+                .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip { 
                     border-top-color: ${isDark ? '#0f172a' : '#ffffff'} !important; 
+                }
+                .mapboxgl-popup-anchor-left .mapboxgl-popup-tip { 
+                    border-right-color: ${isDark ? '#0f172a' : '#ffffff'} !important; 
+                }
+                .mapboxgl-popup-anchor-right .mapboxgl-popup-tip { 
+                    border-left-color: ${isDark ? '#0f172a' : '#ffffff'} !important; 
                 }
             `}</style>
 
@@ -308,63 +323,79 @@ export default function IncidentHistoryMap({
                             longitude={parseFloat(popupInfo.incident_longitude)}
                             latitude={parseFloat(popupInfo.incident_latitude)}
                             onClose={() => setPopupInfo(null)}
-                            closeButton={true}
+                            closeButton={false}
+                            closeOnClick={false}
                             offset={14}
+                            maxWidth="340px"
                         >
-                            <div className="w-[310px] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/80 dark:border-white/10 shadow-2xl overflow-hidden flex flex-col text-slate-900 dark:text-slate-100 font-sans">
-                                {/* Header Bar */}
-                                <div className="p-3 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800/90 dark:to-slate-900/90 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between pr-10">
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="font-mono font-black text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/25 px-2 py-0.5 rounded-md tracking-wider">
-                                            #{popupInfo.id}
-                                        </span>
-                                        {popupInfo.priority && (
-                                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
-                                                popupInfo.priority === 'Critical'
-                                                    ? 'bg-rose-50 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30'
-                                                    : popupInfo.priority === 'High'
-                                                    ? 'bg-orange-50 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-500/30'
-                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
-                                            }`}>
-                                                {popupInfo.priority}
+                            <div className="w-[320px] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 shadow-2xl overflow-hidden flex flex-col text-slate-900 dark:text-slate-100 font-sans ring-1 ring-black/5 dark:ring-white/10">
+                                {/* Pinned Header Area */}
+                                <div className="p-3 bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200/80 dark:border-slate-700/80">
+                                    {/* Meta Badges & Close Button Row */}
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="font-mono font-bold text-xs text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/25 px-2 py-0.5 rounded-md tracking-wider">
+                                                #{popupInfo.id}
                                             </span>
-                                        )}
-                                    </div>
-                                    <StatusBadge status={popupInfo.incident_status} size="xs" />
-                                </div>
-
-                                {/* Body Content */}
-                                <div className="p-3.5 space-y-2.5 max-h-[360px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10">
-                                    
-                                    {/* Classification & Description */}
-                                    <div>
-                                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                                            Classification
+                                            {popupInfo.priority && (
+                                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${getPriorityBadgeClass(popupInfo.priority)}`}>
+                                                    {popupInfo.priority}
+                                                </span>
+                                            )}
                                         </div>
-                                        <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-snug mt-0.5">
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <StatusBadge status={popupInfo.incident_status} size="xs" />
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setPopupInfo(null);
+                                                }}
+                                                className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-100 hover:bg-slate-200/70 dark:hover:bg-slate-700/70 transition-colors"
+                                                title="Close popup"
+                                                aria-label="Close"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Primary Classification Title (Pinned in header so it is never clipped or scrolled away) */}
+                                    <div className="mt-2.5">
+                                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                                            Incident Classification
+                                        </div>
+                                        <h4 className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight mt-0.5">
                                             {popupInfo.incident_type?.name || popupInfo.incident_type || 'Emergency Incident'}
                                         </h4>
                                         {popupInfo.description && (
-                                            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 line-clamp-2 italic bg-slate-50 dark:bg-white/[0.03] p-2 rounded-lg border border-slate-200/60 dark:border-white/5">
+                                            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 line-clamp-2 italic bg-white/70 dark:bg-slate-900/60 p-2 rounded-lg border border-slate-200/60 dark:border-white/5">
                                                 "{popupInfo.description}"
                                             </p>
                                         )}
                                     </div>
+                                </div>
 
+                                {/* Body Content */}
+                                <div className="p-3 space-y-2.5 max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 overscroll-contain">
                                     {/* Location & Barangay */}
-                                    <div className="flex items-start gap-2 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-200/60 dark:border-white/5">
-                                        <MapPin className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                                        <div className="flex flex-col min-w-0">
-                                            <span className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">
+                                    <div className="flex items-start gap-2.5 bg-slate-50/80 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60">
+                                        <div className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                            <MapPin className="w-4 h-4 text-rose-500" />
+                                        </div>
+                                        <div className="flex flex-col min-w-0 flex-1">
+                                            <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 leading-snug">
                                                 {popupInfo.place_of_incident || (typeof popupInfo.location === 'object' ? popupInfo.location?.location_name || popupInfo.location?.name : popupInfo.location) || popupInfo.incident_address || 'Location Unspecified'}
                                             </span>
                                             {(typeof popupInfo.barangay === 'object' ? popupInfo.barangay?.barangay_name || popupInfo.barangay?.name : popupInfo.barangay) && (
-                                                <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 mt-0.5">
-                                                    Brgy. {(typeof popupInfo.barangay === 'object' ? popupInfo.barangay?.barangay_name || popupInfo.barangay?.name : popupInfo.barangay)}
-                                                </span>
+                                                <div className="mt-1">
+                                                    <span className="inline-flex items-center text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-200/60 dark:border-rose-500/20">
+                                                        Brgy. {(typeof popupInfo.barangay === 'object' ? popupInfo.barangay?.barangay_name || popupInfo.barangay?.name : popupInfo.barangay)}
+                                                    </span>
+                                                </div>
                                             )}
                                             {popupInfo.incident_latitude && popupInfo.incident_longitude && (
-                                                <span className="text-[10px] font-mono text-slate-400 mt-0.5">
+                                                <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-1">
                                                     {parseFloat(popupInfo.incident_latitude).toFixed(4)}° N, {parseFloat(popupInfo.incident_longitude).toFixed(4)}° E
                                                 </span>
                                             )}
@@ -373,49 +404,65 @@ export default function IncidentHistoryMap({
 
                                     {/* PCR Chief Complaint Banner */}
                                     {popupInfo.pcr_chief_complaint ? (
-                                        <div className="p-2.5 rounded-xl bg-indigo-50/90 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-500/25">
+                                        <div className="p-2.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-500/30">
                                             <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">
                                                 <Activity className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                                                 <span>PCR Chief Complaint</span>
                                             </div>
-                                            <p className="text-xs font-bold text-indigo-950 dark:text-indigo-100 mt-1">
+                                            <p className="text-xs font-bold text-slate-900 dark:text-indigo-100 mt-1 leading-snug">
                                                 {popupInfo.pcr_chief_complaint}
                                             </p>
                                         </div>
                                     ) : (
-                                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/40 text-[10px] text-slate-500 dark:text-slate-400 border border-slate-200/50 dark:border-white/5">
-                                            <Stethoscope className="w-3 h-3 text-slate-400 shrink-0" />
+                                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100/70 dark:bg-slate-800/40 text-[10px] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/5">
+                                            <Stethoscope className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                             <span>PCR record not attached</span>
                                         </div>
                                     )}
 
                                     {/* Dispatched Unit & Responder Crew */}
                                     {popupInfo.dispatches && popupInfo.dispatches.length > 0 && (
-                                        <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-white/5 space-y-1.5">
-                                            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                                                <Truck className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                                                <span>Response Mission</span>
-                                            </div>
-                                            {popupInfo.dispatches[0].ambulance && (
-                                                <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center justify-between">
-                                                    <span>{popupInfo.dispatches[0].ambulance.name}</span>
-                                                    <span className="font-mono text-[10px] text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 px-1.5 py-0.2 rounded border border-slate-200/60 dark:border-white/10">
-                                                        {popupInfo.dispatches[0].ambulance.plate_number}
+                                        <div className="p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 space-y-2">
+                                            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                                <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                                                    <Truck className="w-3.5 h-3.5 shrink-0" />
+                                                    <span>Response Mission</span>
+                                                </div>
+                                                {popupInfo.dispatches[0].status && (
+                                                    <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 capitalize">
+                                                        {popupInfo.dispatches[0].status}
                                                     </span>
+                                                )}
+                                            </div>
+
+                                            {popupInfo.dispatches[0].ambulance && (
+                                                <div className="flex items-center justify-between bg-white dark:bg-slate-900/60 px-2.5 py-1.5 rounded-lg border border-slate-200/60 dark:border-white/5">
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                        <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                                                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                                                            {popupInfo.dispatches[0].ambulance.name}
+                                                        </span>
+                                                    </div>
+                                                    {popupInfo.dispatches[0].ambulance.plate_number && (
+                                                        <span className="font-mono text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-white/10 shrink-0">
+                                                            {popupInfo.dispatches[0].ambulance.plate_number}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
+
                                             {popupInfo.dispatches[0].driver && (
-                                                <div className="flex items-center gap-1.5 mt-1">
+                                                <div className="flex items-center gap-2 pt-0.5">
                                                     {popupInfo.dispatches[0].driver.responder_profile?.profile_picture ? (
                                                         <img
                                                             src={`/storage/${popupInfo.dispatches[0].driver.responder_profile.profile_picture}`}
-                                                            alt="Responder"
+                                                            alt="Driver"
                                                             className="w-5 h-5 rounded-full object-cover border border-slate-200 dark:border-white/10"
                                                         />
                                                     ) : popupInfo.dispatches[0].driver.profile_picture ? (
                                                         <img
                                                             src={`/storage/${popupInfo.dispatches[0].driver.profile_picture}`}
-                                                            alt="Responder"
+                                                            alt="Driver"
                                                             className="w-5 h-5 rounded-full object-cover border border-slate-200 dark:border-white/10"
                                                         />
                                                     ) : (
@@ -423,16 +470,19 @@ export default function IncidentHistoryMap({
                                                             <User className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                                                         </div>
                                                     )}
-                                                    <span className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
-                                                        Driver: {popupInfo.dispatches[0].driver.first_name} {popupInfo.dispatches[0].driver.last_name}
-                                                    </span>
+                                                    <div className="flex items-baseline gap-1.5 text-xs truncate">
+                                                        <span className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">Driver:</span>
+                                                        <span className="font-medium text-slate-700 dark:text-slate-200 truncate">
+                                                            {popupInfo.dispatches[0].driver.first_name} {popupInfo.dispatches[0].driver.last_name}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
                                     )}
 
                                     {/* Timestamps */}
-                                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1.5 border-t border-slate-200/60 dark:border-white/5">
+                                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200/80 dark:border-slate-700/60">
                                         <span className="flex items-center gap-1">
                                             <Calendar className="w-3 h-3 text-slate-400" />
                                             {popupInfo.reported_at ? new Date(popupInfo.reported_at).toLocaleDateString('en-PH', {
@@ -456,7 +506,7 @@ export default function IncidentHistoryMap({
                                     {onViewDetails && (
                                         <button
                                             onClick={() => onViewDetails(popupInfo)}
-                                            className="w-full mt-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white font-bold text-xs shadow-md shadow-rose-600/20 hover:shadow-rose-600/35 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
+                                            className="w-full mt-1 py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white font-bold text-xs shadow-md shadow-rose-600/20 hover:shadow-rose-600/35 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
                                         >
                                             <FileText className="w-3.5 h-3.5" />
                                             <span>Open Incident Dossier</span>
