@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { ShieldAlert, AlertTriangle, Info, CheckCircle2 } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, Info, CheckCircle2, Clock, Truck } from 'lucide-react';
 
 interface StatusBadgeProps {
     status: string;
@@ -63,6 +63,39 @@ export default function StatusBadge({
             dotColorClass = 'bg-amber-500';
             break;
             
+        // Dispatch Lifecycle Statuses
+        case 'assigned':
+            Icon = Clock;
+            colorClass = 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border-blue-200 dark:border-blue-500/30';
+            dotColorClass = 'bg-blue-500';
+            label = 'Assigned';
+            break;
+        case 'accepted':
+            Icon = CheckCircle2;
+            colorClass = 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-400 border-cyan-200 dark:border-cyan-500/30';
+            dotColorClass = 'bg-cyan-500';
+            label = 'Accepted';
+            break;
+        case 'en_route':
+            Icon = Truck;
+            colorClass = 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 border-amber-200 dark:border-amber-500/30';
+            dotColorClass = 'bg-amber-500';
+            label = 'En Route';
+            break;
+        case 'arrived_on_scene':
+        case 'on_scene':
+            Icon = CheckCircle2;
+            colorClass = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30';
+            dotColorClass = 'bg-emerald-500';
+            label = 'On Scene';
+            break;
+        case 'completed':
+            Icon = CheckCircle2;
+            colorClass = 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/30';
+            dotColorClass = 'bg-indigo-500';
+            label = 'Completed';
+            break;
+
         // Responder Statuses
         case 'available':
             Icon = CheckCircle2;
@@ -70,12 +103,10 @@ export default function StatusBadge({
             dotColorClass = 'bg-emerald-500';
             break;
         case 'busy':
-        case 'en_route':
-        case 'on_scene':
             Icon = AlertTriangle;
             colorClass = 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border-blue-200 dark:border-blue-500/30';
             dotColorClass = 'bg-blue-500';
-            label = s === 'en_route' ? 'En Route' : s === 'on_scene' ? 'On Scene' : 'Busy';
+            label = 'Busy';
             break;
         case 'off_duty':
             Icon = Info;
@@ -97,7 +128,9 @@ export default function StatusBadge({
             break;
 
         default:
-            label = status ? status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ') : 'Unknown';
+            label = status 
+                ? status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) 
+                : 'Unknown';
     }
 
     const sizeClasses = {
