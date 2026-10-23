@@ -16,6 +16,7 @@ export interface PatientRecord {
     street?: string | null;
     address?: string | null;
     care_records_count?: number;
+    is_unidentified?: boolean;
     created_at?: string | null;
 }
 

@@ -1,7 +1,7 @@
 import { Image } from 'lucide-react';
 import EmptyState from '@/shared/components/EmptyState';
 
-export default function IncidentImages({ images = [] }) {
+export default function IncidentImages({ images = [] }: { images?: Array<{ url?: string; path?: string }> }) {
     if (images.length === 0) {
         return (
             <EmptyState

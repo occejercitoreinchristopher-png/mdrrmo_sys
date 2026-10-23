@@ -168,27 +168,27 @@ export default function ActiveDispatchWorkspace({
     }, []);
 
     const getConnectionStatus = (dispatch: any) => {
-        if (!dispatch) return { status: 'unavailable', label: 'Location update unavailable', color: 'text-slate-400 bg-slate-400/10 border-slate-500/20', isLive: false };
+        if (!dispatch) return { status: 'unavailable', label: 'Location Unavailable', color: 'text-slate-400 bg-slate-400/10 border-slate-500/20', isLive: false, isOffline: true, elapsedSeconds: 9999 };
         let loc = liveLocations[dispatch.id] || liveLocations[dispatch.ambulance_id];
         if (!loc && dispatch.last_latitude && dispatch.last_longitude) {
             loc = {
                 latitude: parseFloat(dispatch.last_latitude),
                 longitude: parseFloat(dispatch.last_longitude),
-                updatedAt: dispatch.last_location_updated_at ? new Date(dispatch.last_location_updated_at).getTime() : Date.now(),
+                updatedAt: dispatch.last_location_updated_at ? new Date(dispatch.last_location_updated_at).getTime() : 0,
             };
         }
         if (!loc || !loc.updatedAt) {
-            return { status: 'unavailable', label: 'Location update unavailable', color: 'text-slate-400 bg-slate-400/10 border-slate-500/20', isLive: false };
+            return { status: 'unavailable', label: 'Location Unavailable', color: 'text-slate-400 bg-slate-400/10 border-slate-500/20', isLive: false, isOffline: true, elapsedSeconds: 9999 };
         }
         const elapsedSeconds = Math.max(0, Math.floor((currentTime - loc.updatedAt) / 1000));
-        if (elapsedSeconds <= 30) {
-            return { status: 'live', label: 'Live Tracking', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30', isLive: true };
+        if (elapsedSeconds <= 35) {
+            return { status: 'online', label: 'Online • Live Tracking', color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30', isLive: true, isOffline: false, elapsedSeconds };
         }
-        if (elapsedSeconds <= 90) {
-            return { status: 'stale', label: `Last updated ${elapsedSeconds}s ago`, color: 'text-amber-400 bg-amber-500/10 border-amber-500/30', isLive: false };
+        if (elapsedSeconds <= 180) {
+            return { status: 'stale', label: `Location Stale (${elapsedSeconds}s ago)`, color: 'text-amber-500 bg-amber-500/10 border-amber-500/30', isLive: false, isOffline: false, elapsedSeconds };
         }
         const minutes = Math.floor(elapsedSeconds / 60);
-        return { status: 'stale', label: `Last updated ${minutes}m ago`, color: 'text-slate-400 bg-slate-500/10 border-slate-500/30', isLive: false };
+        return { status: 'offline', label: `Offline (${minutes}m ago)`, color: 'text-rose-400 bg-rose-500/10 border-rose-500/30', isLive: false, isOffline: true, elapsedSeconds };
     };
 
     useEffect(() => {
@@ -331,7 +331,7 @@ export default function ActiveDispatchWorkspace({
                                                 <span className="line-clamp-2">
                                                     {incident.place_of_incident 
                                                         || incident.incident_address 
-                                                        || (incident.location_code ? `Marker: ${incident.location_code}` : null) 
+                                                        || (incident.location_code ? `Marker: ${typeof incident.location_code === 'object' ? incident.location_code?.location_code || incident.location_code?.code : incident.location_code}` : null) 
                                                         || (typeof incident.location === 'object' ? incident.location?.location_name || incident.location?.name : incident.location)
                                                         || incident.description 
                                                         || 'Location unavailable'}
@@ -413,6 +413,26 @@ export default function ActiveDispatchWorkspace({
                                     })()}
                                 </div>
 
+                                {/* Offline Safeguard Warning Banner */}
+                                {(() => {
+                                    const conn = getConnectionStatus(selectedDispatch);
+                                    if (conn.isOffline && conn.status === 'offline') {
+                                        const mins = Math.floor(conn.elapsedSeconds / 60);
+                                        return (
+                                            <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 space-y-1 text-xs">
+                                                <div className="flex items-center gap-1.5 text-rose-500 font-bold text-[11px] uppercase tracking-wider">
+                                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                                    <span>Responder Offline ({mins}m)</span>
+                                                </div>
+                                                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                                                    Network lost. GPS coordinates shown are the last known fix. The responder has cached this mission locally and is operating in offline mode. Automated reassignment is blocked.
+                                                </p>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
+
                                 {/* Q1: Where is the incident? */}
                                 <div className="bg-slate-50/80 dark:bg-white/[0.03] rounded-xl p-3 border border-slate-200/80 dark:border-white/10 space-y-1.5">
                                     <div className="flex items-center justify-between">
@@ -426,7 +446,7 @@ export default function ActiveDispatchWorkspace({
                                         )}
                                     </div>
                                     <div className="text-xs text-slate-900 dark:text-slate-200 font-semibold line-clamp-2">
-                                        {selectedDispatch.incident?.barangay || selectedDispatch.incident?.place_of_incident || 'Reported Location'}
+                                        {(typeof selectedDispatch.incident?.barangay === 'object' ? selectedDispatch.incident?.barangay?.barangay_name || selectedDispatch.incident?.barangay?.name : selectedDispatch.incident?.barangay) || selectedDispatch.incident?.place_of_incident || 'Reported Location'}
                                     </div>
                                     <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                                         GPS: {parseFloat(selectedDispatch.incident?.incident_latitude)?.toFixed(5) || '--'}, {parseFloat(selectedDispatch.incident?.incident_longitude)?.toFixed(5) || '--'}
@@ -556,6 +576,17 @@ export default function ActiveDispatchWorkspace({
                                                     <span className="font-mono text-sm font-semibold text-slate-700 dark:text-slate-300">
                                                         #{dispatch.id}
                                                     </span>
+                                                    {(() => {
+                                                        const itemConn = getConnectionStatus(dispatch);
+                                                        return (
+                                                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${itemConn.color}`}>
+                                                                {itemConn.isLive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                                                                {itemConn.status === 'stale' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                                                                {itemConn.isOffline && <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
+                                                                <span>{itemConn.status === 'online' ? 'Live' : (itemConn.status === 'stale' ? 'Stale' : 'Offline')}</span>
+                                                            </span>
+                                                        );
+                                                    })()}
                                                 </div>
                                                 <StatusBadge status={dispatch.dispatch_status} />
                                             </div>
@@ -567,7 +598,7 @@ export default function ActiveDispatchWorkspace({
                                                 </h3>
                                                 <div className="text-xs text-slate-500 dark:text-slate-400 flex items-start gap-1.5 mt-1">
                                                     <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
-                                                    <span className="line-clamp-1">{incident?.barangay}</span>
+                                                    <span className="line-clamp-1">{(typeof incident?.barangay === 'object' ? incident.barangay?.barangay_name || incident.barangay?.name : incident?.barangay)}</span>
                                                 </div>
                                             </div>
 
@@ -695,6 +726,21 @@ export default function ActiveDispatchWorkspace({
                                     )}
                                 </div>
                                 
+                                {/* Offline Notice in Floating Overlay */}
+                                {(() => {
+                                    const conn = getConnectionStatus(selectedDispatch);
+                                    if (conn.isOffline && conn.status === 'offline') {
+                                        const mins = Math.floor(conn.elapsedSeconds / 60);
+                                        return (
+                                            <div className="mb-3 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2 text-xs text-rose-500 font-medium">
+                                                <AlertTriangle className="w-4 h-4 shrink-0" />
+                                                <span>Responder device offline ({mins}m ago). Local mission cached & offline mode active on device.</span>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
+
                                 <div className="flex">
                                     <button 
                                         onClick={() => setIsExpanded(!isExpanded)}

@@ -15,7 +15,18 @@ const STATUS_OPTIONS = [
     { value: 'rejected', label: 'Rejected' },
 ];
 
-export default function ReportFilters({ initialFilters, lookups }) {
+export interface ReportFiltersState {
+    date_from?: string;
+    date_to?: string;
+    barangay?: string;
+    incident_type_id?: string;
+    status?: string;
+    responder_id?: string;
+    ambulance_id?: string;
+    [key: string]: any;
+}
+
+export default function ReportFilters({ initialFilters, lookups }: { initialFilters: any; lookups: any }) {
     const [filters, setFilters] = useState({
         date_from: initialFilters.date_from || '',
         date_to: initialFilters.date_to || '',

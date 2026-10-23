@@ -82,6 +82,7 @@ class PatientController extends Controller
                 'street' => $patient->street ?? $residentProfile?->street,
                 'address' => $address,
                 'care_records_count' => $patient->care_records_count,
+                'is_unidentified' => (bool) $patient->is_unidentified,
                 'created_at' => $patient->created_at?->toISOString(),
             ];
         });
@@ -237,6 +238,9 @@ class PatientController extends Controller
             'street' => $patient->street ?? $residentProfile?->street,
             'address' => $address,
             'care_records_count' => $patient->careRecords->count(),
+            'is_unidentified' => (bool) $patient->is_unidentified,
+            'identified_at' => $patient->identified_at?->toISOString(),
+            'identified_by_role' => $patient->identified_by_role,
             'created_at' => $patient->created_at?->toISOString(),
             'updated_at' => $patient->updated_at?->toISOString(),
             'registered_user' => $patient->registeredUser ? [
@@ -320,5 +324,46 @@ class PatientController extends Controller
             'patient' => $patientData,
             'care_records' => $careRecords,
         ]);
+    }
+
+    public function updateIdentification(Request $request, Patient $patient)
+    {
+        // Strictly prevent editing if the patient is already identified
+        if (! $patient->is_unidentified) {
+            return back()->with('error', 'This patient has already been identified and cannot be edited.');
+        }
+
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:100',
+            'middle_name' => 'nullable|string|max:100',
+            'last_name' => 'required|string|max:100',
+            'birthdate' => 'nullable|date',
+            'age' => 'nullable|numeric',
+            'gender' => 'nullable|string|in:male,female',
+            'street' => 'nullable|string|max:255',
+            'address' => 'nullable|string|max:255',
+            'contact_number' => 'nullable|string|max:50',
+        ]);
+
+        $birthdate = $validated['birthdate'] ?? null;
+        if (! $birthdate && ! empty($validated['age'])) {
+            $birthdate = now()->subYears((int) $validated['age'])->format('Y-01-01');
+        }
+
+        $address = $validated['street'] ?? $validated['address'] ?? null;
+
+        $patient->update([
+            'patient_first_name' => trim($validated['first_name']),
+            'patient_middle_name' => ! empty($validated['middle_name']) ? trim($validated['middle_name']) : null,
+            'patient_last_name' => trim($validated['last_name']),
+            'patient_birthdate' => $birthdate,
+            'patient_gender' => $validated['gender'] ?? null,
+            'street' => $address,
+            'is_unidentified' => false,
+            'identified_at' => now(),
+            'identified_by_role' => 'dispatcher',
+        ]);
+
+        return back()->with('success', 'Patient identification completed successfully.');
     }
 }

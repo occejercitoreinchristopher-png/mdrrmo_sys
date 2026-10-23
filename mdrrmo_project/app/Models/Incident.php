@@ -312,4 +312,24 @@ class Incident extends Model
     {
         return $this->hasMany(DispatchLog::class);
     }
+
+    public function toArray(): array
+    {
+        $array = parent::toArray();
+
+        // Ensure location_code is always a string and not the LocationCode model object
+        if (isset($array['location_code']) && is_array($array['location_code'])) {
+            $loc = $array['location_code'];
+            $array['location_code'] = $loc['location_code'] ?? ($loc['code'] ?? null);
+            $array['location_code_details'] = $loc;
+        }
+
+        // Ensure barangay is always a string and not a Barangay model object
+        if (isset($array['barangay']) && is_array($array['barangay'])) {
+            $b = $array['barangay'];
+            $array['barangay'] = $b['barangay_name'] ?? ($b['name'] ?? null);
+        }
+
+        return $array;
+    }
 }

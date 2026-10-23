@@ -221,7 +221,10 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
         if (inc.place_of_incident) return toPascalCase(inc.place_of_incident);
         if (inc.incident_address) return toPascalCase(inc.incident_address);
         if (resolvedLocations[inc.id]) return toPascalCase(resolvedLocations[inc.id]);
-        if (inc.location_code) return `Location Marker: ${inc.location_code}`;
+        if (inc.location_code) {
+            const codeStr = typeof inc.location_code === 'object' ? (inc.location_code as any)?.location_code || (inc.location_code as any)?.code : inc.location_code;
+            return `Location Marker: ${codeStr}`;
+        }
         if (profile?.barangay?.barangay_name) return `Brgy. ${toPascalCase(profile.barangay.barangay_name)}, Opol`;
         return 'Opol, Misamis Oriental';
     };

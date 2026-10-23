@@ -1200,12 +1200,12 @@ export default function CreatePhoneIncidentModal({
                                                                 )}
                                                                 {item.barangay && (
                                                                     <span className="text-slate-400 dark:text-slate-500">
-                                                                        • Brgy. {(typeof item.barangay === 'object' ? item.barangay?.barangay_name || item.barangay?.name : item.barangay)}
+                                                                        • Brgy. {(typeof item.barangay === 'object' && item.barangay !== null ? ((item.barangay as any)?.barangay_name || (item.barangay as any)?.name) : item.barangay)}
                                                                     </span>
                                                                 )}
                                                                 {item.previous_location_code && (
                                                                     <span className="text-primary font-mono text-[10px]">
-                                                                        • Prev: {(typeof item.previous_location_code === 'object' ? item.previous_location_code?.location_code || item.previous_location_code?.code : item.previous_location_code)}
+                                                                        • Prev: {(typeof item.previous_location_code === 'object' && item.previous_location_code !== null ? ((item.previous_location_code as any)?.location_code || (item.previous_location_code as any)?.code) : item.previous_location_code)}
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -1391,7 +1391,7 @@ export default function CreatePhoneIncidentModal({
                                                 )}
                                             </div>
                                             <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
-                                                {callerData.previous_location.marker_name}, Barangay {(typeof callerData.previous_location.barangay === 'object' ? callerData.previous_location.barangay?.barangay_name || callerData.previous_location.barangay?.name : callerData.previous_location.barangay)}
+                                                {callerData.previous_location.marker_name}, Barangay {(typeof callerData.previous_location.barangay === 'object' && callerData.previous_location.barangay !== null ? ((callerData.previous_location.barangay as any)?.barangay_name || (callerData.previous_location.barangay as any)?.name) : callerData.previous_location.barangay)}
                                                 {callerData.previous_location.description && ` — ${callerData.previous_location.description}`}
                                             </p>
                                         </div>

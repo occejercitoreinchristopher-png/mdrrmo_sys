@@ -12,7 +12,6 @@ use App\Models\Ambulance;
 use App\Models\Incident;
 use App\Models\IncidentType;
 use App\Models\LocationCode;
-use App\Models\LocationMarker;
 use App\Models\PatientCareRecord;
 use App\Models\ResponderProfile;
 use App\Models\User;
@@ -286,8 +285,11 @@ class IncidentController extends Controller
 
         $code = trim(strtoupper($request->query('code')));
 
-        // 1. Check primary location_codes table
-        $loc = LocationCode::with('barangay')->where('location_code', $code)->first();
+        // 1. Check consolidated location_codes table
+        $loc = LocationCode::with('barangay')
+            ->where('location_code', $code)
+            ->orWhereRaw('UPPER(location_code) = ?', [$code])
+            ->first();
 
         if ($loc) {
             return response()->json([
@@ -302,28 +304,6 @@ class IncidentController extends Controller
                     'latitude' => (float) $loc->latitude,
                     'longitude' => (float) $loc->longitude,
                     'description' => $loc->description,
-                ],
-            ]);
-        }
-
-        // 2. Fallback to location_markers for legacy data / tests
-        $marker = LocationMarker::where('code', $code)
-            ->where('is_active', true)
-            ->first();
-
-        if ($marker) {
-            return response()->json([
-                'data' => [
-                    'id' => $marker->id,
-                    'code' => $marker->code,
-                    'location_code' => $marker->code,
-                    'marker_name' => $marker->marker_name,
-                    'location_name' => $marker->marker_name,
-                    'location_type' => 'Landmark',
-                    'barangay' => $marker->barangay,
-                    'latitude' => (float) $marker->latitude,
-                    'longitude' => (float) $marker->longitude,
-                    'description' => $marker->description,
                 ],
             ]);
         }
@@ -463,17 +443,19 @@ class IncidentController extends Controller
         // 4. Build previous location suggestion
         $previousLocation = null;
         if ($previousIncident?->location_code_id || $previousIncident?->location_code) {
-            $loc = $previousIncident->locationCode ?: LocationCode::with('barangay')->find($previousIncident->location_code_id);
+            $loc = $previousIncident->locationCode ?: LocationCode::with('barangay')
+                ->where('id', $previousIncident->location_code_id)
+                ->orWhere('location_code', $previousIncident->location_code)
+                ->first();
             $locCodeString = $loc?->location_code ?? $previousIncident->location_code;
-            $marker = $loc ? null : ($locCodeString ? LocationMarker::where('code', $locCodeString)->where('is_active', true)->first() : null);
 
             $previousLocation = [
                 'code' => $locCodeString,
-                'marker_name' => $loc?->location_name ?? $marker?->marker_name ?? $previousIncident->place_of_incident,
-                'barangay' => $loc?->barangay?->barangay_name ?? $marker?->barangay,
-                'description' => $loc?->description ?? $marker?->description,
-                'latitude' => $loc?->latitude ?? $marker?->latitude ?? (float) $previousIncident->incident_latitude,
-                'longitude' => $loc?->longitude ?? $marker?->longitude ?? (float) $previousIncident->incident_longitude,
+                'marker_name' => $loc?->location_name ?? $previousIncident->place_of_incident,
+                'barangay' => $loc?->barangay?->barangay_name ?? '',
+                'description' => $loc?->description,
+                'latitude' => $loc?->latitude ?? (float) $previousIncident->incident_latitude,
+                'longitude' => $loc?->longitude ?? (float) $previousIncident->incident_longitude,
                 'last_reported_at' => $previousIncident->reported_at?->diffForHumans() ?? $previousIncident->created_at?->diffForHumans(),
             ];
         }
@@ -676,31 +658,15 @@ class IncidentController extends Controller
                 $latitude = (float) $loc->latitude;
                 $longitude = (float) $loc->longitude;
                 $locationSource = 'location_code';
+            } elseif ($request->filled('latitude') && $request->filled('longitude')) {
+                $latitude = (float) $request->latitude;
+                $longitude = (float) $request->longitude;
+                $placeOfIncident = $request->place_of_incident ?: "Location Code {$code}";
+                $locationSource = 'location_code';
             } else {
-                $marker = LocationMarker::where('code', $code)
-                    ->where('is_active', true)
-                    ->first();
-
-                if ($marker) {
-                    $locFromMarker = LocationCode::where('location_code', $marker->code)->first();
-                    $locationCodeId = $locFromMarker?->id;
-                    $placeOfIncident = "{$marker->marker_name}, Barangay {$marker->barangay}";
-                    if ($marker->description) {
-                        $placeOfIncident .= " ({$marker->description})";
-                    }
-                    $latitude = (float) $marker->latitude;
-                    $longitude = (float) $marker->longitude;
-                    $locationSource = 'location_code';
-                } elseif ($request->filled('latitude') && $request->filled('longitude')) {
-                    $latitude = (float) $request->latitude;
-                    $longitude = (float) $request->longitude;
-                    $placeOfIncident = $request->place_of_incident ?: "Location Code {$code}";
-                    $locationSource = 'location_code';
-                } else {
-                    throw ValidationException::withMessages([
-                        'location_code' => 'Location code not found. Please verify the code with the caller.',
-                    ]);
-                }
+                throw ValidationException::withMessages([
+                    'location_code' => 'Location code not found. Please verify the code with the caller.',
+                ]);
             }
         }
 

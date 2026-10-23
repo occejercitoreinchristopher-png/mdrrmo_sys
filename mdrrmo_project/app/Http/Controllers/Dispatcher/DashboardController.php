@@ -7,6 +7,7 @@ use App\Models\Ambulance;
 use App\Models\Dispatch;
 use App\Models\Incident;
 use App\Models\ResponderProfile;
+use Carbon\Carbon;
 use Inertia\Inertia;
 
 class DashboardController extends Controller
@@ -22,11 +23,23 @@ class DashboardController extends Controller
             'pending_leave_requests' => 0, // Placeholder
         ];
 
-        // Charts data (mocked or basic aggregation)
+        // Real aggregated monthly incident trends for the past 6 months
+        $now = Carbon::now();
+        $monthlyCategories = [];
+        $monthlyIncidentData = [];
+
+        for ($i = 5; $i >= 0; $i--) {
+            $month = $now->copy()->subMonths($i);
+            $monthlyCategories[] = $month->format('M');
+            $monthlyIncidentData[] = Incident::whereYear('created_at', $month->year)
+                ->whereMonth('created_at', $month->month)
+                ->count();
+        }
+
         $charts = [
             'monthly_incidents' => [
-                'categories' => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-                'data' => [12, 19, 15, 22, 30, 25],
+                'categories' => $monthlyCategories,
+                'data' => $monthlyIncidentData,
             ],
             'dispatch_status' => [
                 'labels' => ['Assigned', 'En Route', 'On Scene', 'Completed'],

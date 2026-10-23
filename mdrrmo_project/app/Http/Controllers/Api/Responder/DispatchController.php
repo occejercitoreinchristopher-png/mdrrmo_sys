@@ -117,11 +117,37 @@ class DispatchController extends Controller
         ]);
     }
 
-    public function accept(Dispatch $dispatch)
+    public function accept(Request $request, Dispatch $dispatch)
     {
+        $user = Auth::user();
+
+        if (! $this->isUserAssignedToDispatch($user, $dispatch)) {
+            return response()->json([
+                'message' => 'Unauthorized to accept this dispatch.',
+            ], 403);
+        }
+
+        // Idempotent: If already accepted or advanced beyond, return current record
+        if (in_array($dispatch->dispatch_status, ['accepted', 'en_route', 'arrived_on_scene', 'completed'])) {
+            return response()->json([
+                'message' => 'Dispatch already accepted.',
+                'data' => $dispatch,
+                'already_processed' => true,
+            ]);
+        }
+
+        $acceptedAt = now();
+        if ($request->filled('accepted_at') || $request->filled('timestamp')) {
+            try {
+                $raw = $request->input('accepted_at') ?: $request->input('timestamp');
+                $acceptedAt = is_numeric($raw) ? Carbon::createFromTimestampMs((int)$raw) : Carbon::parse($raw);
+            } catch (\Throwable $e) {}
+        }
+
         $dispatch->update([
             'dispatch_status' => 'accepted',
-            'accepted_at' => $dispatch->accepted_at ?? now(),
+            'accepted_at' => $dispatch->accepted_at ?? $acceptedAt,
+            'last_location_updated_at' => now(),
         ]);
         $dispatch->incident()->update(['incident_status' => 'responding']);
         
@@ -294,19 +320,65 @@ class DispatchController extends Controller
 
     public function updateStatus(Request $request, Dispatch $dispatch)
     {
+        $user = Auth::user();
+
+        if (! $this->isUserAssignedToDispatch($user, $dispatch)) {
+            return response()->json([
+                'message' => 'Unauthorized to update status for this dispatch.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'status' => 'required|in:en_route,arrived_on_scene,completed,cancelled',
             'latitude' => 'nullable|numeric',
             'longitude' => 'nullable|numeric',
+            'timestamp' => 'nullable',
+            'event_time' => 'nullable',
         ]);
 
-        $updates = ['dispatch_status' => $validated['status']];
+        // 1. Idempotency Check: Already at requested status
+        if ($dispatch->dispatch_status === $validated['status']) {
+            return response()->json([
+                'message' => 'Status is already up to date.',
+                'data' => $dispatch,
+                'already_processed' => true,
+            ]);
+        }
+
+        // 2. Conflict Protection: Never let an offline device revert a mission that was already completed or cancelled on server
+        if (in_array($dispatch->dispatch_status, ['completed', 'cancelled']) && in_array($validated['status'], ['en_route', 'arrived_on_scene'])) {
+            return response()->json([
+                'message' => 'Mission has already been marked as ' . $dispatch->dispatch_status . ' on the server.',
+                'data' => $dispatch,
+                'is_conflict' => true,
+            ], 200);
+        }
+
+        // Parse offline event timestamp if provided
+        $eventTime = now();
+        $rawTime = $request->input('timestamp') ?: $request->input('event_time');
+        if (!empty($rawTime)) {
+            try {
+                $eventTime = is_numeric($rawTime) ? Carbon::createFromTimestampMs((int)$rawTime) : Carbon::parse($rawTime);
+            } catch (\Throwable $e) {}
+        }
+
+        $updates = [
+            'dispatch_status' => $validated['status'],
+            'last_location_updated_at' => now(),
+        ];
+
+        if (!empty($validated['latitude']) && !empty($validated['longitude'])) {
+            $updates['last_latitude'] = (float)$validated['latitude'];
+            $updates['last_longitude'] = (float)$validated['longitude'];
+        }
+
         if ($validated['status'] === 'en_route') {
-            $updates['en_route_at'] = $dispatch->en_route_at ?? now();
+            $updates['en_route_at'] = $dispatch->en_route_at ?? $eventTime;
         } elseif ($validated['status'] === 'arrived_on_scene') {
-            $updates['arrived_at'] = $dispatch->arrived_at ?? now();
+            $updates['arrived_at'] = $dispatch->arrived_at ?? $eventTime;
         } elseif ($validated['status'] === 'completed') {
-            $updates['completed_at'] = $dispatch->completed_at ?? now();
+            $updates['completed_at'] = $dispatch->completed_at ?? $eventTime;
         }
 
         $dispatch->update($updates);
@@ -321,7 +393,7 @@ class DispatchController extends Controller
             if ($dispatch->incident) {
                 $dispatch->incident->update([
                     'incident_status' => $validated['status'] === 'completed' ? 'resolved' : 'verified',
-                    'resolved_at' => $validated['status'] === 'completed' ? now() : null,
+                    'resolved_at' => $validated['status'] === 'completed' ? ($dispatch->completed_at ?? now()) : null,
                 ]);
             }
             if ($dispatch->ambulance_id) {
@@ -351,7 +423,7 @@ class DispatchController extends Controller
         }
 
         return response()->json([
-            'message' => 'Status updated automatically',
+            'message' => 'Status updated successfully',
             'data' => $dispatch,
         ]);
     }
@@ -367,13 +439,8 @@ class DispatchController extends Controller
 
         $user = Auth::user();
 
-        // 2. Check if user belongs to this dispatch (or has responder/dispatcher/admin role)
-        $isAssigned = in_array($user->id, array_filter([
-            $dispatch->driver_id,
-            $dispatch->emt_id,
-        ])) || $dispatch->crew()->where('users.id', $user->id)->exists();
-
-        if (! $isAssigned && ! in_array($user->role, ['admin', 'dispatcher', 'responder'])) {
+        // 2. Check if user belongs to this dispatch (or is admin/dispatcher)
+        if (! $this->isUserAssignedToDispatch($user, $dispatch)) {
             return response()->json([
                 'message' => 'Unauthorized to update location for this dispatch.',
             ], 403);
@@ -469,6 +536,12 @@ class DispatchController extends Controller
 
         $user = Auth::user();
 
+        if (! $this->isUserAssignedToDispatch($user, $dispatch)) {
+            return response()->json([
+                'message' => 'Unauthorized to report for this dispatch.',
+            ], 403);
+        }
+
         \Illuminate\Support\Facades\DB::transaction(function () use ($dispatch, $validated, $user) {
             $dispatch->update([
                 'dispatch_status' => 'cancelled',
@@ -516,5 +589,186 @@ class DispatchController extends Controller
             'message' => 'Negative result / false alarm reported successfully. Units released.',
             'data' => $dispatch,
         ]);
+    }
+
+    public function syncBatch(Request $request)
+    {
+        $user = Auth::user();
+        $operations = $request->input('operations', []);
+
+        if (! is_array($operations) || empty($operations)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'No operations to sync',
+                'processed' => 0,
+                'results' => [],
+            ]);
+        }
+
+        $results = [];
+        $idMappings = []; // temp_id -> real_id
+
+        foreach ($operations as $op) {
+            $opId = $op['operation_id'] ?? $op['id'] ?? null;
+            $action = $op['action'] ?? $op['type'] ?? '';
+            $dispatchId = $op['dispatch_id'] ?? $op['dispatchId'] ?? null;
+            $payload = $op['payload'] ?? $op['data'] ?? [];
+
+            try {
+                $dispatch = $dispatchId ? Dispatch::find($dispatchId) : null;
+
+                switch ($action) {
+                    case 'ACCEPT_DISPATCH':
+                        if ($dispatch && $this->isUserAssignedToDispatch($user, $dispatch)) {
+                            if (! in_array($dispatch->dispatch_status, ['accepted', 'en_route', 'arrived_on_scene', 'completed'])) {
+                                $acceptedAt = !empty($op['timestamp']) ? (is_numeric($op['timestamp']) ? Carbon::createFromTimestampMs((int)$op['timestamp']) : Carbon::parse($op['timestamp'])) : now();
+                                $dispatch->update([
+                                    'dispatch_status' => 'accepted',
+                                    'accepted_at' => $dispatch->accepted_at ?? $acceptedAt,
+                                    'last_location_updated_at' => now(),
+                                ]);
+                                $dispatch->incident()?->update(['incident_status' => 'responding']);
+                                try { broadcast(new DispatchAccepted($dispatch)); } catch (\Throwable $e) {}
+                            }
+                            $results[] = ['operation_id' => $opId, 'status' => 'success', 'action' => $action];
+                        } else {
+                            $results[] = ['operation_id' => $opId, 'status' => 'skipped', 'message' => 'Dispatch not found or unauthorized'];
+                        }
+                        break;
+
+                    case 'UPDATE_STATUS':
+                        if ($dispatch && $this->isUserAssignedToDispatch($user, $dispatch)) {
+                            $status = $payload['status'] ?? null;
+                            if ($status && in_array($status, ['en_route', 'arrived_on_scene', 'completed', 'cancelled'])) {
+                                if (in_array($dispatch->dispatch_status, ['completed', 'cancelled']) && in_array($status, ['en_route', 'arrived_on_scene'])) {
+                                    $results[] = ['operation_id' => $opId, 'status' => 'conflict', 'current_status' => $dispatch->dispatch_status];
+                                    break;
+                                }
+
+                                $eventTime = !empty($op['timestamp']) ? (is_numeric($op['timestamp']) ? Carbon::createFromTimestampMs((int)$op['timestamp']) : Carbon::parse($op['timestamp'])) : now();
+                                $updates = ['dispatch_status' => $status, 'last_location_updated_at' => now()];
+
+                                if (!empty($payload['latitude']) && !empty($payload['longitude'])) {
+                                    $updates['last_latitude'] = (float)$payload['latitude'];
+                                    $updates['last_longitude'] = (float)$payload['longitude'];
+                                }
+
+                                if ($status === 'en_route') {
+                                    $updates['en_route_at'] = $dispatch->en_route_at ?? $eventTime;
+                                } elseif ($status === 'arrived_on_scene') {
+                                    $updates['arrived_at'] = $dispatch->arrived_at ?? $eventTime;
+                                } elseif ($status === 'completed') {
+                                    $updates['completed_at'] = $dispatch->completed_at ?? $eventTime;
+                                }
+
+                                $dispatch->update($updates);
+
+                                if (in_array($status, ['en_route', 'arrived_on_scene'])) {
+                                    $dispatch->incident()?->update(['incident_status' => 'responding']);
+                                } elseif (in_array($status, ['completed', 'cancelled'])) {
+                                    $dispatch->incident()?->update([
+                                        'incident_status' => $status === 'completed' ? 'resolved' : 'verified',
+                                        'resolved_at' => $status === 'completed' ? ($dispatch->completed_at ?? now()) : null,
+                                    ]);
+                                    if ($dispatch->ambulance_id) {
+                                        Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
+                                    }
+                                }
+
+                                try {
+                                    broadcast(new DispatchStatusUpdated($dispatch));
+                                } catch (\Throwable $e) {}
+
+                                $results[] = ['operation_id' => $opId, 'status' => 'success', 'action' => $action];
+                            }
+                        }
+                        break;
+
+                    case 'CREATE_PATIENT':
+                        $tempId = $payload['temp_id'] ?? $payload['tempId'] ?? null;
+                        $patientCtrl = app(PatientController::class);
+                        $patientReq = new Request($payload);
+                        $patientReq->setUserResolver(fn () => $user);
+                        $resp = $patientCtrl->store($patientReq);
+                        $data = json_decode($resp->getContent(), true);
+                        $realId = $data['data']['id'] ?? $data['patient_id'] ?? null;
+                        if ($tempId && $realId) {
+                            $idMappings[$tempId] = $realId;
+                        }
+                        $results[] = ['operation_id' => $opId, 'status' => 'success', 'temp_id' => $tempId, 'real_id' => $realId];
+                        break;
+
+                    case 'UPDATE_PCR':
+                        if ($dispatch && $this->isUserAssignedToDispatch($user, $dispatch)) {
+                            if (!empty($payload['patient_id']) && isset($idMappings[$payload['patient_id']])) {
+                                $payload['patient_id'] = $idMappings[$payload['patient_id']];
+                            }
+                            $pcrCtrl = app(PatientCareRecordController::class);
+                            $pcrReq = new Request($payload);
+                            $pcrReq->setUserResolver(fn () => $user);
+                            $resp = $pcrCtrl->update($pcrReq, $dispatch);
+                            $results[] = ['operation_id' => $opId, 'status' => 'success', 'action' => $action];
+                        }
+                        break;
+
+                    case 'SUBMIT_PCR':
+                        if ($dispatch && $this->isUserAssignedToDispatch($user, $dispatch)) {
+                            $pcrCtrl = app(PatientCareRecordController::class);
+                            $pcrReq = new Request($payload);
+                            $pcrReq->setUserResolver(fn () => $user);
+                            $resp = $pcrCtrl->submit($pcrReq, $dispatch);
+                            $results[] = ['operation_id' => $opId, 'status' => 'success', 'action' => $action];
+                        }
+                        break;
+
+                    case 'LOCATION_BREADCRUMBS':
+                        if ($dispatch && !empty($payload['locations']) && is_array($payload['locations'])) {
+                            $lastLoc = end($payload['locations']);
+                            if ($lastLoc && !empty($lastLoc['latitude']) && !empty($lastLoc['longitude'])) {
+                                $dispatch->update([
+                                    'last_latitude' => (float)$lastLoc['latitude'],
+                                    'last_longitude' => (float)$lastLoc['longitude'],
+                                    'last_heading' => isset($lastLoc['heading']) ? (float)$lastLoc['heading'] : null,
+                                    'last_accuracy' => isset($lastLoc['accuracy']) ? (float)$lastLoc['accuracy'] : null,
+                                    'last_location_updated_at' => now(),
+                                ]);
+                            }
+                            $results[] = ['operation_id' => $opId, 'status' => 'success', 'action' => $action, 'count' => count($payload['locations'])];
+                        }
+                        break;
+
+                    default:
+                        $results[] = ['operation_id' => $opId, 'status' => 'skipped', 'message' => "Unknown action: {$action}"];
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("[syncBatch] Operation {$opId} ({$action}) failed: " . $e->getMessage());
+                $results[] = ['operation_id' => $opId, 'status' => 'error', 'error' => $e->getMessage()];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'processed' => count($results),
+            'synced_count' => count(array_filter($results, fn($r) => ($r['status'] ?? '') === 'success')),
+            'results' => $results,
+            'id_mappings' => $idMappings,
+        ]);
+    }
+
+    protected function isUserAssignedToDispatch($user, Dispatch $dispatch): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if (in_array($user->role, ['admin', 'dispatcher'])) {
+            return true;
+        }
+
+        if ((int) $dispatch->driver_id === (int) $user->id || (int) $dispatch->emt_id === (int) $user->id) {
+            return true;
+        }
+
+        return $dispatch->crew()->where('users.id', $user->id)->exists();
     }
 }

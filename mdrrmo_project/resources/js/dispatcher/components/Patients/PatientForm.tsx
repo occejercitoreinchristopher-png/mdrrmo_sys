@@ -3,8 +3,23 @@ import Select from '@/shared/components/Select';
 import Button from '@/shared/components/Button';
 import { useState } from 'react';
 
-export default function PatientForm({ patient = null, onSubmit, onCancel, loading = false, errors = {} }) {
-    const [form, setForm] = useState({
+interface PatientFormProps {
+    patient?: any;
+    onSubmit?: (form: any) => void;
+    onCancel?: () => void;
+    loading?: boolean;
+    errors?: Record<string, string>;
+}
+
+export default function PatientForm({ patient = null, onSubmit, onCancel, loading = false, errors = {} }: PatientFormProps) {
+    const [form, setForm] = useState<{
+        first_name: string;
+        last_name: string;
+        age: string | number;
+        gender: string;
+        contact_number: string;
+        address: string;
+    }>({
         first_name: patient?.first_name ?? '',
         last_name: patient?.last_name ?? '',
         age: patient?.age ?? '',
@@ -12,7 +27,7 @@ export default function PatientForm({ patient = null, onSubmit, onCancel, loadin
         contact_number: patient?.contact_number ?? '',
         address: patient?.address ?? '',
     });
-    const set = (f) => (e) => setForm((prev) => ({ ...prev, [f]: e.target ? e.target.value : e }));
+    const set = (f: string) => (e: any) => setForm((prev) => ({ ...prev, [f]: e.target ? e.target.value : e }));
 
     return (
         <form onSubmit={(e) => { e.preventDefault(); onSubmit?.(form); }} className="space-y-4">

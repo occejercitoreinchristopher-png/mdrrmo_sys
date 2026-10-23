@@ -14,58 +14,62 @@ class ReportController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Incident::with(['incidentType', 'resident.residentProfile.barangay', 'dispatches.ambulance', 'dispatches.crew', 'dispatches.patientCareRecord']);
+        $query = Incident::with([
+            'incidentType',
+            'resident.residentProfile.barangay',
+            'locationCode.barangay',
+            'dispatches.ambulance',
+            'dispatches.crew',
+            'dispatches.patientCareRecord',
+        ]);
 
         // Date Range Filter
         if ($request->filled('date_from')) {
-            $query->whereDate('reported_at', '>=', clone new \Carbon\Carbon($request->date_from));
+            $query->whereDate('reported_at', '>=', $request->date_from);
         }
         if ($request->filled('date_to')) {
-            $query->whereDate('reported_at', '<=', clone new \Carbon\Carbon($request->date_to));
+            $query->whereDate('reported_at', '<=', $request->date_to);
         }
 
-        // Incident Type
+        // Incident Type Filter
         if ($request->filled('incident_type_id')) {
             $query->where('incident_type_id', $request->incident_type_id);
         }
 
-        // Status
+        // Status Filter
         if ($request->filled('status')) {
             $query->where('incident_status', $request->status);
         }
 
-        $incidents = $query->latest('reported_at')->get();
-
-        // Custom Filters that require relationship checks or attribute access
+        // Barangay Filter directly in SQL
         if ($request->filled('barangay')) {
-            $incidents = $incidents->filter(function ($incident) use ($request) {
-                return $incident->barangay === $request->barangay;
+            $barangay = $request->barangay;
+            $query->where(function ($bq) use ($barangay) {
+                $bq->whereHas('resident.residentProfile.barangay', fn($q) => $q->where('barangay_name', $barangay))
+                   ->orWhereHas('locationCode.barangay', fn($q) => $q->where('barangay_name', $barangay))
+                   ->orWhere('incident_address', 'LIKE', "%{$barangay}%")
+                   ->orWhere('place_of_incident', 'LIKE', "%{$barangay}%");
             });
         }
 
+        // Responder Filter directly in SQL
         if ($request->filled('responder_id')) {
             $responderId = (int) $request->responder_id;
-            $incidents = $incidents->filter(function ($incident) use ($responderId) {
-                foreach ($incident->dispatches as $dispatch) {
-                    if ($dispatch->crew->contains('id', $responderId)) {
-                        return true;
-                    }
-                }
-                return false;
+            $query->whereHas('dispatches', function ($dq) use ($responderId) {
+                $dq->where('driver_id', $responderId)
+                   ->orWhere('emt_id', $responderId)
+                   ->orWhereHas('crew', fn($cq) => $cq->where('users.id', $responderId));
             });
         }
 
+        // Ambulance Filter directly in SQL
         if ($request->filled('ambulance_id')) {
             $ambulanceId = (int) $request->ambulance_id;
-            $incidents = $incidents->filter(function ($incident) use ($ambulanceId) {
-                foreach ($incident->dispatches as $dispatch) {
-                    if ($dispatch->ambulance_id === $ambulanceId) {
-                        return true;
-                    }
-                }
-                return false;
-            });
+            $query->whereHas('dispatches', fn($dq) => $dq->where('ambulance_id', $ambulanceId));
         }
+
+        // Retrieve filtered incidents from SQL
+        $incidents = $query->latest('reported_at')->get();
 
         // Calculate Overview Stats
         $totalIncidents = $incidents->count();

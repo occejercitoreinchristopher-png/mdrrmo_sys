@@ -23,11 +23,46 @@ Broadcast::channel('resident.{id}', function ($user, $id) {
 });
 
 Broadcast::channel('incident.{id}', function ($user, $id) {
-    // Both the resident who created it and the assigned responders/dispatchers should have access.
-    // For simplicity in this emergency context, we return true, but normally you'd verify role/assignment.
-    return true;
+    if (in_array($user->role, ['admin', 'dispatcher'])) {
+        return true;
+    }
+
+    $incident = \App\Models\Incident::find($id);
+    if (! $incident) {
+        return false;
+    }
+
+    if ((int) $incident->resident_id === (int) $user->id) {
+        return true;
+    }
+
+    return $incident->dispatches()->where(function ($dq) use ($user) {
+        $dq->where('driver_id', $user->id)
+            ->orWhere('emt_id', $user->id)
+            ->orWhereHas('crew', function ($cq) use ($user) {
+                $cq->where('users.id', $user->id);
+            });
+    })->exists();
 });
 
 Broadcast::channel('dispatch.{id}', function ($user, $id) {
-    return true;
+    if (in_array($user->role, ['admin', 'dispatcher'])) {
+        return true;
+    }
+
+    $dispatch = \App\Models\Dispatch::with('incident')->find($id);
+    if (! $dispatch) {
+        return false;
+    }
+
+    if ($dispatch->incident && (int) $dispatch->incident->resident_id === (int) $user->id) {
+        return true;
+    }
+
+    if ((int) $dispatch->driver_id === (int) $user->id || (int) $dispatch->emt_id === (int) $user->id) {
+        return true;
+    }
+
+    return $dispatch->crew()->where('users.id', $user->id)->exists();
 });
+

@@ -53,35 +53,38 @@ class DashboardController extends Controller
             'total_dispatches' => $totalDispatches,
         ];
 
-        // Current Year Monthly Trend (Jan - Dec)
-        $months = [];
+        // Current Year Monthly Trend (Jan - Dec) via single SQL aggregations
+        $currentYear = $now->year;
+        $months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        $incidentsByMonth = Incident::whereYear('created_at', $currentYear)
+            ->selectRaw('MONTH(created_at) as month_num, count(*) as total')
+            ->groupBy('month_num')
+            ->pluck('total', 'month_num');
+
+        $resolvedByMonth = Incident::where('incident_status', 'resolved')
+            ->whereYear('resolved_at', $currentYear)
+            ->selectRaw('MONTH(resolved_at) as month_num, count(*) as total')
+            ->groupBy('month_num')
+            ->pluck('total', 'month_num');
+
         $monthlyIncidents = [];
         $monthlyResolved = [];
-        $currentYear = $now->year;
 
         for ($m = 1; $m <= 12; $m++) {
-            $monthDate = Carbon::create($currentYear, $m, 1);
-            $months[] = $monthDate->format('M');
-            
-            $start = $monthDate->copy()->startOfMonth();
-            $end = $monthDate->copy()->endOfMonth();
-
-            $monthlyIncidents[] = Incident::whereBetween('created_at', [$start, $end])->count();
-            $monthlyResolved[] = Incident::where('incident_status', 'resolved')
-                ->whereBetween('resolved_at', [$start, $end])
-                ->count();
+            $monthlyIncidents[] = (int) ($incidentsByMonth->get($m) ?? 0);
+            $monthlyResolved[] = (int) ($resolvedByMonth->get($m) ?? 0);
         }
 
-        // Incident types distribution
-        $types = IncidentType::all();
-        $incidentTypes = [];
-        foreach ($types as $type) {
-            $count = Incident::where('incident_type_id', $type->id)->count();
-            $incidentTypes[] = [
-                'name' => $type->name,
-                'count' => $count,
-            ];
-        }
+        // Incident types distribution via single SQL withCount
+        $incidentTypes = IncidentType::withCount('incidents')
+            ->get()
+            ->map(fn($type) => [
+                'name' => $type->name ?? $type->incident_type_name,
+                'count' => (int) $type->incidents_count,
+            ])
+            ->values()
+            ->toArray();
 
         // If no incident types yet, provide graceful default structure
         if (empty($incidentTypes)) {

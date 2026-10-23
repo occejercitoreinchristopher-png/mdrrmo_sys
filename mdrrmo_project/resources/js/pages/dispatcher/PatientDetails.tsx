@@ -21,8 +21,10 @@ import {
     UserCheck,
     Copy,
     Check,
+    AlertCircle,
 } from 'lucide-react';
 import { toPascalCase } from '@/shared/utils/utils';
+import IdentifyPatientModal from '@/dispatcher/components/Patients/IdentifyPatientModal';
 
 interface PatientDetailsProps {
     patient: {
@@ -40,6 +42,7 @@ interface PatientDetailsProps {
         street?: string | null;
         address?: string | null;
         care_records_count?: number;
+        is_unidentified?: boolean;
         created_at?: string | null;
         updated_at?: string | null;
         registered_user?: {
@@ -79,6 +82,7 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
         : 'None';
 
     const [copied, setCopied] = useState(false);
+    const [showIdentifyModal, setShowIdentifyModal] = useState(false);
 
     const handleCopyPhone = () => {
         if (!patient.contact_number) return;
@@ -154,7 +158,11 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                                     <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight capitalize">
                                         {formattedPatientName}
                                     </h1>
-                                    {patient.registered_user ? (
+                                    {patient.is_unidentified ? (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                            <AlertCircle className="w-3.5 h-3.5" /> Unidentified Patient
+                                        </span>
+                                    ) : patient.registered_user ? (
                                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                                             <UserCheck className="w-3.5 h-3.5" /> Registered Resident
                                         </span>
@@ -192,6 +200,16 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
 
                         {/* Quick Actions & Stats Badges */}
                         <div className="flex items-center gap-3 flex-wrap">
+                            {patient.is_unidentified && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowIdentifyModal(true)}
+                                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition-all shadow-md cursor-pointer"
+                                >
+                                    <UserCheck className="w-4 h-4" />
+                                    <span>Identify Patient</span>
+                                </button>
+                            )}
                             {patient.contact_number && (
                                 <button
                                     type="button"
@@ -378,6 +396,14 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                     </div>
                 </div>
             </div>
+
+            {showIdentifyModal && (
+                <IdentifyPatientModal
+                    open={showIdentifyModal}
+                    onClose={() => setShowIdentifyModal(false)}
+                    patient={patient}
+                />
+            )}
         </DispatcherLayout>
     );
 }

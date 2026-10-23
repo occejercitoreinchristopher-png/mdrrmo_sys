@@ -17,6 +17,7 @@ Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
+Route::get('/ping', fn () => response()->json(['status' => 'ok', 'timestamp' => now()->toIso8601String()]));
 Route::get('/barangays', fn () => response()->json(Barangay::orderBy('barangay_name')->get(['id', 'barangay_name'])));
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -51,6 +52,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/profile/password', [ProfileController::class, 'changePassword']);
         Route::get('/patients/search', [PatientController::class, 'search']);
         Route::post('/patients', [PatientController::class, 'store']);
+        Route::put('/patients/{patient}/identify', [PatientController::class, 'updateIdentification']);
         Route::get('/history', [HistoryController::class, 'index']);
 
         Route::get('/incidents/available', [ResponderDispatchController::class, 'availableIncidents']);
@@ -64,5 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/dispatches/{dispatch}/pcr', [PatientCareRecordController::class, 'update']);
         Route::post('/dispatches/{dispatch}/pcr/photo', [PatientCareRecordController::class, 'uploadPhoto']);
         Route::post('/dispatches/{dispatch}/pcr/submit', [PatientCareRecordController::class, 'submit']);
+
+        Route::post('/sync/batch', [ResponderDispatchController::class, 'syncBatch']);
     });
 });

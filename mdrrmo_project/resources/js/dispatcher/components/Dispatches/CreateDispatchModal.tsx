@@ -352,7 +352,7 @@ export default function CreateDispatchModal({
                             {incident.incident_type?.name || 'Emergency Incident'}
                         </span>
                         <span className="text-[11px] font-mono text-primary">
-                            {incident.location_code ? `Code: ${incident.location_code}` : (typeof incident.barangay === 'object' ? incident.barangay?.barangay_name || incident.barangay?.name : incident.barangay)}
+                            {incident.location_code ? `Code: ${typeof incident.location_code === 'object' ? incident.location_code?.location_code || incident.location_code?.code : incident.location_code}` : (typeof incident.barangay === 'object' ? incident.barangay?.barangay_name || incident.barangay?.name : incident.barangay)}
                         </span>
                     </div>
                     <p className="text-xs text-slate-300 line-clamp-2">

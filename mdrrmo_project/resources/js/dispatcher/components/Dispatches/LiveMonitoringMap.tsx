@@ -271,6 +271,7 @@ export default function LiveMonitoringMap({
                 heading: dispatch.last_heading ? parseFloat(dispatch.last_heading) : null,
                 accuracy: dispatch.last_accuracy ? parseFloat(dispatch.last_accuracy) : null,
                 timestamp: dispatch.last_location_updated_at,
+                updatedAt: dispatch.last_location_updated_at ? new Date(dispatch.last_location_updated_at).getTime() : undefined,
             };
         }
 
@@ -772,6 +773,12 @@ export default function LiveMonitoringMap({
                                         ? responderLoc.heading
                                         : (snapped?.bearing ?? 0);
 
+                                    const locTime = responderLoc.updatedAt || (responderLoc.timestamp ? new Date(responderLoc.timestamp).getTime() : 0);
+                                    const elapsedSeconds = locTime > 0 ? Math.max(0, Math.floor((Date.now() - locTime) / 1000)) : 9999;
+                                    const isOnline = elapsedSeconds <= 35;
+                                    const isStale = elapsedSeconds > 35 && elapsedSeconds <= 180;
+                                    const isOffline = elapsedSeconds > 180;
+
                                     return (
                                         <Marker 
                                             longitude={displayLng} 
@@ -787,15 +794,23 @@ export default function LiveMonitoringMap({
                                                 {/* Floating Unit Identifier Pill (positioned above arrow without pushing it down) */}
                                                 <div className={`absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-white font-bold text-[9px] font-mono tracking-wider flex items-center gap-1 border transition-all whitespace-nowrap shadow-md pointer-events-none z-20 ${
                                                     isSelected 
-                                                        ? 'bg-blue-600 border-blue-400 scale-105 shadow-blue-500/40 ring-1 ring-blue-400/50' 
-                                                        : 'bg-slate-900/90 border-slate-700 text-slate-300'
+                                                        ? (isOffline
+                                                            ? 'bg-slate-800 border-rose-500 scale-105 shadow-rose-500/30 ring-1 ring-rose-500/50'
+                                                            : 'bg-blue-600 border-blue-400 scale-105 shadow-blue-500/40 ring-1 ring-blue-400/50')
+                                                        : (isOffline
+                                                            ? 'bg-slate-900/90 border-rose-700/60 text-slate-300'
+                                                            : 'bg-slate-900/90 border-slate-700 text-slate-300')
                                                 }`}>
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                                    {isOnline && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                                                    {isStale && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                                                    {isOffline && <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
                                                     <span>{dispatch.ambulance?.plate_number || (dispatch.driver ? `${dispatch.driver.first_name} ${dispatch.driver.last_name}` : 'Responder')}</span>
+                                                    {isStale && <span className="text-[7.5px] uppercase font-sans tracking-normal bg-amber-500/30 text-amber-300 px-1 py-0.2 rounded border border-amber-500/30">Stale</span>}
+                                                    {isOffline && <span className="text-[7.5px] uppercase font-sans tracking-normal bg-rose-500/40 text-rose-200 px-1 py-0.2 rounded border border-rose-500/40">Offline</span>}
                                                 </div>
 
                                                 {/* Sleek 3D Navigation Arrow (centered directly on coordinates) */}
-                                                <div className="w-[38px] h-[38px] flex items-center justify-center">
+                                                <div className={`w-[38px] h-[38px] flex items-center justify-center ${isOffline ? 'opacity-80' : ''}`}>
                                                     <svg 
                                                         width="38" 
                                                         height="38" 
@@ -810,15 +825,15 @@ export default function LiveMonitoringMap({
                                                     >
                                                         <defs>
                                                             <linearGradient id={`arrow-wing-l-${dispatch.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                                                                <stop offset="0%" stopColor="#38bdf8" />
-                                                                <stop offset="100%" stopColor="#2563eb" />
+                                                                <stop offset="0%" stopColor={isOffline ? "#94a3b8" : "#38bdf8"} />
+                                                                <stop offset="100%" stopColor={isOffline ? "#64748b" : "#2563eb"} />
                                                             </linearGradient>
                                                             <linearGradient id={`arrow-wing-r-${dispatch.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                                                                <stop offset="0%" stopColor="#2563eb" />
-                                                                <stop offset="100%" stopColor="#1d4ed8" />
+                                                                <stop offset="0%" stopColor={isOffline ? "#64748b" : "#2563eb"} />
+                                                                <stop offset="100%" stopColor={isOffline ? "#475569" : "#1d4ed8"} />
                                                             </linearGradient>
                                                             <filter id={`arrow-glow-${dispatch.id}`} x="-20%" y="-20%" width="140%" height="140%">
-                                                                <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#1e40af" floodOpacity="0.5" />
+                                                                <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor={isOffline ? "#334155" : "#1e40af"} floodOpacity="0.5" />
                                                             </filter>
                                                         </defs>
 
@@ -829,7 +844,7 @@ export default function LiveMonitoringMap({
                                                         <path 
                                                             d="M19 3 L6 33 L19 25 L32 33 Z" 
                                                             fill="none"
-                                                            stroke="#FFFFFF" 
+                                                            stroke={isOffline ? "#cbd5e1" : "#FFFFFF"} 
                                                             strokeWidth="3" 
                                                             strokeLinejoin="round"
                                                             strokeLinecap="round"
@@ -848,7 +863,7 @@ export default function LiveMonitoringMap({
                                                         />
 
                                                         {/* Center Spine Ridge Highlight */}
-                                                        <line x1="19" y1="4" x2="19" y2="25" stroke="#BAE6FD" strokeWidth="1.2" strokeLinecap="round" />
+                                                        <line x1="19" y1="4" x2="19" y2="25" stroke={isOffline ? "#e2e8f0" : "#BAE6FD"} strokeWidth="1.2" strokeLinecap="round" />
                                                     </svg>
                                                 </div>
                                             </div>

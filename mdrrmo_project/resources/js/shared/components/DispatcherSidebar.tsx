@@ -16,6 +16,7 @@ import {
     ChevronDown,
     ChevronRight,
     User,
+    Flame,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -31,6 +32,7 @@ const navigation = [
         items: [
             { label: 'Incoming Incidents', icon: AlertTriangle, href: '/dispatcher/incidents' },
             { label: 'Dispatch Center', icon: Truck, href: '/dispatcher/dispatches' },
+            { label: 'Accident Heatmap', icon: Flame, href: '/dispatcher/accident-heatmap' },
             { label: 'Responders', icon: Shield, href: '/dispatcher/responders' },
         ],
     },

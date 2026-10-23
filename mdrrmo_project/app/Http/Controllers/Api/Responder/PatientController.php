@@ -76,6 +76,7 @@ class PatientController extends Controller
                     'barangay' => $patient->barangay?->barangay_name ?? $patient->barangay?->name ?? $residentProfile?->barangay?->barangay_name,
                     'contact_number' => $contact,
                     'civil_status' => $civilStatus,
+                    'is_unidentified' => (bool) $patient->is_unidentified,
                 ];
             });
 
@@ -90,11 +91,18 @@ class PatientController extends Controller
         }, $request->all());
         $request->merge($inputs);
 
+        if ($request->has('gender') && is_string($request->gender)) {
+            $request->merge(['gender' => strtolower(trim($request->gender))]);
+        }
+        if ($request->has('age') && is_numeric($request->age)) {
+            $request->merge(['age' => (string) $request->age]);
+        }
+
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
             'birthdate' => 'nullable|date',
-            'age' => 'nullable|numeric',
+            'age' => 'nullable|string|max:20',
             'gender' => 'nullable|string|in:male,female',
             'address' => 'nullable|string',
             'incident_address' => 'nullable|string',
@@ -106,48 +114,80 @@ class PatientController extends Controller
 
         $birthdate = $validated['birthdate'] ?? null;
         if (! $birthdate && ! empty($validated['age'])) {
-            $birthdate = now()->subYears((int) $validated['age'])->format('Y-01-01');
+            $rawAge = trim((string) $validated['age']);
+            if (str_contains($rawAge, '-')) {
+                $parts = explode('-', $rawAge);
+                $midAge = (int) round(((int) ($parts[0] ?? 25) + (int) ($parts[1] ?? 30)) / 2);
+            } else {
+                $midAge = (int) $rawAge;
+            }
+            if ($midAge > 0 && $midAge <= 120) {
+                $birthdate = now()->subYears($midAge)->format('Y-01-01');
+            }
         }
 
         $street = $validated['address'] ?? $validated['incident_address'] ?? null;
 
-        // Prevent duplicates: Check if patient already exists by first_name and last_name (case-insensitive)
-        $existingPatient = Patient::whereRaw('LOWER(patient_first_name) = ?', [strtolower($firstName)])
-            ->whereRaw('LOWER(patient_last_name) = ?', [strtolower($lastName)])
-            ->first();
+        $isUnidentified = $request->boolean('is_unidentified', false);
 
-        if ($existingPatient) {
-            $patient = $existingPatient;
-            $updates = [];
-            if (empty($patient->birthdate) && $birthdate) {
-                $updates['birthdate'] = $birthdate;
-            }
-            if (empty($patient->gender) && in_array($validated['gender'] ?? '', ['male', 'female'])) {
-                $updates['gender'] = $validated['gender'];
-            }
-            if (empty($patient->street) && ! empty($street)) {
-                $updates['street'] = $street;
-            }
-            if (! empty($updates)) {
-                $patient->update($updates);
-            }
-            $status = 200;
-            $message = 'Existing patient profile loaded';
-        } else {
+        // If explicitly creating an unidentified patient or not found by name
+        if ($isUnidentified) {
             $patient = Patient::create([
                 'first_name' => $firstName,
                 'last_name' => $lastName,
                 'birthdate' => $birthdate,
                 'gender' => in_array($validated['gender'] ?? '', ['male', 'female']) ? $validated['gender'] : null,
                 'street' => $street,
+                'is_unidentified' => true,
             ]);
             $status = 201;
-            $message = 'Patient created successfully';
+            $message = 'Unidentified patient profile created';
+        } else {
+            // Prevent duplicates: Check if patient already exists by first_name and last_name (case-insensitive)
+            $existingPatient = Patient::whereRaw('LOWER(patient_first_name) = ?', [strtolower($firstName)])
+                ->whereRaw('LOWER(patient_last_name) = ?', [strtolower($lastName)])
+                ->first();
+
+            if ($existingPatient) {
+                $patient = $existingPatient;
+                $updates = [];
+                if (empty($patient->birthdate) && $birthdate) {
+                    $updates['birthdate'] = $birthdate;
+                }
+                if (empty($patient->gender) && in_array($validated['gender'] ?? '', ['male', 'female'])) {
+                    $updates['gender'] = $validated['gender'];
+                }
+                if (! empty($street)) {
+                    $newStreet = trim($street);
+                    $oldStreet = trim($patient->street ?? '');
+                    if (empty($oldStreet) || $newStreet !== $oldStreet) {
+                        $updates['street'] = $newStreet;
+                    }
+                }
+                if (! empty($updates)) {
+                    $patient->update($updates);
+                }
+                $status = 200;
+                $message = 'Existing patient profile loaded';
+            } else {
+                $patient = Patient::create([
+                    'first_name' => $firstName,
+                    'last_name' => $lastName,
+                    'birthdate' => $birthdate,
+                    'gender' => in_array($validated['gender'] ?? '', ['male', 'female']) ? $validated['gender'] : null,
+                    'street' => $street,
+                    'is_unidentified' => false,
+                ]);
+                $status = 201;
+                $message = 'Patient created successfully';
+            }
         }
 
-        $calculatedAge = $patient->birthdate
-            ? Carbon::parse($patient->birthdate)->age
-            : ($validated['age'] ?? null ? (int) $validated['age'] : null);
+        $calculatedAge = ($patient->is_unidentified && ! empty($validated['age']))
+            ? (string) $validated['age']
+            : ($patient->birthdate
+                ? Carbon::parse($patient->birthdate)->age
+                : ($validated['age'] ?? null ? (int) $validated['age'] : null));
 
         return response()->json([
             'message' => $message,
@@ -161,6 +201,70 @@ class PatientController extends Controller
             'address' => $patient->street ?? $street,
             'incident_address' => $patient->street ?? $street,
             'contact_number' => $validated['contact_number'] ?? null,
+            'is_unidentified' => (bool) $patient->is_unidentified,
         ], $status);
+    }
+
+    public function updateIdentification(Request $request, Patient $patient)
+    {
+        // Only unidentified patients can be edited
+        if (! $patient->is_unidentified) {
+            return response()->json([
+                'message' => 'This patient has already been identified and cannot be edited.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:100',
+            'middle_name' => 'nullable|string|max:100',
+            'last_name' => 'required|string|max:100',
+            'birthdate' => 'nullable|date',
+            'age' => 'nullable|numeric',
+            'gender' => 'nullable|string|in:male,female',
+            'street' => 'nullable|string|max:255',
+            'address' => 'nullable|string|max:255',
+            'contact_number' => 'nullable|string|max:50',
+        ]);
+
+        $birthdate = $validated['birthdate'] ?? null;
+        if (! $birthdate && ! empty($validated['age'])) {
+            $birthdate = now()->subYears((int) $validated['age'])->format('Y-01-01');
+        }
+
+        $address = $validated['street'] ?? $validated['address'] ?? null;
+
+        $patient->update([
+            'patient_first_name' => trim($validated['first_name']),
+            'patient_middle_name' => ! empty($validated['middle_name']) ? trim($validated['middle_name']) : null,
+            'patient_last_name' => trim($validated['last_name']),
+            'patient_birthdate' => $birthdate,
+            'patient_gender' => $validated['gender'] ?? null,
+            'street' => $address,
+            'is_unidentified' => false,
+            'identified_at' => now(),
+            'identified_by_role' => 'responder',
+        ]);
+
+        $calculatedAge = $patient->birthdate ? Carbon::parse($patient->birthdate)->age : null;
+
+        return response()->json([
+            'message' => 'Patient identification completed successfully',
+            'patient' => [
+                'id' => $patient->id,
+                'patient_id' => $patient->id,
+                'first_name' => $patient->first_name,
+                'middle_name' => $patient->middle_name,
+                'last_name' => $patient->last_name,
+                'full_name' => $patient->full_name,
+                'birthdate' => $patient->birthdate,
+                'age' => $calculatedAge,
+                'gender' => $patient->gender,
+                'address' => $patient->street,
+                'street' => $patient->street,
+                'is_unidentified' => false,
+                'identified_at' => $patient->identified_at?->toISOString(),
+                'identified_by_role' => 'responder',
+            ],
+        ]);
     }
 }

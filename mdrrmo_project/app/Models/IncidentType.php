@@ -29,4 +29,9 @@ class IncidentType extends Model
     {
         $this->attributes['type_description'] = $value;
     }
+
+    public function incidents(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Incident::class, 'incident_type_id');
+    }
 }

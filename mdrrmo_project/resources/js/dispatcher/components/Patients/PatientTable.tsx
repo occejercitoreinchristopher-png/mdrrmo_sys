@@ -13,6 +13,7 @@ import {
     Check,
     AlertCircle,
     ExternalLink,
+    UserCheck,
 } from 'lucide-react';
 import DataTable, { Column } from '@/shared/components/DataTable';
 import Button from '@/shared/components/Button';
@@ -21,6 +22,7 @@ import Card from '@/shared/components/Card';
 import Pagination from '@/shared/components/Pagination';
 import { toPascalCase } from '@/shared/utils/utils';
 import { usePatientsQuery, PatientRecord } from './usePatientsQuery';
+import IdentifyPatientModal from './IdentifyPatientModal';
 
 interface PatientTableProps {
     patients?: PatientRecord[];
@@ -42,6 +44,7 @@ export default function PatientTable({ patients = [], pagination = null }: Patie
     });
 
     const [copiedId, setCopiedId] = useState<number | null>(null);
+    const [identifyingPatient, setIdentifyingPatient] = useState<PatientRecord | null>(null);
 
     const handleCopyPhone = (e: React.MouseEvent, id: number, phone: string) => {
         e.stopPropagation();
@@ -73,9 +76,16 @@ export default function PatientTable({ patients = [], pagination = null }: Patie
                             <span>{initials}</span>
                         </div>
                         <div>
-                            <p className="font-semibold text-slate-900 dark:text-white group-hover:text-[#F61509] transition-colors capitalize">
-                                {name}
-                            </p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-semibold text-slate-900 dark:text-white group-hover:text-[#F61509] transition-colors capitalize">
+                                    {name}
+                                </p>
+                                {row.is_unidentified && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                        Unidentified
+                                    </span>
+                                )}
+                            </div>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400">
                                 {row.gender ? <span className="capitalize">{row.gender}</span> : 'Gender unrecorded'}
                                 {row.age !== null && row.age !== undefined ? ` • ${row.age} yrs` : ''}
@@ -178,6 +188,16 @@ export default function PatientTable({ patients = [], pagination = null }: Patie
             header: 'Actions',
             render: (_, row) => (
                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    {row.is_unidentified && (
+                        <Button
+                            size="xs"
+                            variant="primary"
+                            onClick={() => setIdentifyingPatient(row)}
+                            className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold"
+                        >
+                            <UserCheck className="w-3.5 h-3.5 mr-1" /> Identify
+                        </Button>
+                    )}
                     <Button
                         size="xs"
                         variant="secondary"
@@ -275,6 +295,14 @@ export default function PatientTable({ patients = [], pagination = null }: Patie
                     )}
                 </div>
             </Card>
+
+            {identifyingPatient && (
+                <IdentifyPatientModal
+                    open={!!identifyingPatient}
+                    onClose={() => setIdentifyingPatient(null)}
+                    patient={identifyingPatient}
+                />
+            )}
         </div>
     );
 }

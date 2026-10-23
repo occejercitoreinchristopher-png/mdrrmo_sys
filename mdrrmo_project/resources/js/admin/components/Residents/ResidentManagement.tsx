@@ -6,7 +6,7 @@ import UserCard from '@/admin/components/Users/UserCard';
 
 export { UserTable as ResidentTable, UserModal as ResidentModal, UserCard as ResidentCard };
 
-export default function ResidentManagement({ users = [], pagination = null }) {
+export default function ResidentManagement({ users = [], pagination = undefined }: { users?: any[]; pagination?: any }) {
     return (
         <div className="space-y-6">
             <div className="bg-slate-900/[0.03] dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 rounded-2xl p-4 sm:p-5 flex items-start gap-3.5 shadow-sm">
@@ -22,7 +22,7 @@ export default function ResidentManagement({ users = [], pagination = null }) {
             </div>
             <UserManagement
                 users={users}
-                pagination={pagination}
+                pagination={pagination || undefined}
                 roleFilter="resident"
                 title="Resident Management"
                 subtitle="Manage all registered residents who can report incidents."

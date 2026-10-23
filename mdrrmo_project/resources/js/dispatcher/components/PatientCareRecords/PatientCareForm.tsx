@@ -3,14 +3,27 @@ import Textarea from '@/shared/components/Textarea';
 import Button from '@/shared/components/Button';
 import { useState } from 'react';
 
-export default function PatientCareForm({ record = null, onSubmit, onCancel, loading = false, errors = {} }) {
-    const [form, setForm] = useState({
+interface PatientCareFormProps {
+    record?: any;
+    onSubmit?: (form: any) => void;
+    onCancel?: () => void;
+    loading?: boolean;
+    errors?: Record<string, string>;
+}
+
+export default function PatientCareForm({ record = null, onSubmit, onCancel, loading = false, errors = {} }: PatientCareFormProps) {
+    const [form, setForm] = useState<{
+        treatment_type: string;
+        vital_signs: string;
+        medications: string;
+        notes: string;
+    }>({
         treatment_type: record?.treatment_type ?? '',
         vital_signs: record?.vital_signs ?? '',
         medications: record?.medications ?? '',
         notes: record?.notes ?? '',
     });
-    const set = (f) => (e) => setForm((prev) => ({ ...prev, [f]: e.target ? e.target.value : e }));
+    const set = (f: string) => (e: any) => setForm((prev) => ({ ...prev, [f]: e.target ? e.target.value : e }));
 
     return (
         <form onSubmit={(e) => { e.preventDefault(); onSubmit?.(form); }} className="space-y-4">

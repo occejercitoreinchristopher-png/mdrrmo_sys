@@ -1,6 +1,14 @@
 import { CheckCircle, Clock } from 'lucide-react';
 
-export default function TreatmentTimeline({ steps = [] }) {
+export interface TreatmentStep {
+    done?: boolean;
+    label?: string;
+    timestamp?: string | number | Date;
+    note?: string;
+    [key: string]: any;
+}
+
+export default function TreatmentTimeline({ steps = [] }: { steps?: TreatmentStep[] }) {
     return (
         <div className="space-y-0">
             {steps.map((step, i) => (

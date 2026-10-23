@@ -4,14 +4,26 @@ import Textarea from '@/shared/components/Textarea';
 import Button from '@/shared/components/Button';
 import { useState } from 'react';
 
-export default function IncidentForm({ incident = null, onSubmit, onCancel, loading = false, errors = {} }) {
-    const [form, setForm] = useState({
+interface IncidentFormProps {
+    incident?: any;
+    onSubmit?: (form: any) => void;
+    onCancel?: () => void;
+    loading?: boolean;
+    errors?: Record<string, string>;
+}
+
+export default function IncidentForm({ incident = null, onSubmit, onCancel, loading = false, errors = {} }: IncidentFormProps) {
+    const [form, setForm] = useState<{
+        description: string;
+        incident_status: string;
+        verification_remarks: string;
+    }>({
         description: incident?.description ?? '',
         incident_status: incident?.incident_status ?? 'pending',
         verification_remarks: incident?.verification_remarks ?? '',
     });
 
-    const set = (field) => (e) =>
+    const set = (field: string) => (e: any) =>
         setForm((f) => ({ ...f, [field]: e.target ? e.target.value : e }));
 
     return (
