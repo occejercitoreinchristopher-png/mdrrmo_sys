@@ -919,22 +919,25 @@ export default function AccidentHeatmapView({
                                             <Layer
                                                 id="incidents-heatmap-layer"
                                                 type="heatmap"
-                                                maxzoom={17}
+                                                maxzoom={24}
                                                 paint={{
                                                     'heatmap-weight': [
                                                         'interpolate',
                                                         ['linear'],
                                                         ['get', 'weight'],
-                                                        0.8, 0.5,
-                                                        1.5, 1.2
+                                                        0.8, 0.8,
+                                                        1.5, 1.8
                                                     ],
                                                     'heatmap-intensity': [
                                                         'interpolate',
                                                         ['linear'],
                                                         ['zoom'],
-                                                        10, 1.2,
-                                                        13, 2.2,
-                                                        16, 3.5,
+                                                        9, 1.0,
+                                                        12, 1.8,
+                                                        15, 3.2,
+                                                        17, 5.0,
+                                                        19, 7.5,
+                                                        21, 10.0,
                                                     ],
                                                     // Emergency heat color ramp: transparent -> cyan -> blue -> amber -> red
                                                     'heatmap-color': [
@@ -942,21 +945,60 @@ export default function AccidentHeatmapView({
                                                         ['linear'],
                                                         ['heatmap-density'],
                                                         0, 'rgba(6, 182, 212, 0)',
-                                                        0.15, 'rgba(6, 182, 212, 0.5)',
-                                                        0.4, 'rgba(59, 130, 246, 0.75)',
-                                                        0.65, 'rgba(245, 158, 11, 0.88)',
-                                                        0.85, 'rgba(239, 68, 68, 0.95)',
+                                                        0.05, 'rgba(6, 182, 212, 0.45)',
+                                                        0.2, 'rgba(59, 130, 246, 0.75)',
+                                                        0.45, 'rgba(245, 158, 11, 0.88)',
+                                                        0.75, 'rgba(239, 68, 68, 0.95)',
                                                         1.0, 'rgba(225, 29, 72, 1.0)',
                                                     ],
                                                     'heatmap-radius': [
                                                         'interpolate',
                                                         ['linear'],
                                                         ['zoom'],
-                                                        10, 16,
-                                                        13, 28,
-                                                        16, 44,
+                                                        9, 14,
+                                                        12, 24,
+                                                        15, 42,
+                                                        17, 65,
+                                                        19, 90,
+                                                        21, 120,
                                                     ],
                                                     'heatmap-opacity': 0.88,
+                                                }}
+                                            />
+                                            {/* Street-Level Heat Glow Circle Layer for close-up street zoom (zoom >= 14) */}
+                                            <Layer
+                                                id="incidents-street-heat-glow"
+                                                type="circle"
+                                                minzoom={14}
+                                                maxzoom={24}
+                                                paint={{
+                                                    'circle-radius': [
+                                                        'interpolate',
+                                                        ['linear'],
+                                                        ['zoom'],
+                                                        14, 18,
+                                                        16, 34,
+                                                        18, 58,
+                                                        20, 88,
+                                                    ],
+                                                    'circle-color': [
+                                                        'case',
+                                                        ['==', ['get', 'priority'], 'Critical'],
+                                                        '#e11d48',
+                                                        ['==', ['get', 'priority'], 'High'],
+                                                        '#f59e0b',
+                                                        '#06b6d4',
+                                                    ],
+                                                    'circle-opacity': [
+                                                        'interpolate',
+                                                        ['linear'],
+                                                        ['zoom'],
+                                                        14, 0.25,
+                                                        16, 0.55,
+                                                        18, 0.75,
+                                                        20, 0.85,
+                                                    ],
+                                                    'circle-blur': 0.85,
                                                 }}
                                             />
                                         </Source>
