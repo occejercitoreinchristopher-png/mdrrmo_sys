@@ -259,6 +259,7 @@ export default function ActiveDispatchWorkspace({
             !q ||
             String(d.id).includes(q) ||
             d.ambulance?.plate_number?.toLowerCase().includes(q) ||
+            (d.driver?.first_name + ' ' + d.driver?.last_name).toLowerCase().includes(q) ||
             (d.teamLeader?.first_name + ' ' + d.teamLeader?.last_name).toLowerCase().includes(q) ||
             d.incident?.incident_type?.name?.toLowerCase().includes(q) ||
             d.incident?.barangay?.toLowerCase().includes(q)
@@ -734,8 +735,8 @@ export default function ActiveDispatchWorkspace({
                                         </div>
                                         <div className="flex items-center gap-1.5 border-l border-slate-200 dark:border-white/10 pl-3">
                                             <UserIcon className="w-3.5 h-3.5 text-slate-400" />
-                                            <span className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
-                                                {selectedDispatch.teamLeader?.first_name ? `${selectedDispatch.teamLeader.first_name} ${selectedDispatch.teamLeader.last_name || ''}`.trim() : 'Leader: N/A'}
+                                            <span className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[130px]" title={selectedDispatch.driver ? `Driver: ${selectedDispatch.driver.first_name} ${selectedDispatch.driver.last_name || ''}` : 'Driver: N/A'}>
+                                                {selectedDispatch.driver?.first_name ? `${selectedDispatch.driver.first_name} ${selectedDispatch.driver.last_name || ''}`.trim() : 'Driver: N/A'}
                                             </span>
                                         </div>
                                     </div>
