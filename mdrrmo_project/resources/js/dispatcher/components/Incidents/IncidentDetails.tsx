@@ -1,4 +1,4 @@
-import { MapPin, Clock, CheckCircle, XCircle, ShieldAlert, AlertTriangle, Truck, Send, CheckCircle2, PhoneCall, Smartphone, UserCheck, Image as ImageIcon, ExternalLink, X, Camera } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, XCircle, AlertTriangle, Truck, Send, CheckCircle2, PhoneCall, Smartphone, UserCheck, Image as ImageIcon, ExternalLink, X, Camera } from 'lucide-react';
 import Drawer from '@/shared/components/Drawer';
 import StatusBadge from '@/shared/components/StatusBadge';
 import Button from '@/shared/components/Button';
@@ -633,31 +633,17 @@ export default function IncidentDetails({
                     )}
 
                     {(incident.incident_status === 'assigned' || incident.incident_status === 'responding') && (
-                        <div className="space-y-2">
-                            <div className="flex gap-2">
-                                <Button
-                                    variant="secondary"
-                                    className="flex-1"
-                                    onClick={() => {
-                                        router.get(`/dispatcher/dispatches?incident_id=${incident.id}`);
-                                    }}
-                                >
-                                    <Truck className="w-4 h-4 mr-1.5" />
-                                    View Active Dispatch
-                                </Button>
-                                <Button
-                                    variant="destructive"
-                                    className="w-auto px-3 text-xs"
-                                    title="Cancel mission & mark as Prank / False Alarm"
-                                    onClick={() => setShowRejectModal(true)}
-                                >
-                                    <ShieldAlert className="w-4 h-4 mr-1" />
-                                    Reject / Prank
-                                </Button>
-                            </div>
-                            <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 italic">
-                                If responders arrive and find no incident or report a hoax, use "Reject / Prank" to cancel active units and log the incident.
-                            </p>
+                        <div>
+                            <Button
+                                variant="secondary"
+                                className="w-full"
+                                onClick={() => {
+                                    router.get(`/dispatcher/dispatches?incident_id=${incident.id}`);
+                                }}
+                            >
+                                <Truck className="w-4 h-4 mr-1.5" />
+                                View Active Dispatch
+                            </Button>
                         </div>
                     )}
                 </div>
