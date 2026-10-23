@@ -260,7 +260,7 @@ export default function ActiveDispatchWorkspace({
             String(d.id).includes(q) ||
             d.ambulance?.plate_number?.toLowerCase().includes(q) ||
             (d.driver?.first_name + ' ' + d.driver?.last_name).toLowerCase().includes(q) ||
-            (d.teamLeader?.first_name + ' ' + d.teamLeader?.last_name).toLowerCase().includes(q) ||
+            (d.emt?.first_name + ' ' + d.emt?.last_name).toLowerCase().includes(q) ||
             d.incident?.incident_type?.name?.toLowerCase().includes(q) ||
             d.incident?.barangay?.toLowerCase().includes(q)
         );
@@ -277,11 +277,46 @@ export default function ActiveDispatchWorkspace({
         }
     };
 
-    const crew = selectedDispatch ? [
-        { role: 'Driver', user: selectedDispatch.driver },
-        { role: 'Team Leader', user: selectedDispatch.teamLeader },
-        { role: 'EMT', user: selectedDispatch.emt }
-    ] : [];
+    const crew = selectedDispatch ? (() => {
+        const members: any[] = [];
+        
+        // Driver
+        if (selectedDispatch.driver) {
+            members.push({ role: 'Driver', user: selectedDispatch.driver });
+        } else if (selectedDispatch.crew_snapshot?.driver) {
+            members.push({ 
+                role: 'Driver', 
+                user: { 
+                    first_name: selectedDispatch.crew_snapshot.driver.name?.split(' ')[0] || 'Driver',
+                    last_name: selectedDispatch.crew_snapshot.driver.name?.split(' ').slice(1).join(' ') || '',
+                    responder_profile: { team: selectedDispatch.team || selectedDispatch.crew_snapshot.team }
+                } 
+            });
+        } else {
+            members.push({ role: 'Driver', user: null });
+        }
+
+        // EMT(s)
+        if (Array.isArray(selectedDispatch.crew_snapshot?.emts) && selectedDispatch.crew_snapshot.emts.length > 0) {
+            selectedDispatch.crew_snapshot.emts.forEach((emtItem: any, idx: number) => {
+                const matchedUser = selectedDispatch.emt?.id === emtItem.id ? selectedDispatch.emt : null;
+                members.push({
+                    role: selectedDispatch.crew_snapshot.emts.length > 1 ? `EMT #${idx + 1}` : 'EMT',
+                    user: matchedUser || {
+                        first_name: emtItem.name?.split(' ')[0] || 'EMT',
+                        last_name: emtItem.name?.split(' ').slice(1).join(' ') || '',
+                        responder_profile: { team: selectedDispatch.team || selectedDispatch.crew_snapshot.team }
+                    }
+                });
+            });
+        } else if (selectedDispatch.emt) {
+            members.push({ role: 'EMT', user: selectedDispatch.emt });
+        } else {
+            members.push({ role: 'EMT', user: null });
+        }
+
+        return members;
+    })() : [];
 
     return (
         <div className="h-full flex-1 flex flex-col min-h-0 max-w-[1800px] mx-auto w-full overflow-hidden">
@@ -484,7 +519,7 @@ export default function ActiveDispatchWorkspace({
                                     <div className="text-xs text-slate-800 dark:text-slate-200 font-medium flex items-center gap-1.5">
                                         <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                         <span className="truncate">
-                                            {selectedDispatch.driver ? `${selectedDispatch.driver.first_name} ${selectedDispatch.driver.last_name} (Driver)` : (selectedDispatch.teamLeader ? `${selectedDispatch.teamLeader.first_name} ${selectedDispatch.teamLeader.last_name} (TL)` : 'Assigned Crew')}
+                                            {selectedDispatch.driver ? `${selectedDispatch.driver.first_name} ${selectedDispatch.driver.last_name}` : (selectedDispatch.emt ? `${selectedDispatch.emt.first_name} ${selectedDispatch.emt.last_name} (EMT)` : 'Assigned Crew')}
                                         </span>
                                     </div>
                                     {(() => {
