@@ -71,10 +71,20 @@ class LocationMarkerSeeder extends Seeder
 
         foreach ($markers as $marker) {
             $bName = $marker['barangay_name'];
-            unset($marker['barangay_name']);
-            $marker['barangay_id'] = $barangays->get($bName)?->id ?? $barangays->first()?->id;
+            $barangayId = $barangays->get($bName)?->id ?? $barangays->first()?->id;
 
-            LocationMarker::updateOrCreate(['code' => $marker['code']], $marker);
+            LocationMarker::updateOrCreate(
+                ['location_code' => $marker['code']],
+                [
+                    'barangay_id' => $barangayId,
+                    'location_code' => $marker['code'],
+                    'location_name' => $marker['marker_name'],
+                    'location_type' => 'Landmark',
+                    'location_description' => $marker['marker_description'],
+                    'location_latitude' => $marker['marker_latitude'],
+                    'location_longitude' => $marker['marker_longitude'],
+                ]
+            );
         }
 
         // Also seed standard incident types matching mobile app IDs
