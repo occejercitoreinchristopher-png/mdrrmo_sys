@@ -114,4 +114,31 @@ class ProfileController extends Controller
             'message' => 'Your password has been changed successfully.',
         ]);
     }
+
+    public function updatePersonal(Request $request)
+    {
+        $validated = $request->validate([
+            'phone_number' => 'nullable|string|max:20',
+        ]);
+
+        $user = Auth::user();
+        if (array_key_exists('phone_number', $validated)) {
+            $user->phone_number = $validated['phone_number'];
+            $user->save();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Personal information updated successfully',
+            'user' => [
+                'id' => $user->id,
+                'first_name' => $user->first_name,
+                'last_name' => $user->last_name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'phone_number' => $user->phone_number,
+                'responder_profile' => $user->responderProfile,
+            ],
+        ]);
+    }
 }

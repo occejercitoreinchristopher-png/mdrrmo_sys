@@ -12,8 +12,6 @@ export interface PatientRecord {
     gender?: string | null;
     contact_number?: string | null;
     barangay?: string | null;
-    house_no?: string | null;
-    street?: string | null;
     address?: string | null;
     care_records_count?: number;
     is_unidentified?: boolean;

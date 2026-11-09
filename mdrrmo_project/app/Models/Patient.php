@@ -17,7 +17,7 @@ class Patient extends Model
 
     public function getAddressAttribute(): ?string
     {
-        return $this->street ?? $this->home_address ?? null;
+        return $this->home_address ?? null;
     }
 
     public function getNameAttribute(): string
@@ -80,20 +80,9 @@ class Patient extends Model
         $this->attributes['patient_gender'] = $value;
     }
 
-    public function setStreetAttribute($value): void
-    {
-        $this->attributes['street'] = $value;
-        if (array_key_exists('home_address', $this->attributes)) {
-            $this->attributes['home_address'] = $value;
-        }
-    }
-
     public function setHomeAddressAttribute($value): void
     {
         $this->attributes['home_address'] = $value;
-        if (array_key_exists('street', $this->attributes)) {
-            $this->attributes['street'] = $value;
-        }
     }
 
     public function barangay()

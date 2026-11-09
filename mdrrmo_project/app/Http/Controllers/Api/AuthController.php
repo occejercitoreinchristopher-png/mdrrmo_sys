@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\ResponderStatusUpdated;
 use App\Http\Controllers\Controller;
+use App\Models\Dispatch;
 use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
@@ -44,22 +47,18 @@ class AuthController extends Controller
             'password' => Hash::make($validated['password']),
             'role' => 'resident',
             'status' => 'active',
+            'verification_status' => 'Pending',
         ]);
+
+        // Ensure resident profile record exists
+        $user->residentProfile()->firstOrCreate(['user_id' => $user->id]);
+        $user->syncVerificationStatus();
 
         $token = $user->createToken('mobile-device')->plainTextToken;
 
         return response()->json([
             'token' => $token,
-            'user' => [
-                'id' => $user->id,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
-                'email' => $user->email,
-                'role' => $user->role,
-                'profile_photo_url' => $user->profile_photo_url,
-                'responder_profile' => $user->responderProfile,
-                'resident_profile' => $user->residentProfile,
-            ],
+            'user' => $this->formatUserPayload($user),
         ], 201);
     }
 
@@ -72,15 +71,15 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (! $user) {
+        if (! $user || ! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['We could not find an account with this email address.'],
+                'email' => ['Invalid email or password.'],
             ]);
         }
 
-        if (! Hash::check($request->password, $user->password)) {
+        if ($user->status !== 'active') {
             throw ValidationException::withMessages([
-                'password' => ['The password you entered is incorrect.'],
+                'email' => ['Your account has been deactivated or suspended. Please contact MDRRMO administration.'],
             ]);
         }
 
@@ -94,44 +93,98 @@ class AuthController extends Controller
             ]);
         }
 
+        if ($user->role === 'resident') {
+            $user->syncVerificationStatus();
+        }
+
+        if ($user->role === 'responder' && $user->responderProfile) {
+            $hasActiveDispatch = Dispatch::whereNotIn('dispatch_status', ['completed', 'cancelled'])
+                ->where(function ($q) use ($user) {
+                    $q->where('driver_id', $user->id)
+                        ->orWhere('emt_id', $user->id)
+                        ->orWhereHas('crew', fn ($cq) => $cq->where('users.id', $user->id));
+                })->exists();
+
+            if (! $hasActiveDispatch) {
+                $user->responderProfile->update(['availability' => 'available']);
+                try {
+                    broadcast(new ResponderStatusUpdated($user));
+                } catch (\Throwable $e) {}
+            }
+        }
+
         $token = $user->createToken('mobile-device')->plainTextToken;
 
         return response()->json([
             'token' => $token,
-            'user' => [
-                'id' => $user->id,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
-                'email' => $user->email,
-                'role' => $user->role,
-                'password_change_required' => (bool)$user->password_change_required,
-                'profile_photo_url' => $user->profile_photo_url,
-                'responder_profile' => $user->responderProfile,
-                'resident_profile' => $user->residentProfile,
-            ],
+            'user' => $this->formatUserPayload($user),
         ]);
     }
 
     public function user(Request $request)
     {
         $user = $request->user();
+        if ($user->role === 'resident') {
+            $user->syncVerificationStatus();
+        }
 
-        return response()->json([
+        return response()->json($this->formatUserPayload($user));
+    }
+
+    private function formatUserPayload(User $user): array
+    {
+        $completeness = $user->role === 'resident'
+            ? $user->checkProfileCompleteness()
+            : ['is_complete' => true, 'missing_fields' => []];
+
+        return [
             'id' => $user->id,
+            'name' => $user->name,
             'first_name' => $user->first_name,
+            'middle_name' => $user->middle_name,
             'last_name' => $user->last_name,
             'email' => $user->email,
+            'phone_number' => $user->phone_number,
+            'phone' => $user->phone_number,
             'role' => $user->role,
-            'password_change_required' => (bool)$user->password_change_required,
+            'status' => $user->status,
+            'verification_status' => $user->verification_status ?? 'Pending',
+            'is_verified' => ($user->verification_status ?? 'Pending') === 'Verified',
+            'missing_fields' => $completeness['missing_fields'],
+            'gender' => $user->gender,
+            'age' => $user->age,
+            'birthdate' => $user->birthdate ? Carbon::parse($user->birthdate)->format('Y-m-d') : null,
+            'address' => $user->address,
+            'password_change_required' => (bool) $user->password_change_required,
             'profile_photo_url' => $user->profile_photo_url,
             'responder_profile' => $user->responderProfile,
             'resident_profile' => $user->residentProfile,
-        ]);
+        ];
     }
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+
+        if ($user && $user->role === 'responder' && $user->responderProfile) {
+            $hasActiveDispatch = Dispatch::whereNotIn('dispatch_status', ['completed', 'cancelled'])
+                ->where(function ($q) use ($user) {
+                    $q->where('driver_id', $user->id)
+                        ->orWhere('emt_id', $user->id)
+                        ->orWhereHas('crew', fn ($cq) => $cq->where('users.id', $user->id));
+                })->exists();
+
+            if (! $hasActiveDispatch) {
+                $user->responderProfile->update(['availability' => 'off_duty']);
+                try {
+                    broadcast(new ResponderStatusUpdated($user));
+                } catch (\Throwable $e) {}
+            }
+        }
+
+        if ($user) {
+            $user->tokens()->delete();
+        }
 
         return response()->json(['message' => 'Logged out successfully']);
     }

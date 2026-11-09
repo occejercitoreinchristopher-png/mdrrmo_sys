@@ -122,9 +122,9 @@ class PatientCareRecordController extends Controller
             }
             if (! empty($validated['incident_address'])) {
                 $newAddress = trim($validated['incident_address']);
-                $currentAddress = trim($patient->street ?? '');
+                $currentAddress = trim($patient->home_address ?? '');
                 if (empty($currentAddress) || $newAddress !== $currentAddress) {
-                    $patientUpdates['street'] = $newAddress;
+                    $patientUpdates['home_address'] = $newAddress;
                 }
             }
             if (! empty($validated['age']) && empty($patient->birthdate)) {
@@ -154,6 +154,12 @@ class PatientCareRecordController extends Controller
 
     public function submit(Request $request, Dispatch $dispatch)
     {
+        $request->validate([
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
+            'photos' => 'nullable|array',
+            'photos.*' => 'image|mimes:jpeg,png,jpg,webp|max:10240',
+        ]);
+
         $user = $request->user();
         if (! $this->isUserAssignedToDispatch($user, $dispatch)) {
             return response()->json(['message' => 'Unauthorized to submit PCR for this dispatch.'], 403);

@@ -54,9 +54,17 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
+        // Operational staff (Admin and Dispatcher) cannot delete their accounts
+        if (in_array($user->role, ['admin', 'dispatcher'])) {
+            return back()->withErrors([
+                'password' => 'Operational accounts (Admin and Dispatcher) cannot be deleted. Please contact MDRRMO Administration.',
+            ]);
+        }
+
         Auth::logout();
 
-        $user->forceDelete();
+        // Soft delete the user record to preserve foreign keys and audit history
+        $user->delete();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

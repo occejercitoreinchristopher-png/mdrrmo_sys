@@ -84,21 +84,35 @@ class PatientCareRecord extends Model
 
         $names = [];
 
-        if ($dispatch->relationLoaded('crew') && $dispatch->crew->isNotEmpty()) {
+        if ($dispatch->relationLoaded('crew') && $dispatch->crew && $dispatch->crew->isNotEmpty()) {
             foreach ($dispatch->crew as $c) {
-                $role = ! empty($c->pivot?->role) ? ' (' . strtoupper($c->pivot->role) . ')' : '';
-                $names[] = trim("{$c->first_name} {$c->last_name}{$role}");
-            }
-        } else {
-            if ($dispatch->driver) {
-                $names[] = "{$dispatch->driver->first_name} {$dispatch->driver->last_name} (Driver)";
-            }
-            if ($dispatch->emt) {
-                $names[] = "{$dispatch->emt->first_name} {$dispatch->emt->last_name} (EMT)";
+                $names[] = trim("{$c->first_name} {$c->last_name}");
             }
         }
 
-        return ! empty($names) ? implode(', ', array_unique($names)) : null;
+        if ($dispatch->driver) {
+            $names[] = trim("{$dispatch->driver->first_name} {$dispatch->driver->last_name}");
+        }
+
+        if ($dispatch->emt) {
+            $names[] = trim("{$dispatch->emt->first_name} {$dispatch->emt->last_name}");
+        }
+
+        $unique = [];
+        $seen = [];
+        foreach ($names as $name) {
+            $clean = trim(preg_replace('/\s*\([^)]*\)/', '', $name));
+            if (empty($clean)) {
+                continue;
+            }
+            $lower = mb_strtolower($clean);
+            if (! isset($seen[$lower])) {
+                $seen[$lower] = true;
+                $unique[] = mb_convert_case($clean, MB_CASE_TITLE, 'UTF-8');
+            }
+        }
+
+        return ! empty($unique) ? implode(', ', $unique) : null;
     }
 
     public function setChiefComplaintAttribute($value): void

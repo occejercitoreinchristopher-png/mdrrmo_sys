@@ -40,8 +40,6 @@ interface ResidentProfile {
     id: number;
     user_id: number;
     barangay_id: number;
-    house_no?: string | null;
-    street?: string | null;
     birthdate?: string | null;
     gender?: 'male' | 'female' | null;
     barangay?: Barangay | null;

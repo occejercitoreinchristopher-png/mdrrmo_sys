@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Dispatcher;
 
+use App\Events\ResponderStatusUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Dispatch;
 use App\Models\User;
@@ -15,6 +16,7 @@ class ResponderController extends Controller
         // Only fetch users with responder roles
         $users = User::whereIn('role', ['responder', 'team_leader', 'emt', 'driver'])
             ->with(['responderProfile'])
+            ->withCount('tokens')
             ->orderBy('id', 'asc')
             ->paginate(10);
 
@@ -74,6 +76,7 @@ class ResponderController extends Controller
             $user->temporary_mission = $temporaryMission;
             $user->is_borrowed = $isReliever && (bool) $dispatch;
             $user->current_status = $dispatch ? 'assigned' : ($user->responderProfile?->availability ?? 'offline');
+            $user->is_logged_in = (int) ($user->tokens_count ?? 0) > 0;
             $user->dispatches = $dispatch ? [$dispatch] : [];
 
             return $user;
@@ -112,6 +115,9 @@ class ResponderController extends Controller
 
         if ($user->responderProfile) {
             $user->responderProfile->update(['availability' => $validated['availability']]);
+            try {
+                broadcast(new ResponderStatusUpdated($user));
+            } catch (\Throwable $e) {}
         }
 
         $statusLabel = match ($validated['availability']) {

@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Responder\PatientCareRecordController;
 use App\Http\Controllers\Api\Responder\PatientController;
 use App\Http\Controllers\Api\Responder\ProfileController;
 use App\Models\Barangay;
+use App\Models\IncidentType;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
 
@@ -19,6 +20,7 @@ Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
 Route::get('/ping', fn () => response()->json(['status' => 'ok', 'timestamp' => now()->toIso8601String()]));
 Route::get('/barangays', fn () => response()->json(Barangay::orderBy('barangay_name')->get(['id', 'barangay_name'])));
+Route::get('/incident-types', fn () => response()->json(IncidentType::orderBy('id')->get(['id', 'incident_type_name', 'type_description'])));
 
 Route::middleware('auth:sanctum')->group(function () {
     Broadcast::routes(['middleware' => ['auth:sanctum']]);
@@ -39,6 +41,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/incidents', [ResidentIncidentController::class, 'index']);
         Route::post('/incidents', [ResidentIncidentController::class, 'store']);
         Route::put('/incidents/{incident}/location', [ResidentIncidentController::class, 'updateLocation']);
+        Route::post('/incidents/{incident}/cancel', [ResidentIncidentController::class, 'cancel']);
         Route::post('/incidents/{incident}/call-responder', [ResidentIncidentController::class, 'callResponder']);
         Route::post('/hotline/call', [ResidentIncidentController::class, 'callHotline']);
     });
@@ -49,6 +52,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/status', [ProfileController::class, 'updateStatus']);
         Route::post('/profile/photo', [ProfileController::class, 'uploadPhoto']);
         Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto']);
+        Route::put('/profile/personal', [ProfileController::class, 'updatePersonal']);
         Route::put('/profile/password', [ProfileController::class, 'changePassword']);
         Route::get('/patients/search', [PatientController::class, 'search']);
         Route::post('/patients', [PatientController::class, 'store']);

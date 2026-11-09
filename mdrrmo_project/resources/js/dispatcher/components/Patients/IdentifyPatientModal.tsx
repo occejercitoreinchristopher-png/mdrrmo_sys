@@ -18,7 +18,6 @@ interface IdentifyPatientModalProps {
         age?: number | string | null;
         birthdate?: string | null;
         address?: string | null;
-        street?: string | null;
         contact_number?: string | null;
     } | null;
 }
@@ -33,7 +32,7 @@ export default function IdentifyPatientModal({ open, onClose, patient }: Identif
         age: patient.age && !String(patient.age).includes('-') ? String(patient.age) : '',
         birthdate: patient.birthdate || '',
         gender: patient.gender || 'male',
-        address: patient.street || patient.address || '',
+        address: patient.address || '',
         contact_number: patient.contact_number || '',
     });
 
@@ -70,7 +69,7 @@ export default function IdentifyPatientModal({ open, onClose, patient }: Identif
                 age: form.age ? parseInt(form.age, 10) : null,
                 birthdate: form.birthdate || null,
                 gender: form.gender || null,
-                street: form.address.trim() || null,
+                address: form.address.trim() || null,
                 contact_number: form.contact_number.trim() || null,
             },
             {
@@ -193,8 +192,8 @@ export default function IdentifyPatientModal({ open, onClose, patient }: Identif
                         id="address"
                         value={form.address}
                         onChange={set('address')}
-                        placeholder="House / Street / Barangay / Town"
-                        error={errors.street || errors.address}
+                        placeholder="Barangay / Municipality"
+                        error={errors.address}
                     />
                     <Input
                         label="Contact Number"

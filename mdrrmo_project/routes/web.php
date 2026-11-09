@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AmbulanceController;
 use App\Http\Controllers\Admin\BarangayController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\IncidentTypeController;
 use App\Http\Controllers\Admin\LocationCodeController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\UserController;
@@ -73,13 +74,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('dashboard');
 });
 
-// Profile Routes (Restricted strictly to Admin and Dispatcher only)
+// Shared Admin & Dispatcher Routes
 Route::middleware(['auth', 'role:admin,dispatcher'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'show'])->name('admin.profile');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('admin.profile.update');
     Route::post('/profile/photo', [ProfileController::class, 'updatePhoto'])->name('admin.profile.photo.update');
     Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto'])->name('admin.profile.photo.destroy');
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('admin.profile.password.update');
+    Route::post('/incident-types', [\App\Http\Controllers\Admin\IncidentTypeController::class, 'store'])->name('incident-types.store');
 });
 
 // Admin Routes
@@ -98,6 +100,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::get('/ambulances', [AmbulanceController::class, 'index'])->name('ambulances');
     Route::post('/ambulances', [AmbulanceController::class, 'store'])->name('ambulances.store');
     Route::patch('/ambulances/{ambulance}', [AmbulanceController::class, 'update'])->name('ambulances.update');
+    Route::get('/incident-types', [IncidentTypeController::class, 'index'])->name('incident-types');
+    Route::post('/incident-types', [IncidentTypeController::class, 'store'])->name('incident-types.store');
+    Route::patch('/incident-types/{incidentType}', [IncidentTypeController::class, 'update'])->name('incident-types.update');
+    Route::delete('/incident-types/{incidentType}', [IncidentTypeController::class, 'destroy'])->name('incident-types.destroy');
     Route::get('/barangays', [BarangayController::class, 'index'])->name('barangays');
     Route::get('/barangays/{barangay}/location-codes', [LocationCodeController::class, 'index'])->name('barangays.location-codes.index');
     Route::post('/barangays/{barangay}/location-codes', [LocationCodeController::class, 'store'])->name('barangays.location-codes.store');

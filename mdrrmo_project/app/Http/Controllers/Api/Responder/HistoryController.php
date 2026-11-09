@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Responder;
 
 use App\Http\Controllers\Controller;
 use App\Models\Dispatch;
+use App\Models\Incident;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -16,7 +17,7 @@ class HistoryController extends Controller
         $query = Dispatch::with([
             'incident',
             'incident.incidentType',
-            'incident.resident',
+            'incident.resident.residentProfile.barangay',
             'patientCareRecord',
             'patientCareRecord.patient',
         ])
@@ -49,11 +50,43 @@ class HistoryController extends Controller
             $incident = $dispatch->incident;
             $reporter = $incident ? $incident->resident : null;
 
+            $locationName = $incident?->place_of_incident 
+                ?: $incident?->incident_address 
+                ?: ($incident?->location_code ? "Marker {$incident->location_code}" : null);
+
+            $barangay = $incident?->barangay 
+                ?: $incident?->resident?->residentProfile?->barangay?->barangay_name;
+
+            $isGeneric = empty($locationName) 
+                || in_array(strtolower(trim($locationName)), [
+                    'opol, misamis oriental',
+                    'opol',
+                    'incident scene, opol, misamis oriental',
+                    'incident scene',
+                ])
+                || preg_match('/^-?\d+\.\d+/', trim($locationName ?? ''));
+
+            if ($isGeneric && !empty($barangay)) {
+                $locationName = "Brgy. {$barangay}, Opol, Misamis Oriental";
+            } elseif ($isGeneric && $incident && $incident->incident_latitude && $incident->incident_longitude) {
+                $resolvedBrgy = Incident::resolveBarangayFromCoordinates($incident->incident_latitude, $incident->incident_longitude);
+                if ($resolvedBrgy) {
+                    $locationName = "Brgy. {$resolvedBrgy}, Opol, Misamis Oriental";
+                } else {
+                    $locationName = "Opol, Misamis Oriental";
+                }
+            } elseif (empty($locationName)) {
+                $locationName = !empty($barangay) ? "Brgy. {$barangay}, Opol, Misamis Oriental" : "Opol, Misamis Oriental";
+            }
+
             return [
                 'id' => 'DSP-'.str_pad($dispatch->id, 3, '0', STR_PAD_LEFT),
                 'status' => ucfirst($dispatch->dispatch_status),
                 'type' => optional(optional($incident)->incidentType)->name ?? 'Unknown',
-                'location' => $incident ? trim($incident->incident_latitude.','.$incident->incident_longitude) : 'Unknown', // we might just send the desc
+                'location' => $locationName,
+                'barangay' => $barangay,
+                'latitude' => $incident?->incident_latitude ? (float) $incident->incident_latitude : null,
+                'longitude' => $incident?->incident_longitude ? (float) $incident->incident_longitude : null,
                 'description' => $incident ? $incident->description : 'No description',
                 'date' => $dispatch->created_at->format('M d, Y'),
                 'time' => $dispatch->created_at->format('H:i'),

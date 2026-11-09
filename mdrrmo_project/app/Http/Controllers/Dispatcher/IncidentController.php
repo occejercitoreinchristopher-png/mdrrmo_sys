@@ -224,12 +224,39 @@ class IncidentController extends Controller
                 'is_prank' => $isPrank,
                 'verified_by' => $request->user()->id,
             ]);
+
+            // Check if resident has accumulated 3 rejected/prank strikes
+            if ($incident->resident_id) {
+                $resident = \App\Models\User::find($incident->resident_id);
+                if ($resident) {
+                    $prankCount = Incident::where('resident_id', $resident->id)
+                        ->where(function ($q) {
+                            $q->where('is_prank', true)
+                              ->orWhere('rejection_category', 'prank');
+                        })
+                        ->count();
+
+                    $totalRejected = Incident::where('resident_id', $resident->id)
+                        ->where('incident_status', 'rejected')
+                        ->count();
+
+                    if ($prankCount >= 3 || $totalRejected >= 3) {
+                        $resident->update([
+                            'reporting_suspended_until' => now()->addDay(),
+                        ]);
+                    }
+                }
+            }
         });
 
         event(new IncidentRejected($incident));
         \App\Services\PushNotificationService::notifyIncidentRejected($incident);
 
-        return back()->with('success', 'Incident rejected and any active dispatches cancelled.');
+        $notice = ($incident->resident?->fresh()?->isReportingSuspended())
+            ? 'Incident rejected. Reporter reached 3 strikes and has been suspended from reporting for 24 hours.'
+            : 'Incident rejected and any active dispatches cancelled.';
+
+        return back()->with('success', $notice);
     }
 
     public function resolve(Request $request, Incident $incident)
@@ -433,9 +460,8 @@ class IncidentController extends Controller
         if ($resident?->residentProfile) {
             $rp = $resident->residentProfile;
             $parts = array_filter([
-                $rp->house_no,
-                $rp->street,
                 $rp->barangay ? "Barangay {$rp->barangay->barangay_name}" : null,
+                'Opol',
             ]);
             $residentAddress = ! empty($parts) ? implode(', ', $parts) : null;
         }
@@ -684,9 +710,8 @@ class IncidentController extends Controller
         if ($resident?->residentProfile) {
             $rp = $resident->residentProfile;
             $parts = array_filter([
-                $rp->house_no,
-                $rp->street,
                 $rp->barangay ? "Barangay {$rp->barangay->barangay_name}" : null,
+                'Opol',
             ]);
             $incidentAddress = ! empty($parts) ? implode(', ', $parts) : null;
         }

@@ -44,6 +44,7 @@ class DatabaseSeeder extends Seeder
         );
 
         $this->call([
+            IncidentTypeSeeder::class,
             AmbulanceSeeder::class,
             ResponderSeeder::class,
             LocationMarkerSeeder::class,

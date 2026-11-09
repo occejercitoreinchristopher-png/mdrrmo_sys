@@ -81,6 +81,19 @@ class DispatchController extends Controller
             $incident = Incident::findOrFail($validated['incident_id']);
             $ambulance = Ambulance::findOrFail($validated['ambulance_id']);
 
+            // Safeguard: Ensure the selected ambulance is available and not deployed
+            if ($ambulance->status !== 'available') {
+                abort(422, "Ambulance {$ambulance->plate_number} is currently marked as '{$ambulance->status}' and cannot be dispatched.");
+            }
+
+            $ambulanceAlreadyActive = Dispatch::whereNotIn('dispatch_status', ['completed', 'cancelled'])
+                ->where('ambulance_id', $ambulance->id)
+                ->exists();
+
+            if ($ambulanceAlreadyActive) {
+                abort(422, "Ambulance {$ambulance->plate_number} is already deployed to an active mission.");
+            }
+
             // Load driver and verify position if provided
             $driver = null;
             if ($driverId) {

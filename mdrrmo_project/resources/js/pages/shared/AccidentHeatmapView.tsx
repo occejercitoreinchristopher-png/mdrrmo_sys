@@ -369,6 +369,13 @@ export default function AccidentHeatmapView({
                 hex: '#3b82f6',
             };
         }
+        if (lower.includes('search') || lower.includes('rescue') || lower.includes('drown') || lower.includes('water')) {
+            return {
+                bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
+                dot: 'bg-emerald-500',
+                hex: '#10b981',
+            };
+        }
         return {
             bg: 'bg-violet-500/15 border-violet-500/30 text-violet-300',
             dot: 'bg-violet-500',

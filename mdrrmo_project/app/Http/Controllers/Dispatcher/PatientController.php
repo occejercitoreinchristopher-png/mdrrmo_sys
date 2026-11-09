@@ -25,8 +25,7 @@ class PatientController extends Controller
                 $q->where(DB::raw("CONCAT(patient_first_name, ' ', patient_last_name)"), 'LIKE', "%{$search}%")
                     ->orWhere('patient_first_name', 'LIKE', "%{$search}%")
                     ->orWhere('patient_last_name', 'LIKE', "%{$search}%")
-                    ->orWhere('street', 'LIKE', "%{$search}%")
-                    ->orWhere('house_no', 'LIKE', "%{$search}%")
+                    ->orWhere('home_address', 'LIKE', "%{$search}%")
                     ->orWhereHas('barangay', function ($b) use ($search) {
                         $b->where('barangay_name', 'LIKE', "%{$search}%");
                     })
@@ -56,9 +55,8 @@ class PatientController extends Controller
             $barangayName = $patient->barangay?->barangay_name ?? $residentProfile?->barangay?->barangay_name ?? null;
 
             $addressParts = array_filter([
-                $patient->house_no ?? $residentProfile?->house_no,
-                $patient->street ?? $residentProfile?->street,
-                $barangayName,
+                $patient->home_address,
+                $barangayName ? "Barangay {$barangayName}" : null,
             ]);
             $address = ! empty($addressParts) ? implode(', ', $addressParts) : null;
 
@@ -78,8 +76,6 @@ class PatientController extends Controller
                 'gender' => $gender,
                 'contact_number' => $contactNumber,
                 'barangay' => $barangayName,
-                'house_no' => $patient->house_no ?? $residentProfile?->house_no,
-                'street' => $patient->street ?? $residentProfile?->street,
                 'address' => $address,
                 'care_records_count' => $patient->care_records_count,
                 'is_unidentified' => (bool) $patient->is_unidentified,
@@ -116,8 +112,7 @@ class PatientController extends Controller
                 $q->where(DB::raw("CONCAT(patient_first_name, ' ', patient_last_name)"), 'LIKE', "%{$search}%")
                     ->orWhere('patient_first_name', 'LIKE', "%{$search}%")
                     ->orWhere('patient_last_name', 'LIKE', "%{$search}%")
-                    ->orWhere('street', 'LIKE', "%{$search}%")
-                    ->orWhere('house_no', 'LIKE', "%{$search}%")
+                    ->orWhere('home_address', 'LIKE', "%{$search}%")
                     ->orWhereHas('barangay', function ($b) use ($search) {
                         $b->where('barangay_name', 'LIKE', "%{$search}%");
                     })
@@ -147,9 +142,8 @@ class PatientController extends Controller
             $barangayName = $patient->barangay?->barangay_name ?? $residentProfile?->barangay?->barangay_name ?? null;
 
             $addressParts = array_filter([
-                $patient->house_no ?? $residentProfile?->house_no,
-                $patient->street ?? $residentProfile?->street,
-                $barangayName,
+                $patient->home_address,
+                $barangayName ? "Barangay {$barangayName}" : null,
             ]);
             $address = ! empty($addressParts) ? implode(', ', $addressParts) : null;
 
@@ -169,8 +163,6 @@ class PatientController extends Controller
                 'gender' => $gender,
                 'contact_number' => $contactNumber,
                 'barangay' => $barangayName,
-                'house_no' => $patient->house_no ?? $residentProfile?->house_no,
-                'street' => $patient->street ?? $residentProfile?->street,
                 'address' => $address,
                 'care_records_count' => $patient->care_records_count,
                 'created_at' => $patient->created_at?->toISOString(),
@@ -212,9 +204,8 @@ class PatientController extends Controller
         $barangayName = $patient->barangay?->barangay_name ?? $residentProfile?->barangay?->barangay_name ?? null;
 
         $addressParts = array_filter([
-            $patient->house_no ?? $residentProfile?->house_no,
-            $patient->street ?? $residentProfile?->street,
-            $barangayName,
+            $patient->home_address,
+            $barangayName ? "Barangay {$barangayName}" : null,
         ]);
         $address = ! empty($addressParts) ? implode(', ', $addressParts) : null;
 
@@ -234,8 +225,6 @@ class PatientController extends Controller
             'gender' => $gender,
             'contact_number' => $contactNumber,
             'barangay' => $barangayName,
-            'house_no' => $patient->house_no ?? $residentProfile?->house_no,
-            'street' => $patient->street ?? $residentProfile?->street,
             'address' => $address,
             'care_records_count' => $patient->careRecords->count(),
             'is_unidentified' => (bool) $patient->is_unidentified,
@@ -283,9 +272,9 @@ class PatientController extends Controller
                 'special_instructions' => $pcr->special_instructions,
                 'disposition' => is_array($pcr->disposition) ? $pcr->disposition : ($pcr->disposition ? [$pcr->disposition] : []),
                 'responders' => $pcr->responders ?: ($dispatch ? collect([
-                    $dispatch->driver ? "{$dispatch->driver->first_name} {$dispatch->driver->last_name} (Driver)" : null,
-                    $dispatch->emt ? "{$dispatch->emt->first_name} {$dispatch->emt->last_name} (EMT)" : null,
-                ])->filter()->join(', ') : null),
+                    $dispatch->driver ? trim("{$dispatch->driver->first_name} {$dispatch->driver->last_name}") : null,
+                    $dispatch->emt ? trim("{$dispatch->emt->first_name} {$dispatch->emt->last_name}") : null,
+                ])->filter()->map(fn ($n) => mb_convert_case(trim(preg_replace('/\s*\([^)]*\)/', '', $n)), MB_CASE_TITLE, 'UTF-8'))->unique(fn ($n) => mb_strtolower($n))->join(', ') : null),
                 'transported' => (bool) $pcr->transported,
                 'transported_to' => $pcr->transported_to,
                 'received_by' => $pcr->received_by,
@@ -340,7 +329,6 @@ class PatientController extends Controller
             'birthdate' => 'nullable|date',
             'age' => 'nullable|numeric',
             'gender' => 'nullable|string|in:male,female',
-            'street' => 'nullable|string|max:255',
             'address' => 'nullable|string|max:255',
             'contact_number' => 'nullable|string|max:50',
         ]);
@@ -350,7 +338,7 @@ class PatientController extends Controller
             $birthdate = now()->subYears((int) $validated['age'])->format('Y-01-01');
         }
 
-        $address = $validated['street'] ?? $validated['address'] ?? null;
+        $address = $validated['address'] ?? null;
 
         $patient->update([
             'patient_first_name' => trim($validated['first_name']),
@@ -358,7 +346,7 @@ class PatientController extends Controller
             'patient_last_name' => trim($validated['last_name']),
             'patient_birthdate' => $birthdate,
             'patient_gender' => $validated['gender'] ?? null,
-            'street' => $address,
+            'home_address' => $address,
             'is_unidentified' => false,
             'identified_at' => now(),
             'identified_by_role' => 'dispatcher',

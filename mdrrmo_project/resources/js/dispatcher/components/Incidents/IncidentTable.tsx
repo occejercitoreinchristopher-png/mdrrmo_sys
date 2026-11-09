@@ -82,11 +82,11 @@ export default function IncidentTable({
     // Available Incident Types
     const availableIncidentTypes = useMemo(() => {
         if (incidentTypes && incidentTypes.length > 0) {
-            return incidentTypes.map(t => t.name).sort();
+            return incidentTypes.map((t: any) => t.incident_type_name || t.name).filter(Boolean).sort();
         }
         const set = new Set<string>();
         archiveDataset.forEach((inc) => {
-            const name = inc.incident_type?.name;
+            const name = inc.incident_type?.incident_type_name || inc.incident_type?.name;
             if (name && name.trim()) set.add(name.trim());
         });
         return Array.from(set).sort();
@@ -107,7 +107,7 @@ export default function IncidentTable({
     const complaintCounts = useMemo(() => {
         const counts: Record<string, number> = {};
         archiveDataset.forEach((inc) => {
-            const name = inc.incident_type?.name;
+            const name = inc.incident_type?.incident_type_name || inc.incident_type?.name;
             if (name) {
                 counts[name] = (counts[name] || 0) + 1;
             }
@@ -133,7 +133,7 @@ export default function IncidentTable({
 
             // 2. Incident Type Filter (OR logic among selected types)
             if (selectedComplaints.length > 0) {
-                const incType = inc.incident_type?.name;
+                const incType = inc.incident_type?.incident_type_name || inc.incident_type?.name;
                 const matches = selectedComplaints.some((c) => {
                     const normC = c.toLowerCase().trim();
                     return incType && incType.toLowerCase().trim() === normC;
@@ -158,6 +158,7 @@ export default function IncidentTable({
             // 4. Keyword Search Query
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
+                const typeName = inc.incident_type?.incident_type_name || inc.incident_type?.name;
                 const matchQ =
                     String(inc.id).includes(q) ||
                     (inc.place_of_incident && inc.place_of_incident.toLowerCase().includes(q)) ||
@@ -165,7 +166,7 @@ export default function IncidentTable({
                     ((typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location) && (typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location).toLowerCase().includes(q)) ||
                     ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) && (typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay).toLowerCase().includes(q)) ||
                     (inc.description && inc.description.toLowerCase().includes(q)) ||
-                    (inc.incident_type?.name && inc.incident_type.name.toLowerCase().includes(q)) ||
+                    (typeName && typeName.toLowerCase().includes(q)) ||
                     (inc.caller_phone_number && inc.caller_phone_number.toLowerCase().includes(q));
                 if (!matchQ) return false;
             }

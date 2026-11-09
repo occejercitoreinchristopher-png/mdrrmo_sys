@@ -164,7 +164,7 @@ export default function PatientTable({ patients = [], pagination = null }: Patie
             key: 'address',
             header: 'Address',
             render: (v, row) => {
-                const addr = v || [row.house_no, row.street, row.barangay].filter(Boolean).join(', ');
+                const addr = v || (row.barangay ? `Barangay ${row.barangay}` : '');
                 return (
                     <span className="text-xs text-slate-600 dark:text-slate-300 max-w-[200px] truncate block capitalize" title={addr || ''}>
                         {addr ? toPascalCase(addr) : '—'}

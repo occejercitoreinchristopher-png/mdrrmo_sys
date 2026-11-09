@@ -122,7 +122,7 @@ export function printPatientCareRecord(record: any): void {
         || '';
 
     const patientAddress = patient.address
-        || [patient.house_no, patient.street, patient.barangay || patient.barangay?.barangay_name].filter(Boolean).join(', ')
+        || (patient.barangay?.barangay_name ? `Barangay ${patient.barangay.barangay_name}, Opol` : (typeof patient.barangay === 'string' ? `Barangay ${patient.barangay}, Opol` : ''))
         || '';
 
     const incidentPlace = record.place_of_incident
@@ -166,14 +166,46 @@ export function printPatientCareRecord(record: any): void {
     const hasDispo = (kw: string) => allDispos.some(d => d.includes(kw.toLowerCase()));
     const isTransported = record.transported || hasDispo('transport');
 
-    // Responders text
-    const respondersList = [
+    // Responders text - clean names, strip roles/positions, deduplicate
+    const cleanResponderName = (raw: string): string => {
+        const stripped = raw
+            .replace(/\s*\([^)]*\)/gi, '')
+            .replace(/\s*-\s*(driver|emt|team\s*leader|crew|responder|leader|paramedic)/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (!stripped) return '';
+        return stripped
+            .toLowerCase()
+            .split(' ')
+            .filter(Boolean)
+            .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+    };
+
+    const respondersRawList = [
         dispatch.team_leader?.name,
         dispatch.driver?.name,
         dispatch.emt?.name,
         record.responders
     ].filter(Boolean);
-    const respondersText = respondersList.length > 0 ? Array.from(new Set(respondersList)).join(', ') : '';
+
+    const uniqueResponders: string[] = [];
+    const seenResponders = new Set<string>();
+
+    respondersRawList.forEach(item => {
+        String(item)
+            .split(',')
+            .map(s => cleanResponderName(s))
+            .filter(Boolean)
+            .forEach(name => {
+                const norm = name.toLowerCase();
+                if (!seenResponders.has(norm)) {
+                    seenResponders.add(norm);
+                    uniqueResponders.push(name);
+                }
+            });
+    });
+    const respondersText = uniqueResponders.join(', ');
 
     const gcsEye = Number(gcs.eye) || null;
     const gcsVerbal = Number(gcs.verbal) || null;

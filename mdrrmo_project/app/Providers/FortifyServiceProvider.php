@@ -91,6 +91,12 @@ class FortifyServiceProvider extends ServiceProvider
                     ]);
                 }
 
+                if ($user->status !== 'active') {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'email' => 'Your account has been deactivated or suspended. Please contact MDRRMO administration.',
+                    ]);
+                }
+
                 return $user;
             }
 

@@ -31,6 +31,9 @@ class ProfileController extends Controller
             $profile->load('barangay');
         }
 
+        $user->syncVerificationStatus();
+        $completeness = $user->checkProfileCompleteness();
+
         $barangays = Barangay::orderBy('barangay_name')->get(['id', 'barangay_name']);
 
         return response()->json([
@@ -42,10 +45,14 @@ class ProfileController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'phone_number' => $user->phone_number,
+                'address' => $user->address,
                 'birthdate' => $user->birthdate ? Carbon::parse($user->birthdate)->format('Y-m-d') : null,
                 'age' => $user->age,
                 'gender' => $user->gender,
                 'role' => $user->role,
+                'verification_status' => $user->verification_status ?? 'Pending',
+                'is_verified' => $user->isVerifiedResident(),
+                'missing_fields' => $completeness['missing_fields'],
                 'profile_photo_url' => $user->profile_photo_url,
             ],
             'resident_profile' => $profile,
@@ -64,16 +71,17 @@ class ProfileController extends Controller
             'last_name' => 'required|string|max:255',
             'birthdate' => 'nullable|date|before:today',
             'phone_number' => 'nullable|string|max:25',
-            'gender' => 'nullable|string|in:male,female,other',
+            'gender' => 'nullable|string|in:male,female,other,Male,Female,Other',
             'barangay_id' => 'nullable|exists:barangays,id',
-            'house_no' => 'nullable|string|max:255',
-            'street' => 'nullable|string|max:255',
+            'address' => 'nullable|string|max:255',
         ]);
 
         $user = Auth::user();
 
         $birthdate = $validated['birthdate'] ?? null;
         $age = $birthdate ? Carbon::parse($birthdate)->age : $user->age;
+        $gender = ! empty($validated['gender']) ? ucfirst(strtolower($validated['gender'])) : null;
+        $homeAddress = array_key_exists('address', $validated) ? trim($validated['address'] ?? '') : null;
 
         $user->update([
             'first_name' => $validated['first_name'],
@@ -81,8 +89,9 @@ class ProfileController extends Controller
             'last_name' => $validated['last_name'],
             'birthdate' => $birthdate,
             'age' => $age,
-            'gender' => $validated['gender'] ?? null,
+            'gender' => $gender,
             'phone_number' => $validated['phone_number'] ?? null,
+            'address' => ! empty($homeAddress) ? $homeAddress : ($user->address ?? null),
         ]);
 
         $profile = $user->residentProfile;
@@ -91,17 +100,37 @@ class ProfileController extends Controller
         }
 
         $profile->barangay_id = $validated['barangay_id'] ?? null;
-        $profile->house_no = $validated['house_no'] ?? null;
-        $profile->street = $validated['street'] ?? null;
         $profile->save();
-
         $profile->load('barangay');
+
+        if (empty($user->address) && $profile->barangay) {
+            $user->address = "Barangay {$profile->barangay->barangay_name}, Opol, Misamis Oriental";
+            $user->save();
+        }
+
+        // Automatically update verification status based on completeness
+        $user->syncVerificationStatus();
+        $completeness = $user->checkProfileCompleteness();
+        $isVerified = $user->isVerifiedResident();
+
+        $message = $isVerified
+            ? 'Personal details updated. Your profile is complete and verified!'
+            : 'Personal details updated successfully.';
 
         return response()->json([
             'success' => true,
-            'message' => 'Personal information updated successfully.',
-            'user' => $user->fresh(),
+            'message' => $message,
+            'user' => array_merge($user->fresh()->toArray(), [
+                'verification_status' => $user->verification_status,
+                'is_verified' => $isVerified,
+                'missing_fields' => $completeness['missing_fields'],
+            ]),
             'resident_profile' => $profile,
+            'verification' => [
+                'verification_status' => $user->verification_status,
+                'is_verified' => $isVerified,
+                'missing_fields' => $completeness['missing_fields'],
+            ],
         ]);
     }
 

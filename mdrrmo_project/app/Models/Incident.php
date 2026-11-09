@@ -117,15 +117,18 @@ class Incident extends Model
 
     public function getBarangayAttribute(): ?string
     {
-        if ($this->resident?->residentProfile?->barangay?->barangay_name) {
-            return $this->resident->residentProfile->barangay->barangay_name;
-        }
-
+        // 1. Resolve directly from actual incident coordinates (Point-in-Polygon)
         $fromCoords = self::resolveBarangayFromCoordinates($this->incident_latitude, $this->incident_longitude);
         if ($fromCoords) {
             return $fromCoords;
         }
 
+        // 2. Resolve from registered official location code marker
+        if ($this->locationCode?->barangay?->barangay_name) {
+            return $this->locationCode->barangay->barangay_name;
+        }
+
+        // 3. Resolve from textual address of incident scene
         $fullText = $this->incident_address ?? '';
         if (!empty($fullText)) {
             foreach (self::OPOL_BARANGAYS as $bName) {
@@ -136,6 +139,11 @@ class Incident extends Model
             if (stripos($fullText, 'luyong bonbon') !== false || stripos($fullText, 'luyong-bonbon') !== false) {
                 return 'Luyongbonbon';
             }
+        }
+
+        // 4. Fallback to reporter's registered home barangay only if scene location is unspecified
+        if ($this->resident?->residentProfile?->barangay?->barangay_name) {
+            return $this->resident->residentProfile->barangay->barangay_name;
         }
 
         return null;

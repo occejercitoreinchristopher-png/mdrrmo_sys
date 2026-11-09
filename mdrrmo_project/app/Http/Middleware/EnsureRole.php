@@ -44,8 +44,11 @@ class EnsureRole
             }
         }
 
-        // Allow 'admin' to access any role-restricted route
-        if ($user->role !== 'admin' && ! in_array($user->role, $roles)) {
+        // On web routes, allow 'admin' to access any role-restricted route (e.g. dispatcher tools).
+        // On API routes, strictly enforce the designated role ($roles) to avoid null profile crashes.
+        $isAdminWebAccess = $user->role === 'admin' && ! $request->is('api/*') && ! $request->expectsJson();
+
+        if (! $isAdminWebAccess && ! in_array($user->role, $roles)) {
             abort(403, 'Unauthorized action.');
         }
 

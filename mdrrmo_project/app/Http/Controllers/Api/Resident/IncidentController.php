@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Resident;
 
 use App\Events\IncidentCreated;
+use App\Events\IncidentRejected;
 use App\Events\ResidentCalledHotline;
 use App\Events\ResidentCalledResponder;
 use App\Http\Controllers\Controller;
@@ -14,7 +15,20 @@ class IncidentController extends Controller
 {
     public function index()
     {
-        $incidents = Incident::where('resident_id', Auth::id())
+        $user = Auth::user();
+        $isSuspended = $user->isReportingSuspended();
+        $prankCount = Incident::where('resident_id', $user->id)
+            ->where(function ($q) {
+                $q->where('is_prank', true)
+                  ->orWhere('rejection_category', 'prank');
+            })
+            ->count();
+
+        $totalRejected = Incident::where('resident_id', $user->id)
+            ->where('incident_status', 'rejected')
+            ->count();
+
+        $incidents = Incident::where('resident_id', $user->id)
             ->with([
                 'incidentType',
                 'images',
@@ -29,11 +43,50 @@ class IncidentController extends Controller
                 return $incident;
             });
 
-        return response()->json(['data' => $incidents]);
+        $user->syncVerificationStatus();
+        $completeness = $user->checkProfileCompleteness();
+        $isVerified = $user->isVerifiedResident();
+
+        return response()->json([
+            'data' => $incidents,
+            'suspension' => [
+                'is_suspended' => $isSuspended,
+                'suspended_until' => $isSuspended && $user->reporting_suspended_until ? $user->reporting_suspended_until->toIso8601String() : null,
+                'prank_count' => $prankCount,
+                'total_rejected_count' => $totalRejected,
+            ],
+            'verification' => [
+                'verification_status' => $user->verification_status,
+                'is_verified' => $isVerified,
+                'missing_fields' => $completeness['missing_fields'],
+            ],
+        ]);
     }
 
     public function store(Request $request)
     {
+        $user = Auth::user();
+        if ($user->isReportingSuspended()) {
+            return response()->json([
+                'message' => 'Your reporting privileges are temporarily suspended until ' . $user->reporting_suspended_until->format('M d, Y h:i A') . ' due to multiple rejected reports.',
+                'suspended_until' => $user->reporting_suspended_until->toIso8601String(),
+            ], 403);
+        }
+
+        // Automatic Resident Profile Verification Check
+        if ($user->role === 'resident') {
+            $user->syncVerificationStatus();
+            if (! $user->isVerifiedResident()) {
+                $completeness = $user->checkProfileCompleteness();
+                return response()->json([
+                    'message' => 'Complete your personal information to unlock the accident reporting feature.',
+                    'verification_status' => $user->verification_status,
+                    'is_verified' => false,
+                    'missing_fields' => $completeness['missing_fields'],
+                ], 403);
+            }
+        }
+
         $validated = $request->validate([
             'incident_type_id' => 'required|exists:incident_types,id',
             'latitude' => 'required|numeric',
@@ -183,6 +236,43 @@ class IncidentController extends Controller
                 'latitude' => $validated['latitude'],
                 'longitude' => $validated['longitude'],
             ],
+        ]);
+    }
+
+    public function cancel(Request $request, Incident $incident)
+    {
+        $user = Auth::user();
+
+        if ($incident->resident_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorized action.'], 403);
+        }
+
+        if ($incident->incident_status !== 'pending') {
+            return response()->json([
+                'message' => 'Only pending emergency reports can be cancelled directly. If responders have already been dispatched, please contact the MDRRMO hotline immediately.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'reason' => 'nullable|string|max:255',
+        ]);
+
+        $reason = $validated['reason'] ?? 'Cancelled by reporting citizen';
+
+        $incident->update([
+            'incident_status' => 'cancelled',
+            'notes' => trim(($incident->notes ?? '') . " [Report cancelled by resident: {$reason}]"),
+        ]);
+
+        try {
+            event(new IncidentRejected($incident));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Broadcast error on resident incident cancellation: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Emergency report cancelled successfully.',
+            'data' => $incident->fresh(['incidentType', 'images']),
         ]);
     }
 }

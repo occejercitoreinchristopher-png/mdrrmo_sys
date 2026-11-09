@@ -38,8 +38,6 @@ interface PatientDetailsProps {
         gender?: string | null;
         contact_number?: string | null;
         barangay?: string | null;
-        house_no?: string | null;
-        street?: string | null;
         address?: string | null;
         care_records_count?: number;
         is_unidentified?: boolean;
@@ -327,8 +325,6 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                                                     {patient.address ? toPascalCase(patient.address) : 'Address details not fully specified'}
                                                 </p>
                                                 <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 space-y-0.5">
-                                                    {patient.house_no && <p>House No: <span className="font-medium text-slate-800 dark:text-slate-300">{patient.house_no}</span></p>}
-                                                    {patient.street && <p>Street: <span className="font-medium text-slate-800 dark:text-slate-300">{toPascalCase(patient.street)}</span></p>}
                                                     {formattedBarangay && <p>Barangay: <span className="font-medium text-slate-800 dark:text-slate-300">{formattedBarangay}</span></p>}
                                                     <p className="text-slate-500 dark:text-slate-500">Opol, Misamis Oriental</p>
                                                 </div>

@@ -18,7 +18,8 @@ import {
     UserCheck, 
     ChevronRight,
     ArrowRightLeft,
-    Siren
+    Siren,
+    Smartphone,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/avatar';
 import { toPascalCase } from '@/shared/utils/utils';
@@ -62,52 +63,72 @@ export default function ResponderManagement({ users = [], pagination = null }: R
 
     const getStatusBadge = (user: any) => {
         const status = user.current_status || user.responder_profile?.availability || 'offline';
+        const isLoggedIn = Boolean(user.is_logged_in);
 
+        let badge;
         if (status === 'assigned') {
-            return (
+            badge = (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 border border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/30">
                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
                     🚑 Assigned
                 </span>
             );
+        } else {
+            switch (status) {
+                case 'available':
+                    badge = (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            🟢 Available
+                        </span>
+                    );
+                    break;
+                case 'off_duty':
+                    badge = (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            🟡 Off Duty
+                        </span>
+                    );
+                    break;
+                case 'on_leave':
+                    badge = (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                            🟠 On Leave
+                        </span>
+                    );
+                    break;
+                case 'sick':
+                    badge = (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:border-rose-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            🔴 Sick
+                        </span>
+                    );
+                    break;
+                default:
+                    badge = (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-500/15 dark:text-slate-400 dark:border-slate-500/30 capitalize">
+                            ⚪ {status.replace('_', ' ')}
+                        </span>
+                    );
+            }
         }
 
-        switch (status) {
-            case 'available':
-                return (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        🟢 Available
-                    </span>
-                );
-            case 'off_duty':
-                return (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                        🟡 Off Duty
-                    </span>
-                );
-            case 'on_leave':
-                return (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-500/30">
-                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                        🟠 On Leave
-                    </span>
-                );
-            case 'sick':
-                return (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:border-rose-500/30">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                        🔴 Sick
-                    </span>
-                );
-            default:
-                return (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-500/15 dark:text-slate-400 dark:border-slate-500/30 capitalize">
-                        ⚪ {status.replace('_', ' ')}
-                    </span>
-                );
-        }
+        return (
+            <div className="flex flex-col gap-1 items-start">
+                {badge}
+                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                    isLoggedIn
+                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25'
+                        : 'bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10'
+                }`}>
+                    <Smartphone className="w-2.5 h-2.5 shrink-0" />
+                    {isLoggedIn ? 'App Logged In' : 'App Logged Out'}
+                </span>
+            </div>
+        );
     };
 
     const handleUpdateStatus = (user: any, newAvailability: string) => {

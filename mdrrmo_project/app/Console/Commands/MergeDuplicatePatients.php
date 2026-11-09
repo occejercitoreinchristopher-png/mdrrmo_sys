@@ -28,7 +28,7 @@ class MergeDuplicatePatients extends Command
 
             $this->info("Merging duplicates for: {$key} ({$records->count()} records)");
 
-            // Sort: prioritize records with most filled attributes (birthdate, street, etc.)
+            // Sort: prioritize records with most filled attributes (birthdate, home_address, etc.)
             $sorted = $records->sortByDesc(function ($p) {
                 $score = 0;
                 if ($p->registered_user_id) {
@@ -37,7 +37,7 @@ class MergeDuplicatePatients extends Command
                 if ($p->birthdate) {
                     $score += 5;
                 }
-                if ($p->street) {
+                if ($p->home_address) {
                     $score += 4;
                 }
                 if ($p->barangay_id) {
@@ -45,9 +45,6 @@ class MergeDuplicatePatients extends Command
                 }
                 if ($p->gender) {
                     $score += 2;
-                }
-                if ($p->house_no) {
-                    $score += 1;
                 }
 
                 return $score;
@@ -63,17 +60,13 @@ class MergeDuplicatePatients extends Command
                         $master->patient_birthdate = $dup->patient_birthdate;
                         $updates['patient_birthdate'] = $dup->patient_birthdate;
                     }
-                    if (empty($master->street) && ! empty($dup->street)) {
-                        $master->street = $dup->street;
-                        $updates['street'] = $dup->street;
+                    if (empty($master->home_address) && ! empty($dup->home_address)) {
+                        $master->home_address = $dup->home_address;
+                        $updates['home_address'] = $dup->home_address;
                     }
                     if (empty($master->patient_gender) && ! empty($dup->patient_gender)) {
                         $master->patient_gender = $dup->patient_gender;
                         $updates['patient_gender'] = $dup->patient_gender;
-                    }
-                    if (empty($master->house_no) && ! empty($dup->house_no)) {
-                        $master->house_no = $dup->house_no;
-                        $updates['house_no'] = $dup->house_no;
                     }
                     if (empty($master->barangay_id) && ! empty($dup->barangay_id)) {
                         $master->barangay_id = $dup->barangay_id;

@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
-import { Filter, RotateCcw, MapPin, Activity, Check, Search, X, CheckSquare, Square, ChevronDown, ChevronUp, AlertTriangle, Calendar } from 'lucide-react';
+import { router } from '@inertiajs/react';
+import { Filter, RotateCcw, MapPin, Activity, Check, Search, X, CheckSquare, Square, ChevronDown, ChevronUp, AlertTriangle, Calendar, Plus } from 'lucide-react';
+import IncidentTypeModal from '@/admin/components/IncidentTypes/IncidentTypeModal';
 
 export interface ArchiveFilterSidebarProps {
     barangays: string[];
@@ -47,6 +49,30 @@ export default function ArchiveFilterSidebar({
     const [isBarangayOpen, setIsBarangayOpen] = useState(true);
     const [isComplaintOpen, setIsComplaintOpen] = useState(true);
     const [isDateRangeOpen, setIsDateRangeOpen] = useState(true);
+
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isSubmittingType, setIsSubmittingType] = useState(false);
+    const [addTypeErrors, setAddTypeErrors] = useState<Record<string, string>>({});
+
+    const handleAddIncidentType = (form: { incident_type_name: string; type_description: string }) => {
+        setIsSubmittingType(true);
+        setAddTypeErrors({});
+
+        router.post('/incident-types', form, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setIsSubmittingType(false);
+                setIsAddModalOpen(false);
+                if (!selectedComplaints.includes(form.incident_type_name)) {
+                    setSelectedComplaints([...selectedComplaints, form.incident_type_name]);
+                }
+            },
+            onError: (errs) => {
+                setIsSubmittingType(false);
+                setAddTypeErrors(errs as Record<string, string>);
+            },
+        });
+    };
 
     const hasActiveFilters = selectedBarangays.length > 0 || selectedComplaints.length > 0 || searchQuery.trim().length > 0 || !!startDate || !!endDate;
     const totalActiveFiltersCount = selectedBarangays.length + selectedComplaints.length + (searchQuery.trim() ? 1 : 0) + (startDate ? 1 : 0) + (endDate ? 1 : 0);
@@ -324,7 +350,19 @@ export default function ArchiveFilterSidebar({
                                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5" />
                             )}
                         </button>
-                        <div className="flex items-center gap-1 text-[11px]">
+                        <div className="flex items-center gap-1.5 text-[11px]">
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsAddModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 rounded-md border border-indigo-200/80 dark:border-indigo-500/30 transition-colors cursor-pointer shadow-2xs"
+                                title="Add New Emergency Incident Type"
+                            >
+                                <Plus className="w-3 h-3 text-indigo-500 shrink-0" />
+                                <span>Add</span>
+                            </button>
                             {selectedComplaints.length < chiefComplaints.length ? (
                                 <button
                                     onClick={selectAllComplaints}
@@ -410,6 +448,18 @@ export default function ArchiveFilterSidebar({
                 </div>
 
             </div>
+
+            {/* Add Emergency Incident Type Modal */}
+            <IncidentTypeModal
+                open={isAddModalOpen}
+                onClose={() => {
+                    setIsAddModalOpen(false);
+                    setAddTypeErrors({});
+                }}
+                onSubmit={handleAddIncidentType}
+                loading={isSubmittingType}
+                errors={addTypeErrors}
+            />
         </aside>
     );
 }

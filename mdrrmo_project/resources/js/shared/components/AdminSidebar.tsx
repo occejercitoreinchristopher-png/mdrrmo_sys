@@ -13,6 +13,7 @@ import {
     PanelLeftClose,
     PhoneCall,
     Flame,
+    AlertTriangle,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 

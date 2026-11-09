@@ -112,7 +112,7 @@ export default function Profile() {
                 </Form>
             </div>
 
-            <DeleteUser />
+            {auth.user.role !== 'admin' && auth.user.role !== 'dispatcher' && <DeleteUser />}
         </>
     );
 }

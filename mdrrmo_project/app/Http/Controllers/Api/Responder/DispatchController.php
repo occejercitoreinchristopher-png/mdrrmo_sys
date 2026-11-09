@@ -157,6 +157,15 @@ class DispatchController extends Controller
             \Illuminate\Support\Facades\Log::warning('DispatchAccepted broadcast notice: '.$e->getMessage());
         }
 
+        $dispatch->loadMissing([
+            'incident',
+            'incident.incidentType',
+            'ambulance',
+            'driver',
+            'teamLeader',
+            'emt',
+        ]);
+
         return response()->json(['message' => 'Dispatch accepted', 'data' => $dispatch]);
     }
 

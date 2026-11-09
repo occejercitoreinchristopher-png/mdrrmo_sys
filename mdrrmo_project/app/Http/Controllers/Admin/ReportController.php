@@ -47,8 +47,7 @@ class ReportController extends Controller
             $query->where(function ($bq) use ($barangay) {
                 $bq->whereHas('resident.residentProfile.barangay', fn($q) => $q->where('barangay_name', $barangay))
                    ->orWhereHas('locationCode.barangay', fn($q) => $q->where('barangay_name', $barangay))
-                   ->orWhere('incident_address', 'LIKE', "%{$barangay}%")
-                   ->orWhere('place_of_incident', 'LIKE', "%{$barangay}%");
+                   ->orWhere('incident_address', 'LIKE', "%{$barangay}%");
             });
         }
 

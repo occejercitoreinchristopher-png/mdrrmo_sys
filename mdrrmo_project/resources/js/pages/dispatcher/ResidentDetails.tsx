@@ -22,8 +22,6 @@ interface ResidentProfile {
     id: number;
     user_id: number;
     barangay_id: number;
-    house_no?: string | null;
-    street?: string | null;
     birthdate?: string | null;
     gender?: 'male' | 'female' | null;
     barangay?: Barangay | null;
@@ -231,12 +229,10 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
 
     // Full address computation
     const addressParts = [
-        profile?.house_no,
-        profile?.street ? toPascalCase(profile.street) : null,
         profile?.barangay ? `Barangay ${toPascalCase(profile.barangay.barangay_name)}` : null,
         'Opol, Misamis Oriental',
     ].filter(Boolean);
-    const fullAddress = addressParts.length > 1 ? addressParts.join(', ') : 'No full street address provided';
+    const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : 'No address provided';
 
     const formattedRegisteredDate = resident.created_at
         ? new Date(resident.created_at).toLocaleDateString('en-PH', {
