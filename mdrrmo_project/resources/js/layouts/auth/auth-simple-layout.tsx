@@ -35,37 +35,13 @@ export default function AuthSimpleLayout({ children }: AuthLayoutProps) {
                     <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
                         {/* Branding / Home Link */}
                         <Link href="/" className="flex items-center gap-3 group select-none">
-                            {/* Redesigned MDRRMO Emergency Emblem */}
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#10264B] via-[#1B2941] to-[#10264B] border border-white/20 dark:border-white/15 p-2 flex items-center justify-center shadow-lg shadow-black/20 relative overflow-hidden group-hover:scale-105 transition-transform duration-200 flex-shrink-0">
-                                <svg
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    className="w-full h-full drop-shadow-sm"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    aria-label="MDRRMO Emergency Shield Emblem"
-                                >
-                                    {/* Shield Base */}
-                                    <path
-                                        d="M12 2L4 5.2V11.5C4 16.8 7.4 21.3 12 22.2C16.6 21.3 20 16.8 20 11.5V5.2L12 2Z"
-                                        fill="url(#headerShieldGrad)"
-                                        stroke="#FFFFFF"
-                                        strokeWidth="1.2"
-                                        strokeLinejoin="round"
-                                    />
-                                    {/* Medical / Rescue Emergency Cross */}
-                                    <path
-                                        d="M12 7.5V16.5M7.5 12H16.5"
-                                        stroke="#FFFFFF"
-                                        strokeWidth="2.2"
-                                        strokeLinecap="round"
-                                    />
-                                    <defs>
-                                        <linearGradient id="headerShieldGrad" x1="4" y1="2" x2="20" y2="22.2" gradientUnits="userSpaceOnUse">
-                                            <stop stopColor="#E63946" />
-                                            <stop offset="1" stopColor="#FF6B35" />
-                                        </linearGradient>
-                                    </defs>
-                                </svg>
+                            {/* Official Opol Rescue Shield Logo */}
+                            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-white/10 dark:bg-white/5 border border-slate-300/60 dark:border-white/15 p-1.5 flex items-center justify-center shadow-md shadow-black/10 backdrop-blur-sm relative overflow-hidden group-hover:scale-105 transition-transform duration-200 flex-shrink-0">
+                                <img
+                                    src="/images/opol_rescue.png"
+                                    alt="MDRRMO Opol Rescue Logo"
+                                    className="w-full h-full object-contain drop-shadow-sm"
+                                />
                             </div>
 
                             <div>
