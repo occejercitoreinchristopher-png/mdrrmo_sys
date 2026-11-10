@@ -39,14 +39,14 @@ createInertiaApp({
         switch (true) {
             case name === 'welcome':
                 return null;
+            case name === 'auth/login':
+                return null;
             case name === 'profile':
                 return null; // Dynamically wraps with AdminLayout or DispatcherLayout
             case name.startsWith('admin/'):
                 return null; // Admin pages use AdminLayout explicitly
             case name.startsWith('dispatcher/'):
                 return null; // Dispatcher pages use DispatcherLayout explicitly
-            case name === 'auth/login':
-                return null; // Standalone split-screen login page
             case name.startsWith('auth/'):
                 return AuthLayout;
             case name.startsWith('settings/'):

@@ -5,16 +5,11 @@ import {
     Lock,
     Eye,
     EyeOff,
-    Shield,
     AlertCircle,
     CheckCircle2,
     Smartphone,
-    Activity,
-    Radio,
-    Clock,
     Loader2,
-    ArrowUpRight,
-    HeartPulse,
+    Shield,
 } from 'lucide-react';
 import { ThemeProvider } from '@/shared/contexts/ThemeContext';
 import ThemeToggle from '@/shared/components/ThemeToggle';
@@ -25,7 +20,7 @@ interface LoginProps {
     canResetPassword?: boolean;
 }
 
-export default function Login({ status, canResetPassword = true }: LoginProps) {
+function LoginForm({ status, canResetPassword = true }: LoginProps) {
     const [showPassword, setShowPassword] = useState(false);
 
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -42,150 +37,125 @@ export default function Login({ status, canResetPassword = true }: LoginProps) {
     };
 
     return (
-        <ThemeProvider>
-            <Head title="Sign In - MDRRMO Opol EMS" />
+        <div className="relative min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 bg-[#F4F6FA] dark:bg-[#070D1B] transition-colors duration-300 overflow-x-hidden selection:bg-[#FF6B35] selection:text-white">
+            {/* Ambient Background Lighting */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+                <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#2455C5]/10 dark:bg-[#2455C5]/15 rounded-full blur-3xl" />
+                <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-[#FF6B35]/8 dark:bg-[#FF6B35]/10 rounded-full blur-3xl" />
+                <div
+                    className="absolute inset-0 opacity-[0.035] dark:opacity-[0.04]"
+                    style={{
+                        backgroundImage: 'radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)',
+                        backgroundSize: '24px 24px',
+                    }}
+                />
+            </div>
 
-            <div className="min-h-screen w-full flex flex-col lg:grid lg:grid-cols-2 relative overflow-x-hidden font-sans bg-white dark:bg-[#0B132B] transition-colors duration-300">
-                {/* Minimal Theme Toggle in Upper-Right Corner */}
-                <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-30 flex items-center gap-2">
-                    <ThemeToggle className="bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-md border border-slate-200/80 dark:border-white/10" />
+            {/* Top Right Theme Toggle */}
+            <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-30 flex items-center gap-2 animate-fade-in">
+                <ThemeToggle className="shadow-md shadow-black/5 dark:shadow-black/40" />
+            </div>
+
+            {/* Main Split-Screen Container */}
+            <div className="relative z-10 w-full max-w-[960px] lg:h-[600px] bg-white dark:bg-[#0D1B2A] rounded-[18px] shadow-2xl shadow-slate-900/15 dark:shadow-black/60 border border-slate-200/80 dark:border-white/10 flex flex-col lg:flex-row overflow-hidden transition-all duration-300 animate-container">
+                {/* ========================================================= */}
+                {/* LEFT PANEL – HELICOPTER RESCUE BACKGROUND (40% width)     */}
+                {/* ========================================================= */}
+                <div className="relative w-full lg:w-[40%] min-h-[220px] sm:min-h-[260px] lg:min-h-full overflow-hidden flex flex-col justify-between p-6 sm:p-7 select-none animate-slide-left">
+                    {/* Background Image */}
+                    <div
+                        className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-700 ease-out hover:scale-105"
+                        style={{
+                            backgroundImage: "url('/images/rescue-helicopter.jpg')",
+                        }}
+                    />
+
+                    {/* Dark Navy Gradient Overlay: darker at bottom for text, keeps helicopter & responders bright */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#10264B]/95 via-[#10264B]/55 to-[#10264B]/40" />
+
+                    {/* Subtle top edge vignette */}
+                    <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[#10264B]/50 to-transparent pointer-events-none" />
+
+                    {/* Top Branding Content */}
+                    <div className="relative z-10 flex items-center gap-3">
+                        <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white/10 backdrop-blur-md p-1.5 border border-white/20 shadow-lg shadow-black/20 flex items-center justify-center flex-shrink-0">
+                            <img
+                                src="/images/opol-logo.png"
+                                alt="MDRRMO Opol Municipal Logo"
+                                className="w-full h-full object-contain drop-shadow-md"
+                            />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-1.5">
+                                <span className="font-extrabold text-base sm:text-lg tracking-wider text-white drop-shadow-sm">
+                                    MDRRMO OPOL
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#FF6B35] text-white shadow-sm">
+                                    EMS
+                                </span>
+                            </div>
+                            <p className="text-[10px] sm:text-[11px] text-white/80 font-medium tracking-wide">
+                                Municipality of Opol
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Center area kept completely clear to showcase helicopter and rescue responders */}
+                    <div className="flex-1 pointer-events-none" />
+
+                    {/* Bottom Branding Content */}
+                    <div className="relative z-10 pt-4 lg:pt-0">
+                        {/* Subtle Orange Accent Line */}
+                        <div className="w-12 h-1 bg-[#FF6B35] rounded-full mb-2.5 shadow-sm shadow-[#FF6B35]/50" />
+
+                        <h2 className="text-xs sm:text-sm font-bold text-white tracking-wider uppercase leading-snug drop-shadow-sm">
+                            EMERGENCY MEDICAL SERVICES MANAGEMENT SYSTEM
+                        </h2>
+                        <p className="text-[11px] text-slate-200/90 font-medium leading-relaxed mt-1 drop-shadow-sm">
+                            Preparedness, Protection, and Response for the Opol Community.
+                        </p>
+                    </div>
                 </div>
 
                 {/* ========================================================= */}
-                {/* LEFT PANEL – Branding and System Identity                 */}
+                {/* RIGHT PANEL – LOGIN FORM (60% width)                      */}
                 {/* ========================================================= */}
-                <section className="relative flex flex-col justify-between p-6 sm:p-10 lg:p-14 xl:p-16 bg-white dark:bg-[#0A1124] text-slate-900 dark:text-white border-b lg:border-b-0 lg:border-r border-slate-200/80 dark:border-white/5 overflow-hidden">
-                    {/* Subtle Topographic / Geographic Background Vector Pattern */}
-                    <div className="absolute inset-0 pointer-events-none opacity-[0.035] dark:opacity-[0.05] -z-0">
-                        <svg className="w-full h-full object-cover" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
-                            <defs>
-                                <pattern id="topo-grid" width="48" height="48" patternUnits="userSpaceOnUse">
-                                    <path d="M 48 0 L 0 0 0 48" fill="none" stroke="currentColor" strokeWidth="1" />
-                                    <circle cx="24" cy="24" r="1.5" fill="currentColor" />
-                                </pattern>
-                            </defs>
-                            <rect width="100%" height="100%" fill="url(#topo-grid)" />
-                        </svg>
-                    </div>
+                <div className="relative w-full lg:w-[60%] flex flex-col justify-center items-center p-6 sm:p-8 lg:p-10 bg-gradient-to-br from-[#10264B] via-[#2455C5] to-[#3568DC] text-white animate-slide-right">
+                    {/* Subtle geometric pattern overlay */}
+                    <div
+                        className="absolute inset-0 opacity-[0.035] pointer-events-none"
+                        style={{
+                            backgroundImage: 'radial-gradient(circle at 1px 1px, #FFFFFF 1px, transparent 0)',
+                            backgroundSize: '20px 20px',
+                        }}
+                    />
 
-                    {/* Subtle Emergency Watermark Glow */}
-                    <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-blue-500/5 dark:bg-blue-600/10 blur-3xl pointer-events-none" />
-                    <div className="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-[#FF6B35]/5 dark:bg-[#FF6B35]/5 blur-3xl pointer-events-none" />
-
-                    {/* Top Branding Header Pill */}
-                    <div className="relative z-10 flex items-center justify-between">
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200/70 dark:border-blue-800/50 text-[#2455C5] dark:text-blue-300 text-xs font-semibold tracking-wide shadow-sm">
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                            </span>
-                            <span className="text-[11px] font-bold uppercase tracking-wider">Official Municipal Operations Portal</span>
-                        </div>
-                    </div>
-
-                    {/* Main Centered Identity Section */}
-                    <div className="relative z-10 my-auto py-8 sm:py-12 flex flex-col items-center text-center max-w-lg mx-auto">
-                        {/* Prominent Municipal Logo */}
-                        <div className="relative mb-6 group">
-                            {/* Ambient Seal Glow Ring */}
-                            <div className="absolute -inset-2.5 rounded-full bg-gradient-to-tr from-[#2455C5]/20 via-sky-400/20 to-[#FF6B35]/20 blur-md opacity-75 group-hover:opacity-100 transition-opacity duration-300" />
-                            
-                            <div className="relative flex items-center justify-center gap-3">
-                                <div className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-2xl p-1 bg-white dark:bg-slate-900 shadow-xl border border-slate-200/80 dark:border-white/10 flex items-center justify-center transition-transform duration-300 hover:scale-105">
-                                    <img
-                                        src="/images/opol-logo.png"
-                                        alt="Municipality of Opol Official Seal"
-                                        className="w-full h-full object-contain drop-shadow"
-                                    />
-                                </div>
-                                <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl p-1 bg-white dark:bg-slate-900 shadow-lg border border-slate-200/80 dark:border-white/10 flex items-center justify-center transition-transform duration-300 hover:scale-105">
-                                    <img
-                                        src="/images/drrm_logo.png"
-                                        alt="MDRRMO Opol DRRM Seal"
-                                        className="w-full h-full object-contain drop-shadow"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Official Titles */}
-                        <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-[#10264B] dark:text-white tracking-tight">
-                            MDRRMO OPOL
-                        </h1>
-                        <p className="mt-2 text-xs sm:text-sm font-bold uppercase tracking-[0.18em] text-[#2455C5] dark:text-sky-400">
-                            EMERGENCY MEDICAL SERVICES MANAGEMENT SYSTEM
-                        </p>
-
-                        {/* Subtle Divider */}
-                        <div className="w-16 h-1 rounded-full bg-gradient-to-r from-[#2455C5] via-[#3568DC] to-[#FF6B35] my-4" />
-
-                        {/* Short Description */}
-                        <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base leading-relaxed max-w-md font-normal">
-                            Preparedness, Protection, and Response for the Opol Community.
-                        </p>
-
-                        {/* Key Pillars / Micro-indicators */}
-                        <div className="mt-8 grid grid-cols-3 gap-2.5 sm:gap-3 w-full max-w-md">
-                            <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200/70 dark:border-white/5 flex flex-col items-center text-center">
-                                <Radio className="w-4 h-4 text-[#2455C5] dark:text-sky-400 mb-1" />
-                                <span className="text-[10px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200">24/7 Hotline</span>
-                                <span className="text-[9px] text-slate-400 dark:text-slate-500">Triage & Dispatch</span>
-                            </div>
-                            <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200/70 dark:border-white/5 flex flex-col items-center text-center">
-                                <Activity className="w-4 h-4 text-[#E63946] mb-1" />
-                                <span className="text-[10px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200">Live Telemetry</span>
-                                <span className="text-[9px] text-slate-400 dark:text-slate-500">GPS Fleet Tracking</span>
-                            </div>
-                            <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200/70 dark:border-white/5 flex flex-col items-center text-center">
-                                <HeartPulse className="w-4 h-4 text-emerald-500 mb-1" />
-                                <span className="text-[10px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200">Digital PCR</span>
-                                <span className="text-[9px] text-slate-400 dark:text-slate-500">Pre-Hospital Care</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Left Panel Footer */}
-                    <div className="relative z-10 pt-4 border-t border-slate-200/60 dark:border-white/5 text-center lg:text-left flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400 dark:text-slate-500">
-                        <span>Municipal Disaster Risk Reduction & Management Office</span>
-                        <span>Municipality of Opol, Misamis Oriental</span>
-                    </div>
-                </section>
-
-                {/* ========================================================= */}
-                {/* RIGHT PANEL – Login Form with Professional Blue Gradient  */}
-                {/* ========================================================= */}
-                <section className="relative flex flex-col justify-center items-center p-6 sm:p-10 md:p-12 lg:p-14 xl:p-16 bg-gradient-to-br from-[#10264B] via-[#163870] to-[#2455C5] text-white min-h-[550px] lg:min-h-screen overflow-hidden">
-                    {/* Atmospheric Lighting Accents */}
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-sky-400/10 rounded-full blur-3xl pointer-events-none" />
-                    <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#2455C5]/30 rounded-full blur-3xl pointer-events-none" />
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/5 via-transparent to-black/20 pointer-events-none" />
-
-                    <div className="relative z-10 w-full max-w-md my-auto">
-                        {/* Title & Subtitle */}
-                        <div className="mb-8 text-left">
-                            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    <div className="relative z-10 w-full max-w-[400px] mx-auto flex flex-col justify-center">
+                        {/* Login Heading */}
+                        <div className="mb-5 sm:mb-6 animate-fade-in">
+                            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white drop-shadow-sm">
                                 Welcome Back
-                            </h2>
-                            <p className="mt-2 text-xs sm:text-sm text-blue-100/90 leading-relaxed font-normal">
+                            </h1>
+                            <p className="mt-1 text-xs sm:text-sm text-white/80 leading-relaxed font-normal">
                                 Sign in to access the MDRRMO Emergency Medical Services Management System.
                             </p>
                         </div>
 
-                        {/* Status Alert Banner */}
+                        {/* Status Banner (e.g. Password Reset Confirmation) */}
                         {status && (
-                            <div className="mb-5 p-3.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-100 text-xs flex items-center gap-2.5 backdrop-blur-sm animate-fade-in">
+                            <div className="mb-4 p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-100 text-xs flex items-center gap-2 backdrop-blur-sm animate-fade-in">
                                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-300" />
-                                <span>{status}</span>
+                                <span className="font-medium">{status}</span>
                             </div>
                         )}
 
-                        {/* Generic Error Alert Banner */}
+                        {/* Error Banner */}
                         {(errors.email || errors.password) && (
-                            <div className="mb-5 p-3.5 rounded-xl bg-[#E63946]/20 border border-[#E63946]/40 text-rose-100 text-xs flex items-start gap-2.5 backdrop-blur-sm animate-shake">
-                                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-300" />
+                            <div className="mb-4 p-2.5 rounded-xl bg-[#E63946]/25 border border-[#E63946]/50 text-white text-xs flex items-start gap-2 backdrop-blur-sm animate-fade-in">
+                                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-[#FF6B35]" />
                                 <div>
                                     <p className="font-semibold text-white">Authentication Failed</p>
-                                    <p className="text-[11px] mt-0.5 text-rose-100/90 leading-snug">
+                                    <p className="text-[11px] text-white/90 mt-0.5">
                                         {errors.email || errors.password}
                                     </p>
                                 </div>
@@ -193,17 +163,17 @@ export default function Login({ status, canResetPassword = true }: LoginProps) {
                         )}
 
                         {/* Form */}
-                        <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-                            {/* Username or Email */}
-                            <div className="space-y-1.5 text-left">
+                        <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4">
+                            {/* Username or Email Field */}
+                            <div className="space-y-1.5">
                                 <label
                                     htmlFor="email"
-                                    className="block text-xs font-semibold uppercase tracking-wider text-blue-100"
+                                    className="block text-xs font-semibold text-white/90 tracking-wide"
                                 >
-                                    Username or Email <span className="text-[#FF6B35]">*</span>
+                                    Username or Email
                                 </label>
                                 <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-blue-200/80">
+                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-white/50">
                                         <Mail className="w-4 h-4" />
                                     </div>
                                     <input
@@ -216,31 +186,31 @@ export default function Login({ status, canResetPassword = true }: LoginProps) {
                                         autoComplete="username"
                                         autoFocus
                                         required
-                                        className={`w-full bg-white/10 hover:bg-white/15 focus:bg-white/20 border rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder:text-blue-200/50 transition-all duration-200 outline-none backdrop-blur-sm shadow-inner focus:ring-2 focus:ring-white/40 focus:border-white ${
+                                        className={`w-full bg-white/10 hover:bg-white/[0.13] focus:bg-white/[0.18] border rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-white/45 transition-all duration-200 outline-none backdrop-blur-sm shadow-inner ${
                                             errors.email
-                                                ? 'border-[#E63946] focus:ring-[#E63946]/50'
-                                                : 'border-white/20'
+                                                ? 'border-[#E63946] focus:ring-2 focus:ring-[#E63946]/50'
+                                                : 'border-white/20 focus:border-[#FF6B35] focus:ring-2 focus:ring-[#FF6B35]/40'
                                         }`}
                                     />
                                 </div>
                                 {errors.email && (
-                                    <p className="text-xs text-rose-300 flex items-center gap-1.5 mt-1">
-                                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                    <p className="text-[11px] text-[#FF6B35] flex items-center gap-1 mt-1 font-medium">
+                                        <AlertCircle className="w-3 h-3 flex-shrink-0" />
                                         <span>{errors.email}</span>
                                     </p>
                                 )}
                             </div>
 
-                            {/* Password */}
-                            <div className="space-y-1.5 text-left">
+                            {/* Password Field */}
+                            <div className="space-y-1.5">
                                 <label
                                     htmlFor="password"
-                                    className="block text-xs font-semibold uppercase tracking-wider text-blue-100"
+                                    className="block text-xs font-semibold text-white/90 tracking-wide"
                                 >
-                                    Password <span className="text-[#FF6B35]">*</span>
+                                    Password
                                 </label>
                                 <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-blue-200/80">
+                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-white/50">
                                         <Lock className="w-4 h-4" />
                                     </div>
                                     <input
@@ -252,67 +222,67 @@ export default function Login({ status, canResetPassword = true }: LoginProps) {
                                         placeholder="Enter your password"
                                         autoComplete="current-password"
                                         required
-                                        className={`w-full bg-white/10 hover:bg-white/15 focus:bg-white/20 border rounded-xl pl-10 pr-11 py-3 text-sm text-white placeholder:text-blue-200/50 transition-all duration-200 outline-none backdrop-blur-sm shadow-inner focus:ring-2 focus:ring-white/40 focus:border-white ${
+                                        className={`w-full bg-white/10 hover:bg-white/[0.13] focus:bg-white/[0.18] border rounded-xl pl-10 pr-11 py-2.5 text-sm text-white placeholder-white/45 transition-all duration-200 outline-none backdrop-blur-sm shadow-inner ${
                                             errors.password
-                                                ? 'border-[#E63946] focus:ring-[#E63946]/50'
-                                                : 'border-white/20'
+                                                ? 'border-[#E63946] focus:ring-2 focus:ring-[#E63946]/50'
+                                                : 'border-white/20 focus:border-[#FF6B35] focus:ring-2 focus:ring-[#FF6B35]/40'
                                         }`}
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowPassword(!showPassword)}
                                         aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-blue-200/70 hover:text-white transition-colors focus:outline-none"
+                                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-white/60 hover:text-white transition-colors focus:outline-none"
                                     >
                                         {showPassword ? (
-                                            <EyeOff className="w-4 h-4" />
+                                            <EyeOff className="w-4 h-4 transition-transform active:scale-90" />
                                         ) : (
-                                            <Eye className="w-4 h-4" />
+                                            <Eye className="w-4 h-4 transition-transform active:scale-90" />
                                         )}
                                     </button>
                                 </div>
                                 {errors.password && (
-                                    <p className="text-xs text-rose-300 flex items-center gap-1.5 mt-1">
-                                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                    <p className="text-[11px] text-[#FF6B35] flex items-center gap-1 mt-1 font-medium">
+                                        <AlertCircle className="w-3 h-3 flex-shrink-0" />
                                         <span>{errors.password}</span>
                                     </p>
                                 )}
                             </div>
 
-                            {/* Below Password: Remember Me & Forgot Password */}
-                            <div className="flex items-center justify-between pt-1">
+                            {/* Remember Me and Forgot Password Row */}
+                            <div className="flex items-center justify-between text-xs pt-0.5">
                                 <label className="flex items-center gap-2 cursor-pointer select-none group">
                                     <input
                                         id="remember"
                                         type="checkbox"
                                         checked={data.remember}
                                         onChange={(e) => setData('remember', e.target.checked)}
-                                        className="w-4 h-4 rounded border-white/30 text-[#2455C5] focus:ring-white/40 bg-white/10 cursor-pointer transition-colors"
+                                        className="w-4 h-4 rounded border-white/30 bg-white/10 text-[#2455C5] focus:ring-[#FF6B35]/60 focus:ring-offset-0 cursor-pointer transition-colors"
                                     />
-                                    <span className="text-xs sm:text-sm text-blue-100/90 group-hover:text-white transition-colors font-medium">
-                                        Remember me
+                                    <span className="text-white/85 group-hover:text-white transition-colors font-medium">
+                                        Remember Me
                                     </span>
                                 </label>
 
                                 {canResetPassword && (
                                     <Link
                                         href={request ? request() : '/forgot-password'}
-                                        className="text-xs sm:text-sm font-medium text-blue-200 hover:text-white underline-offset-4 hover:underline transition-colors"
+                                        className="text-white/85 hover:text-white hover:underline transition-colors font-medium"
                                     >
                                         Forgot Password?
                                     </Link>
                                 )}
                             </div>
 
-                            {/* Primary Button */}
+                            {/* Sign In Button */}
                             <button
                                 type="submit"
                                 disabled={processing}
-                                className="w-full py-3.5 px-4 rounded-xl bg-white hover:bg-slate-50 active:bg-slate-100 text-[#10264B] font-bold text-sm sm:text-base tracking-wide shadow-xl hover:shadow-2xl active:scale-[0.99] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed mt-2"
+                                className="w-full mt-2 py-2.5 sm:py-3 px-4 rounded-xl font-bold text-sm bg-white hover:bg-slate-100 text-[#2455C5] shadow-lg shadow-black/20 hover:shadow-xl active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 tracking-wide cursor-pointer select-none"
                             >
                                 {processing ? (
                                     <>
-                                        <Loader2 className="w-4 h-4 animate-spin text-[#10264B]" />
+                                        <Loader2 className="w-4 h-4 animate-spin text-[#2455C5]" />
                                         <span>Signing In...</span>
                                     </>
                                 ) : (
@@ -321,41 +291,109 @@ export default function Login({ status, canResetPassword = true }: LoginProps) {
                             </button>
                         </form>
 
-                        {/* Additional Information Footer */}
-                        <div className="mt-8 pt-6 border-t border-white/15 text-center space-y-4">
-                            {/* Staff Access Notice */}
-                            <p className="text-xs text-blue-200/80 flex items-center justify-center gap-1.5 font-normal">
-                                <Shield className="w-3.5 h-3.5 text-blue-300" />
-                                <span>Staff access is provided by the MDRRMO Administrator.</span>
+                        {/* Additional Information Section */}
+                        <div className="mt-4 pt-3.5 border-t border-white/15 space-y-2.5">
+                            {/* Staff Access note */}
+                            <p className="text-[11px] text-white/75 text-center leading-relaxed">
+                                <span className="font-semibold text-white">Staff Access:</span> Admin, Dispatcher, and Responder accounts are provided by the MDRRMO Administrator.
                             </p>
 
-                            {/* Resident Mobile Application Section */}
-                            <div className="p-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 transition-colors text-left backdrop-blur-sm">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2 text-xs font-bold text-white">
-                                        <Smartphone className="w-4 h-4 text-sky-300" />
-                                        <span>Are you an Opol Resident?</span>
-                                    </div>
-                                    <Link
-                                        href="/download/app"
-                                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-200 hover:text-white transition-colors"
-                                    >
-                                        <span>Get App</span>
-                                        <ArrowUpRight className="w-3.5 h-3.5" />
-                                    </Link>
+                            {/* Resident Mobile App Promo Card */}
+                            <div className="p-2.5 rounded-xl bg-white/10 border border-white/15 text-left flex items-start gap-2.5 shadow-sm">
+                                <div className="w-7 h-7 rounded-lg bg-[#FF6B35]/25 border border-[#FF6B35]/40 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                    <Smartphone className="w-3.5 h-3.5 text-[#FF6B35]" />
                                 </div>
-                                <p className="text-[11px] text-blue-100/80 leading-relaxed mt-1">
-                                    Report emergencies, request ambulance dispatch, and monitor responders using the{' '}
-                                    <span className="font-semibold text-white">MDRRMO Mobile App</span>.
-                                </p>
+                                <div className="flex-1">
+                                    <p className="text-[11px] font-bold text-white tracking-wide">
+                                        Are you an Opol Resident?
+                                    </p>
+                                    <p className="text-[10px] text-white/80 leading-snug mt-0.5">
+                                        Create your resident account, report emergencies, and track dispatched ambulances through the{' '}
+                                        <span className="font-semibold text-white underline decoration-white/40">
+                                            MDRRMO Mobile App
+                                        </span>
+                                        .
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </section>
+                </div>
             </div>
-        </ThemeProvider>
+
+            {/* Custom Embedded Keyframe Styles for Smooth Transitions */}
+            <style>{`
+                @keyframes containerFade {
+                    0% {
+                        opacity: 0;
+                        transform: scale(0.975);
+                    }
+                    100% {
+                        opacity: 1;
+                        transform: scale(1);
+                    }
+                }
+                @keyframes slideLeft {
+                    0% {
+                        opacity: 0;
+                        transform: translateX(-20px);
+                    }
+                    100% {
+                        opacity: 1;
+                        transform: translateX(0);
+                    }
+                }
+                @keyframes slideRight {
+                    0% {
+                        opacity: 0;
+                        transform: translateX(20px);
+                    }
+                    100% {
+                        opacity: 1;
+                        transform: translateX(0);
+                    }
+                }
+                @keyframes fadeIn {
+                    0% {
+                        opacity: 0;
+                        transform: translateY(8px);
+                    }
+                    100% {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                .animate-container {
+                    animation: containerFade 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                }
+                .animate-slide-left {
+                    animation: slideLeft 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                }
+                .animate-slide-right {
+                    animation: slideRight 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                }
+                .animate-fade-in {
+                    animation: fadeIn 0.4s ease-out forwards;
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    .animate-container,
+                    .animate-slide-left,
+                    .animate-slide-right,
+                    .animate-fade-in {
+                        animation: none !important;
+                        transition: none !important;
+                    }
+                }
+            `}</style>
+        </div>
     );
 }
 
-// Mark layout as self-contained so Inertia does not wrap with the outer navbar/footer
-Login.layout = (page: React.ReactNode) => page;
+export default function Login(props: LoginProps) {
+    return (
+        <ThemeProvider>
+            <Head title="Sign In - MDRRMO Opol EMS" />
+            <LoginForm {...props} />
+        </ThemeProvider>
+    );
+}
