@@ -884,10 +884,22 @@ export default function Profile({ user: propUser, status }: ProfileProps) {
                                             <Input
                                                 label="Contact Phone"
                                                 id="phone_number"
+                                                type="tel"
+                                                inputMode="numeric"
+                                                maxLength={11}
                                                 value={profileForm.data.phone_number}
-                                                onChange={(e) =>
-                                                    profileForm.setData('phone_number', e.target.value)
-                                                }
+                                                onChange={(e) => {
+                                                    let clean = e.target.value.replace(/[^0-9]/g, '');
+                                                    if (clean.startsWith('639')) clean = '09' + clean.slice(3);
+                                                    else if (clean.startsWith('9')) clean = '09' + clean.slice(1);
+                                                    clean = clean.slice(0, 11);
+                                                    profileForm.setData('phone_number', clean);
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'];
+                                                    if (e.ctrlKey || e.metaKey || allowedKeys.includes(e.key)) return;
+                                                    if (!/^[0-9]$/.test(e.key)) e.preventDefault();
+                                                }}
                                                 error={profileForm.errors.phone_number}
                                                 required
                                                 placeholder="09XXXXXXXXX"

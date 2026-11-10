@@ -37,6 +37,17 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
     const availableRoles = ALL_ROLES.filter(r => rolesToDisplay.includes(r));
     const initialRole = userRole || allowedRoles[0] || 'dispatcher';
 
+    const normalizePhone = (phone?: string | null) => {
+        if (!phone) return '';
+        let clean = String(phone).replace(/\D/g, '');
+        if (clean.startsWith('639')) {
+            clean = '09' + clean.slice(3);
+        } else if (clean.startsWith('9')) {
+            clean = '09' + clean.slice(1);
+        }
+        return clean.slice(0, 11);
+    };
+
     const getInitialForm = (targetUser?: User | null) => ({
         first_name: targetUser?.first_name ?? '',
         middle_name: targetUser?.middle_name ?? '',
@@ -44,7 +55,7 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
         birthdate: targetUser?.birthdate ? String(targetUser.birthdate).substring(0, 10) : (targetUser?.birthday ? String(targetUser.birthday).substring(0, 10) : ''),
         age: targetUser?.age !== undefined && targetUser?.age !== null ? String(targetUser.age) : '',
         email: targetUser?.email ?? '',
-        phone_number: targetUser?.phone_number ?? '',
+        phone_number: normalizePhone(targetUser?.phone_number),
         role: targetUser?.role ?? initialRole,
         position: targetUser?.responder_profile?.position ?? (initialRole === 'responder' ? 'driver' : ''),
         team: targetUser?.responder_profile?.team ?? '',
@@ -54,10 +65,12 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
 
     const [form, setForm] = useState(() => getInitialForm(user));
     const [ageError, setAgeError] = useState('');
+    const [phoneError, setPhoneError] = useState('');
 
     useEffect(() => {
         setForm(getInitialForm(user));
         setAgeError('');
+        setPhoneError('');
     }, [user]);
 
     const set = (field: string) => (e: any) =>
@@ -103,6 +116,60 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
         setForm(f => ({ ...f, age: cleanVal }));
     };
 
+    // Strictly enforce Philippine mobile numbers (numbers only, exactly 11 digits, starts with 09)
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const rawVal = e.target.value;
+        // Strip out any non-numeric characters
+        let cleanVal = rawVal.replace(/[^0-9]/g, '');
+
+        // Auto-convert standard Philippine mobile international prefixes if pasted
+        if (cleanVal.startsWith('639')) {
+            cleanVal = '09' + cleanVal.slice(3);
+        } else if (cleanVal.startsWith('9')) {
+            // Auto-prepend 0 if user directly typed 9
+            cleanVal = '09' + cleanVal.slice(1);
+        }
+
+        // Strictly cap at 11 digits
+        if (cleanVal.length > 11) {
+            cleanVal = cleanVal.slice(0, 11);
+        }
+
+        // Real-time validation feedback
+        if (cleanVal !== '') {
+            if (!cleanVal.startsWith('09')) {
+                setPhoneError('Philippine mobile numbers must start with 09 (e.g. 09123456789).');
+            } else if (cleanVal.length < 11) {
+                setPhoneError(`Phone number must be exactly 11 digits (${cleanVal.length}/11).`);
+            } else {
+                setPhoneError('');
+            }
+        } else {
+            setPhoneError('');
+        }
+
+        setForm(f => ({ ...f, phone_number: cleanVal }));
+    };
+
+    const handlePhoneKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'];
+        if (e.ctrlKey || e.metaKey || allowedKeys.includes(e.key)) {
+            return;
+        }
+        if (!/^[0-9]$/.test(e.key)) {
+            e.preventDefault();
+        }
+    };
+
+    const handlePhoneBlur = () => {
+        if (!form.phone_number) return;
+        if (!/^09\d{9}$/.test(form.phone_number)) {
+            setPhoneError('Please enter a valid 11-digit Philippine mobile number starting with 09 (e.g. 09123456789).');
+        } else {
+            setPhoneError('');
+        }
+    };
+
     const maxDate = new Date().toISOString().split('T')[0];
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -111,6 +178,16 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
             const num = parseInt(form.age, 10);
             if (isNaN(num) || num < 1 || num > 120) {
                 setAgeError('Please enter a valid age between 1 and 120.');
+                return;
+            }
+        }
+        if (showField('phone_number')) {
+            if (!form.phone_number) {
+                setPhoneError('Phone number is required.');
+                return;
+            }
+            if (!/^09\d{9}$/.test(form.phone_number)) {
+                setPhoneError('Please enter a valid 11-digit Philippine mobile number starting with 09 (e.g. 09123456789).');
                 return;
             }
         }
@@ -153,7 +230,7 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
     const activeFields = ROLE_FIELDS[form.role] || [];
     const showField = (field: string) => activeFields.includes(field);
 
-    const hasErrors = (errors && Object.keys(errors).length > 0) || Boolean(ageError);
+    const hasErrors = (errors && Object.keys(errors).length > 0) || Boolean(ageError) || Boolean(phoneError);
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -164,6 +241,7 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
                         <p className="font-semibold mb-1">Please fix the following errors:</p>
                         <ul className="list-disc list-inside space-y-0.5 text-xs">
                             {ageError && <li><span className="capitalize font-medium">Age:</span> {ageError}</li>}
+                            {phoneError && <li><span className="capitalize font-medium">Phone Number:</span> {phoneError}</li>}
                             {errors && Object.entries(errors).map(([field, err]) => (
                                 <li key={field}>
                                     <span className="capitalize font-medium">{field.replace(/_/g, ' ')}:</span> {String(err)}
@@ -273,9 +351,14 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
                     <Input
                         label="Phone Number"
                         id="phone_number"
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={11}
                         value={form.phone_number}
-                        onChange={set('phone_number')}
-                        error={errors.phone_number}
+                        onChange={handlePhoneChange}
+                        onKeyDown={handlePhoneKeyDown}
+                        onBlur={handlePhoneBlur}
+                        error={phoneError || errors.phone_number}
                         required
                         placeholder="09XXXXXXXXX"
                     />

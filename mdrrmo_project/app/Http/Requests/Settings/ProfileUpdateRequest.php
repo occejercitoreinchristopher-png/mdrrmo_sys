@@ -28,11 +28,24 @@ class ProfileUpdateRequest extends FormRequest
             $this->merge([
                 'phone_number' => $this->user()?->phone_number ?? '09123456789',
             ]);
+        } elseif ($this->input('phone_number')) {
+            $cleaned = preg_replace('/\D/', '', (string) $this->input('phone_number'));
+            if (str_starts_with($cleaned, '639')) {
+                $cleaned = '09'.substr($cleaned, 3);
+            }
+            $this->merge(['phone_number' => $cleaned]);
         }
     }
 
     public function rules(): array
     {
         return $this->profileRules($this->user()->id);
+    }
+
+    public function messages(): array
+    {
+        return [
+            'phone_number.regex' => 'The phone number must be a valid 11-digit Philippine mobile number starting with 09 (e.g., 09123456789).',
+        ];
     }
 }

@@ -69,12 +69,20 @@ export default function Profile() {
                                 <Label htmlFor="phone_number">Phone Number</Label>
                                 <Input
                                     id="phone_number"
+                                    type="tel"
+                                    inputMode="numeric"
+                                    maxLength={11}
                                     className="mt-1 block w-full"
                                     defaultValue={auth.user.phone_number ?? ''}
                                     name="phone_number"
                                     required
                                     autoComplete="tel"
                                     placeholder="09XXXXXXXXX"
+                                    onKeyDown={(e) => {
+                                        const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'];
+                                        if (e.ctrlKey || e.metaKey || allowedKeys.includes(e.key)) return;
+                                        if (!/^[0-9]$/.test(e.key)) e.preventDefault();
+                                    }}
                                 />
                                 <InputError className="mt-2" message={errors.phone_number} />
                             </div>

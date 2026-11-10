@@ -272,8 +272,21 @@ export default function Register({ passwordRules }: RegisterProps) {
                                         id="phone_number"
                                         type="tel"
                                         name="phone_number"
+                                        inputMode="numeric"
+                                        maxLength={11}
                                         value={data.phone_number}
-                                        onChange={(e) => setData('phone_number', e.target.value)}
+                                        onChange={(e) => {
+                                            let clean = e.target.value.replace(/[^0-9]/g, '');
+                                            if (clean.startsWith('639')) clean = '09' + clean.slice(3);
+                                            else if (clean.startsWith('9')) clean = '09' + clean.slice(1);
+                                            clean = clean.slice(0, 11);
+                                            setData('phone_number', clean);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'];
+                                            if (e.ctrlKey || e.metaKey || allowedKeys.includes(e.key)) return;
+                                            if (!/^[0-9]$/.test(e.key)) e.preventDefault();
+                                        }}
                                         placeholder="09XXXXXXXXX"
                                         autoComplete="tel"
                                         required

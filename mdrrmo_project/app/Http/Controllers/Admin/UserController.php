@@ -101,12 +101,20 @@ class UserController extends Controller
         $isDispatcher = auth()->user()?->role === 'dispatcher';
         $allowedRoles = $isDispatcher ? ['responder'] : ['dispatcher', 'responder'];
 
+        if ($request->has('phone_number')) {
+            $cleaned = preg_replace('/\D/', '', (string) $request->phone_number);
+            if (str_starts_with($cleaned, '639')) {
+                $cleaned = '09'.substr($cleaned, 3);
+            }
+            $request->merge(['phone_number' => $cleaned]);
+        }
+
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'last_name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')],
-            'phone_number' => ['required', 'string', 'max:255', Rule::unique('users')],
+            'phone_number' => ['required', 'string', 'regex:/^09\d{9}$/', Rule::unique('users')],
             'birthdate' => ['nullable', 'date', 'before:today'],
             'birthday' => ['nullable', 'date', 'before:today'],
             'age' => ['nullable', 'integer', 'min:1', 'max:120'],
@@ -116,6 +124,8 @@ class UserController extends Controller
             'team' => 'nullable|string|max:255',
             'is_reliever' => 'nullable|boolean',
             'password' => 'nullable|string|min:8|confirmed',
+        ], [
+            'phone_number.regex' => 'The phone number must be a valid 11-digit Philippine mobile number starting with 09 (e.g., 09123456789).',
         ]);
 
         $isReliever = $request->boolean('is_reliever');
@@ -202,12 +212,20 @@ class UserController extends Controller
     {
         // Admin cannot modify themselves from this interface, or maybe they can?
         // Let's just allow it for now, but prevent changing roles to resident or admin.
+        if ($request->has('phone_number')) {
+            $cleaned = preg_replace('/\D/', '', (string) $request->phone_number);
+            if (str_starts_with($cleaned, '639')) {
+                $cleaned = '09'.substr($cleaned, 3);
+            }
+            $request->merge(['phone_number' => $cleaned]);
+        }
+
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'last_name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'phone_number' => ['required', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
+            'phone_number' => ['required', 'string', 'regex:/^09\d{9}$/', Rule::unique('users')->ignore($user->id)],
             'birthdate' => ['nullable', 'date', 'before:today'],
             'birthday' => ['nullable', 'date', 'before:today'],
             'age' => ['nullable', 'integer', 'min:1', 'max:120'],
@@ -217,6 +235,8 @@ class UserController extends Controller
             'position' => ['required_if:role,responder', 'nullable', Rule::in(['driver', 'emt'])],
             'team' => 'nullable|string|max:255',
             'is_reliever' => 'nullable|boolean',
+        ], [
+            'phone_number.regex' => 'The phone number must be a valid 11-digit Philippine mobile number starting with 09 (e.g., 09123456789).',
         ]);
 
         // Prevent manually assigning the resident role to a non-resident
