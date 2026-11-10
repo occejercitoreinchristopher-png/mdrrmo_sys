@@ -35,12 +35,12 @@ export default function AuthSimpleLayout({ children }: AuthLayoutProps) {
                     <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
                         {/* Branding / Home Link */}
                         <Link href="/" className="flex items-center gap-3 group select-none">
-                            {/* Official Opol Rescue Shield Logo */}
-                            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-900/30 dark:bg-black/30 border border-slate-300/60 dark:border-white/15 p-1 flex items-center justify-center shadow-md shadow-black/10 backdrop-blur-sm relative overflow-hidden group-hover:scale-105 transition-transform duration-200 flex-shrink-0">
+                            {/* Official MDRRMO Opol Logo (Copied directly from Login Form) */}
+                            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-900/10 dark:bg-white/10 backdrop-blur-md p-1.5 border border-slate-300/60 dark:border-white/20 shadow-lg shadow-black/10 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform duration-200">
                                 <img
-                                    src="/images/opol-rescue-logo.png"
-                                    alt="MDRRMO Opol Rescue Logo"
-                                    className="w-full h-full object-contain drop-shadow-sm rounded-lg"
+                                    src="/images/opol-logo.png"
+                                    alt="MDRRMO Opol Municipal Logo"
+                                    className="w-full h-full object-contain drop-shadow-md"
                                 />
                             </div>
 
