@@ -122,6 +122,26 @@ class Patient extends Model
         }
     }
 
+    public function setAddressAttribute($value): void
+    {
+        $this->setHomeAddressAttribute($value);
+    }
+
+    public function setStreetAttribute($value): void
+    {
+        $col = static::addressColumn();
+        if ($col === 'street') {
+            $this->attributes['street'] = $value ? mb_substr(trim((string) $value), 0, 255) : null;
+        }
+    }
+
+    public function setHouseNoAttribute($value): void
+    {
+        if (Schema::hasColumn('patients', 'house_no')) {
+            $this->attributes['house_no'] = $value ? mb_substr(trim((string) $value), 0, 100) : null;
+        }
+    }
+
     public function barangay()
     {
         return $this->belongsTo(Barangay::class);
