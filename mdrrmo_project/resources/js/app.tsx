@@ -43,6 +43,8 @@ createInertiaApp({
                 return null;
             case name === 'profile':
                 return null; // Dynamically wraps with AdminLayout or DispatcherLayout
+            case name === 'shared/AccidentHeatmapView':
+                return null; // Renders standalone full-screen with internal navigation
             case name.startsWith('admin/'):
                 return null; // Admin pages use AdminLayout explicitly
             case name.startsWith('dispatcher/'):

@@ -38,7 +38,7 @@ class PatientCareRecord extends Model
             return null;
         }
 
-        $time = $dispatch->created_at ?? $dispatch->assigned_at;
+        $time = $dispatch->assigned_at ?? $dispatch->created_at;
         return $time ? $time->format('H:i') : null;
     }
 

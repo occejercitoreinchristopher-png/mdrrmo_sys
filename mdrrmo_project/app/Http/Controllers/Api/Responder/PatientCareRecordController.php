@@ -109,6 +109,55 @@ class PatientCareRecordController extends Controller
             $pcrData
         );
 
+        // Allow responders to review and correct operational timestamps in PCR
+        $dispatchTimeUpdates = [];
+        $dispatchTimeMap = [
+            'dispatch_time' => ['column' => 'assigned_at', 'fallback' => $dispatch->created_at],
+            'en_route_time' => ['column' => 'en_route_at', 'fallback' => $dispatch->assigned_at ?? $dispatch->created_at],
+            'on_scene_time' => ['column' => 'arrived_at', 'fallback' => $dispatch->en_route_at ?? $dispatch->assigned_at ?? $dispatch->created_at],
+        ];
+
+        foreach ($dispatchTimeMap as $inputKey => $config) {
+            if (array_key_exists($inputKey, $validated)) {
+                $newHi = $validated[$inputKey];
+                $col = $config['column'];
+                $existingTs = $dispatch->{$col};
+
+                if ($newHi === null) {
+                    if ($col !== 'assigned_at' && $existingTs !== null) {
+                        $dispatchTimeUpdates[$col] = null;
+                    }
+                } elseif (! $existingTs || $existingTs->format('H:i') !== $newHi) {
+                    $baseDate = ($existingTs ?? $config['fallback'] ?? now())->copy();
+                    $dispatchTimeUpdates[$col] = $baseDate->setTimeFromTimeString($newHi.':00');
+                }
+            }
+        }
+
+        if (! empty($dispatchTimeUpdates)) {
+            $dispatch->update($dispatchTimeUpdates);
+            $dispatch->refresh();
+        }
+
+        // Auto-align incident_type_id if clinical PCR findings reveal a specific emergency type (e.g. Vehicular Accident)
+        if ($dispatch->incident) {
+            $complaint = strtolower($pcr->clinical_chief_complaint ?? $validated['chief_complaint'] ?? '');
+            $nature = strtolower($pcr->nature_of_call ?? $validated['nature_of_call'] ?? '');
+            $pcrText = "{$complaint} {$nature}";
+
+            if (preg_match('/\b(vehicular|motorcycle|collision|crash|hit and run|car crash|traffic accident|road crash)\b/i', $pcrText)) {
+                $vehicularType = \App\Models\IncidentType::where('incident_type_name', 'like', '%vehicular%')->first();
+                if ($vehicularType && (int)$dispatch->incident->incident_type_id !== (int)$vehicularType->id) {
+                    $dispatch->incident->update(['incident_type_id' => $vehicularType->id]);
+                }
+            } elseif (preg_match('/\b(fire|burn|explosion)\b/i', $pcrText)) {
+                $fireType = \App\Models\IncidentType::where('incident_type_name', 'like', '%fire%')->first();
+                if ($fireType && (int)$dispatch->incident->incident_type_id !== (int)$fireType->id) {
+                    $dispatch->incident->update(['incident_type_id' => $fireType->id]);
+                }
+            }
+        }
+
         // Keep master Patient record synchronized with latest known demographics
         $patient = \App\Models\Patient::find($validated['patient_id']);
         if ($patient) {
@@ -121,10 +170,10 @@ class PatientCareRecordController extends Controller
                 }
             }
             if (! empty($validated['incident_address'])) {
-                $newAddress = trim($validated['incident_address']);
-                $currentAddress = trim($patient->home_address ?? '');
+                $newAddress = mb_substr(trim($validated['incident_address']), 0, 255);
+                $currentAddress = trim($patient->street ?? $patient->home_address ?? '');
                 if (empty($currentAddress) || $newAddress !== $currentAddress) {
-                    $patientUpdates['home_address'] = $newAddress;
+                    $patientUpdates['street'] = $newAddress;
                 }
             }
             if (! empty($validated['age']) && empty($patient->birthdate)) {
@@ -149,7 +198,7 @@ class PatientCareRecordController extends Controller
         // Broadcast to other crew members on the same dispatch
         // broadcast(new PatientCareRecordUpdatedEvent($pcr))->toOthers();
 
-        return response()->json(['message' => 'PCR updated', 'data' => $pcr->load('patient')]);
+        return response()->json(['message' => 'PCR updated', 'data' => $pcr->load(['patient', 'dispatch'])]);
     }
 
     public function submit(Request $request, Dispatch $dispatch)

@@ -25,7 +25,7 @@ class PatientController extends Controller
                 $q->where(DB::raw("CONCAT(patient_first_name, ' ', patient_last_name)"), 'LIKE', "%{$search}%")
                     ->orWhere('patient_first_name', 'LIKE', "%{$search}%")
                     ->orWhere('patient_last_name', 'LIKE', "%{$search}%")
-                    ->orWhere('home_address', 'LIKE', "%{$search}%")
+                    ->orWhere('street', 'LIKE', "%{$search}%")
                     ->orWhereHas('barangay', function ($b) use ($search) {
                         $b->where('barangay_name', 'LIKE', "%{$search}%");
                     })
@@ -112,7 +112,7 @@ class PatientController extends Controller
                 $q->where(DB::raw("CONCAT(patient_first_name, ' ', patient_last_name)"), 'LIKE', "%{$search}%")
                     ->orWhere('patient_first_name', 'LIKE', "%{$search}%")
                     ->orWhere('patient_last_name', 'LIKE', "%{$search}%")
-                    ->orWhere('home_address', 'LIKE', "%{$search}%")
+                    ->orWhere('street', 'LIKE', "%{$search}%")
                     ->orWhereHas('barangay', function ($b) use ($search) {
                         $b->where('barangay_name', 'LIKE', "%{$search}%");
                     })
@@ -346,7 +346,7 @@ class PatientController extends Controller
             'patient_last_name' => trim($validated['last_name']),
             'patient_birthdate' => $birthdate,
             'patient_gender' => $validated['gender'] ?? null,
-            'home_address' => $address,
+            'street' => $address ? mb_substr(trim($address), 0, 255) : null,
             'is_unidentified' => false,
             'identified_at' => now(),
             'identified_by_role' => 'dispatcher',

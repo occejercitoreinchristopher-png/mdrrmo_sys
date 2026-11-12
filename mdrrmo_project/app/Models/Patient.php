@@ -15,9 +15,23 @@ class Patient extends Model
 
     protected $appends = ['name', 'full_name', 'first_name', 'middle_name', 'last_name', 'birthdate', 'gender', 'address'];
 
+    public function getHomeAddressAttribute(): ?string
+    {
+        if (! empty($this->attributes['home_address'])) {
+            return $this->attributes['home_address'];
+        }
+
+        $parts = array_filter([
+            $this->attributes['house_no'] ?? null,
+            $this->attributes['street'] ?? null,
+        ]);
+
+        return ! empty($parts) ? implode(', ', $parts) : null;
+    }
+
     public function getAddressAttribute(): ?string
     {
-        return $this->home_address ?? null;
+        return $this->home_address;
     }
 
     public function getNameAttribute(): string
@@ -82,7 +96,7 @@ class Patient extends Model
 
     public function setHomeAddressAttribute($value): void
     {
-        $this->attributes['home_address'] = $value;
+        $this->attributes['street'] = $value ? mb_substr(trim((string) $value), 0, 255) : null;
     }
 
     public function barangay()

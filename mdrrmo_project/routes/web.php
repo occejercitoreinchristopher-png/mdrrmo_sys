@@ -133,6 +133,7 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
     Route::get('/callers/lookup', [IncidentController::class, 'lookupCaller'])->name('callers.lookup');
     Route::get('/callers/search', [IncidentController::class, 'searchCallerPhoneNumbers'])->name('callers.search');
     Route::post('/incidents/{incident}/verify', [IncidentController::class, 'verify'])->name('incidents.verify');
+    Route::patch('/incidents/{incident}', [IncidentController::class, 'update'])->name('incidents.update');
     Route::post('/incidents/{incident}/reject', [IncidentController::class, 'reject'])->name('incidents.reject');
     Route::post('/incidents/{incident}/resolve', [IncidentController::class, 'resolve'])->name('incidents.resolve');
 

@@ -12,7 +12,6 @@ import {
     PanelLeft,
     PanelLeftClose,
     PhoneCall,
-    Flame,
     AlertTriangle,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -42,7 +41,6 @@ const navigation = [
     {
         group: 'Analytics & Governance',
         items: [
-            { label: 'Accident Heatmap', icon: Flame, href: '/admin/accident-heatmap' },
             { label: 'Reports & Analytics', icon: BarChart3, href: '/admin/reports' },
             { label: 'Account Profile', icon: User, href: '/profile' },
         ],

@@ -247,9 +247,19 @@ class IncidentController extends Controller
             return response()->json(['message' => 'Unauthorized action.'], 403);
         }
 
-        if ($incident->incident_status !== 'pending') {
+        if (! in_array($incident->incident_status, ['pending', 'verified'])) {
             return response()->json([
-                'message' => 'Only pending emergency reports can be cancelled directly. If responders have already been dispatched, please contact the MDRRMO hotline immediately.',
+                'message' => 'Cannot cancel: A response team is already assigned or en route. Please contact the MDRRMO hotline immediately.',
+            ], 422);
+        }
+
+        $hasActiveDispatch = $incident->dispatches()
+            ->whereNotIn('dispatch_status', ['completed', 'cancelled'])
+            ->exists();
+
+        if ($hasActiveDispatch || in_array($incident->incident_status, ['assigned', 'responding'])) {
+            return response()->json([
+                'message' => 'Cannot cancel: A response team is already assigned or en route. Please contact the MDRRMO hotline immediately.',
             ], 422);
         }
 
@@ -257,7 +267,7 @@ class IncidentController extends Controller
             'reason' => 'nullable|string|max:255',
         ]);
 
-        $reason = $validated['reason'] ?? 'Cancelled by reporting citizen';
+        $reason = $validated['reason'] ?? 'Cancelled by reporting resident';
 
         $incident->update([
             'incident_status' => 'cancelled',

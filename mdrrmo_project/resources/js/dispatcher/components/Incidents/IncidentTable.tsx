@@ -305,7 +305,7 @@ export default function IncidentTable({
         <div>
             {/* Header */}
             <PageHeader
-                title={statusFilter === 'history' ? "Incident Archive" : "Incoming Incidents"}
+                title={statusFilter === 'history' ? "Incident Records" : "Incoming Incidents"}
                 subtitle={statusFilter === 'history' ? "Synchronized incident records and geospatial intelligence filtered by Barangay and PCR Chief Complaints." : undefined}
                 actions={
                     statusFilter !== 'history' ? (
@@ -547,6 +547,7 @@ export default function IncidentTable({
                 open={!!viewing}
                 onClose={() => setViewing(null)}
                 onAssignUnit={(inc) => setAssigningIncident(inc)}
+                incidentTypes={incidentTypes}
             />
 
             {/* Reject Modal */}

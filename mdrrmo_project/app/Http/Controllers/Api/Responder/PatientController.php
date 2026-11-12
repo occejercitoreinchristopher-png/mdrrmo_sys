@@ -109,8 +109,8 @@ class PatientController extends Controller
             'contact_number' => 'nullable|string',
         ]);
 
-        $firstName = trim($validated['first_name']);
-        $lastName = trim($validated['last_name']);
+        $firstName = mb_substr(trim($validated['first_name']), 0, 100);
+        $lastName = mb_substr(trim($validated['last_name']), 0, 100);
 
         $birthdate = $validated['birthdate'] ?? null;
         if (! $birthdate && ! empty($validated['age'])) {
@@ -126,7 +126,8 @@ class PatientController extends Controller
             }
         }
 
-        $homeAddress = $validated['address'] ?? $validated['incident_address'] ?? null;
+        $rawHomeAddress = $validated['address'] ?? $validated['incident_address'] ?? null;
+        $homeAddress = $rawHomeAddress ? mb_substr(trim($rawHomeAddress), 0, 255) : null;
 
         $isUnidentified = $request->boolean('is_unidentified', false);
 
@@ -137,7 +138,7 @@ class PatientController extends Controller
                 'last_name' => $lastName,
                 'birthdate' => $birthdate,
                 'gender' => in_array($validated['gender'] ?? '', ['male', 'female']) ? $validated['gender'] : null,
-                'home_address' => $homeAddress,
+                'street' => $homeAddress,
                 'is_unidentified' => true,
             ]);
             $status = 201;
@@ -150,7 +151,7 @@ class PatientController extends Controller
             if (! empty($birthdate)) {
                 $patientMatchQuery->where('patient_birthdate', $birthdate);
             } elseif (! empty($homeAddress)) {
-                $patientMatchQuery->where('home_address', $homeAddress);
+                $patientMatchQuery->where('street', $homeAddress);
             } else {
                 // Without birthdate or address, do not blindly merge to avoid dangerous cross-patient medical collisions
                 $patientMatchQuery->whereRaw('1 = 0');
@@ -169,9 +170,9 @@ class PatientController extends Controller
                 }
                 if (! empty($homeAddress)) {
                     $newAddress = trim($homeAddress);
-                    $oldAddress = trim($patient->home_address ?? '');
+                    $oldAddress = trim($patient->street ?? $patient->home_address ?? '');
                     if (empty($oldAddress) || $newAddress !== $oldAddress) {
-                        $updates['home_address'] = $newAddress;
+                        $updates['street'] = $newAddress;
                     }
                 }
                 if (! empty($updates)) {
@@ -185,7 +186,7 @@ class PatientController extends Controller
                     'last_name' => $lastName,
                     'birthdate' => $birthdate,
                     'gender' => in_array($validated['gender'] ?? '', ['male', 'female']) ? $validated['gender'] : null,
-                    'home_address' => $homeAddress,
+                    'street' => $homeAddress,
                     'is_unidentified' => false,
                 ]);
                 $status = 201;
@@ -248,7 +249,7 @@ class PatientController extends Controller
             'patient_last_name' => trim($validated['last_name']),
             'patient_birthdate' => $birthdate,
             'patient_gender' => $validated['gender'] ?? null,
-            'home_address' => $address,
+            'street' => $address ? mb_substr(trim($address), 0, 255) : null,
             'is_unidentified' => false,
             'identified_at' => now(),
             'identified_by_role' => 'responder',

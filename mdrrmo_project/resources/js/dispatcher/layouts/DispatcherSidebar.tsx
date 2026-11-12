@@ -12,15 +12,35 @@ import {
     User,
     ChevronDown,
     MapPin,
+    MapPinned,
     PanelLeft,
     PanelLeftClose,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
 
 function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl, collapsed }) {
-    const isSubActive = subItems?.some(sub => currentUrl === sub.href || (sub.href.includes('?') && currentUrl.includes(sub.href.split('?')[1])));
+    const checkSubActive = (subHref: string) => {
+        if (!currentUrl) return false;
+        if (currentUrl === subHref) return true;
+        if (subHref.includes('?')) {
+            const [base, query] = subHref.split('?');
+            if (currentUrl.includes(query)) return true;
+            if (subHref === '/dispatcher/incidents?status=active' && (currentUrl === '/dispatcher/incidents' || currentUrl === '/dispatcher/incidents/')) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const isSubActive = subItems?.some(sub => checkSubActive(sub.href));
     const [isOpen, setIsOpen] = useState(isSubActive || false);
+
+    useEffect(() => {
+        if (isSubActive) {
+            setIsOpen(true);
+        }
+    }, [isSubActive]);
 
     const isCurrentActive = active || (!subItems && isSubActive);
 
@@ -107,11 +127,11 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl,
             {subItems && !collapsed && (
                 <div className={clsx(
                     "flex flex-col space-y-0.5 overflow-hidden transition-all duration-300 ease-in-out pl-4 pr-1 mt-0.5",
-                    isOpen ? "max-h-48 opacity-100" : "max-h-0 opacity-0"
+                    isOpen ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
                 )}>
                     <div className="border-l border-slate-200 dark:border-white/10 ml-2.5 pl-2.5 space-y-0.5 mt-1">
                         {subItems.map((subItem) => {
-                            const subActive = currentUrl === subItem.href || (subItem.href.includes('?') && currentUrl.includes(subItem.href.split('?')[1]));
+                            const subActive = checkSubActive(subItem.href);
                             return (
                                 <button
                                     type="button"
@@ -192,7 +212,8 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
                     badge: incidentCounts.active,
                     subItems: [
                         { label: 'Active Incidents', icon: Siren, href: '/dispatcher/incidents?status=active' },
-                        { label: 'Incident Archive', icon: ClipboardList, href: '/dispatcher/incidents?status=history' },
+                        { label: 'Incident Heatmap', icon: MapPinned, href: '/dispatcher/accident-heatmap' },
+                        { label: 'Incident Records', icon: ClipboardList, href: '/dispatcher/incidents?status=history' },
                     ]
                 },
                 { label: 'Dispatch Center', icon: Truck, href: '/dispatcher/dispatches' },

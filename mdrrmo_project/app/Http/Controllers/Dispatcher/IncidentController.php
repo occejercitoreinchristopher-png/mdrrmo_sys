@@ -141,6 +141,7 @@ class IncidentController extends Controller
     {
         $validated = $request->validate([
             'priority' => 'nullable|in:Critical,High,Moderate',
+            'incident_type_id' => 'nullable|exists:incident_types,id',
         ]);
 
         if ($incident->incident_status !== 'pending') {
@@ -148,10 +149,12 @@ class IncidentController extends Controller
         }
 
         $priority = $validated['priority'] ?? $request->input('priority') ?? $incident->priority ?? 'Moderate';
+        $incidentTypeId = $validated['incident_type_id'] ?? $request->input('incident_type_id') ?? $incident->incident_type_id;
 
         $incident->update([
             'incident_status' => 'verified',
             'priority' => $priority,
+            'incident_type_id' => $incidentTypeId,
             'verified_at' => now(),
             'verified_by' => $request->user()?->id,
         ]);
@@ -171,6 +174,27 @@ class IncidentController extends Controller
         }
 
         return redirect()->route('dispatcher.dispatches', ['incident_id' => $incident->id]);
+    }
+
+    public function update(Request $request, Incident $incident)
+    {
+        $validated = $request->validate([
+            'incident_type_id' => 'required|exists:incident_types,id',
+            'priority' => 'nullable|in:Critical,High,Moderate',
+        ]);
+
+        $updateData = [
+            'incident_type_id' => $validated['incident_type_id'],
+        ];
+
+        if (! empty($validated['priority'])) {
+            $updateData['priority'] = $validated['priority'];
+        }
+
+        $incident->update($updateData);
+        $incident->loadMissing(['incidentType', 'resident']);
+
+        return back()->with('success', 'Incident emergency category updated successfully.');
     }
 
     public function reject(Request $request, Incident $incident)

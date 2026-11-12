@@ -60,9 +60,9 @@ class MergeDuplicatePatients extends Command
                         $master->patient_birthdate = $dup->patient_birthdate;
                         $updates['patient_birthdate'] = $dup->patient_birthdate;
                     }
-                    if (empty($master->home_address) && ! empty($dup->home_address)) {
-                        $master->home_address = $dup->home_address;
-                        $updates['home_address'] = $dup->home_address;
+                    if (empty($master->street) && ! empty($dup->street)) {
+                        $master->street = $dup->street;
+                        $updates['street'] = $dup->street;
                     }
                     if (empty($master->patient_gender) && ! empty($dup->patient_gender)) {
                         $master->patient_gender = $dup->patient_gender;
