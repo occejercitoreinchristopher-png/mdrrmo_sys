@@ -171,9 +171,12 @@ class PatientCareRecordController extends Controller
             }
             if (! empty($validated['incident_address'])) {
                 $newAddress = mb_substr(trim($validated['incident_address']), 0, 255);
-                $currentAddress = trim($patient->street ?? $patient->home_address ?? '');
-                if (empty($currentAddress) || $newAddress !== $currentAddress) {
-                    $patientUpdates['street'] = $newAddress;
+                $addressCol = \App\Models\Patient::addressColumn();
+                if ($addressCol) {
+                    $currentAddress = trim($patient->{$addressCol} ?? '');
+                    if (empty($currentAddress) || $newAddress !== $currentAddress) {
+                        $patientUpdates[$addressCol] = $newAddress;
+                    }
                 }
             }
             if (! empty($validated['age']) && empty($patient->birthdate)) {

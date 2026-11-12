@@ -25,7 +25,6 @@ class PatientController extends Controller
                 $q->where(DB::raw("CONCAT(patient_first_name, ' ', patient_last_name)"), 'LIKE', "%{$search}%")
                     ->orWhere('patient_first_name', 'LIKE', "%{$search}%")
                     ->orWhere('patient_last_name', 'LIKE', "%{$search}%")
-                    ->orWhere('street', 'LIKE', "%{$search}%")
                     ->orWhereHas('barangay', function ($b) use ($search) {
                         $b->where('barangay_name', 'LIKE', "%{$search}%");
                     })
@@ -36,6 +35,10 @@ class PatientController extends Controller
                     ->orWhereHas('registeredUser', function ($u) use ($search) {
                         $u->where('phone_number', 'LIKE', "%{$search}%");
                     });
+
+                if ($addressCol = Patient::addressColumn()) {
+                    $q->orWhere($addressCol, 'LIKE', "%{$search}%");
+                }
             });
         }
 
@@ -112,7 +115,6 @@ class PatientController extends Controller
                 $q->where(DB::raw("CONCAT(patient_first_name, ' ', patient_last_name)"), 'LIKE', "%{$search}%")
                     ->orWhere('patient_first_name', 'LIKE', "%{$search}%")
                     ->orWhere('patient_last_name', 'LIKE', "%{$search}%")
-                    ->orWhere('street', 'LIKE', "%{$search}%")
                     ->orWhereHas('barangay', function ($b) use ($search) {
                         $b->where('barangay_name', 'LIKE', "%{$search}%");
                     })
@@ -123,6 +125,10 @@ class PatientController extends Controller
                     ->orWhereHas('registeredUser', function ($u) use ($search) {
                         $u->where('phone_number', 'LIKE', "%{$search}%");
                     });
+
+                if ($addressCol = Patient::addressColumn()) {
+                    $q->orWhere($addressCol, 'LIKE', "%{$search}%");
+                }
             });
         }
 
@@ -340,17 +346,20 @@ class PatientController extends Controller
 
         $address = $validated['address'] ?? null;
 
-        $patient->update([
+        $updateData = [
             'patient_first_name' => trim($validated['first_name']),
             'patient_middle_name' => ! empty($validated['middle_name']) ? trim($validated['middle_name']) : null,
             'patient_last_name' => trim($validated['last_name']),
             'patient_birthdate' => $birthdate,
             'patient_gender' => $validated['gender'] ?? null,
-            'street' => $address ? mb_substr(trim($address), 0, 255) : null,
             'is_unidentified' => false,
             'identified_at' => now(),
             'identified_by_role' => 'dispatcher',
-        ]);
+        ];
+        if ($addressCol = Patient::addressColumn()) {
+            $updateData[$addressCol] = $address ? mb_substr(trim($address), 0, 255) : null;
+        }
+        $patient->update($updateData);
 
         return back()->with('success', 'Patient identification completed successfully.');
     }

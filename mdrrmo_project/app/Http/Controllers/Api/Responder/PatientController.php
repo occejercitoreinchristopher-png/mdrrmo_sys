@@ -128,19 +128,23 @@ class PatientController extends Controller
 
         $rawHomeAddress = $validated['address'] ?? $validated['incident_address'] ?? null;
         $homeAddress = $rawHomeAddress ? mb_substr(trim($rawHomeAddress), 0, 255) : null;
+        $addressCol = Patient::addressColumn();
 
         $isUnidentified = $request->boolean('is_unidentified', false);
 
         // If explicitly creating an unidentified patient or not found by name
         if ($isUnidentified) {
-            $patient = Patient::create([
+            $createData = [
                 'first_name' => $firstName,
                 'last_name' => $lastName,
                 'birthdate' => $birthdate,
                 'gender' => in_array($validated['gender'] ?? '', ['male', 'female']) ? $validated['gender'] : null,
-                'street' => $homeAddress,
                 'is_unidentified' => true,
-            ]);
+            ];
+            if ($addressCol) {
+                $createData[$addressCol] = $homeAddress;
+            }
+            $patient = Patient::create($createData);
             $status = 201;
             $message = 'Unidentified patient profile created';
         } else {
@@ -150,8 +154,8 @@ class PatientController extends Controller
 
             if (! empty($birthdate)) {
                 $patientMatchQuery->where('patient_birthdate', $birthdate);
-            } elseif (! empty($homeAddress)) {
-                $patientMatchQuery->where('street', $homeAddress);
+            } elseif (! empty($homeAddress) && $addressCol) {
+                $patientMatchQuery->where($addressCol, $homeAddress);
             } else {
                 // Without birthdate or address, do not blindly merge to avoid dangerous cross-patient medical collisions
                 $patientMatchQuery->whereRaw('1 = 0');
@@ -168,11 +172,11 @@ class PatientController extends Controller
                 if (empty($patient->gender) && in_array($validated['gender'] ?? '', ['male', 'female'])) {
                     $updates['gender'] = $validated['gender'];
                 }
-                if (! empty($homeAddress)) {
+                if (! empty($homeAddress) && $addressCol) {
                     $newAddress = trim($homeAddress);
-                    $oldAddress = trim($patient->street ?? $patient->home_address ?? '');
+                    $oldAddress = trim($patient->{$addressCol} ?? $patient->home_address ?? '');
                     if (empty($oldAddress) || $newAddress !== $oldAddress) {
-                        $updates['street'] = $newAddress;
+                        $updates[$addressCol] = $newAddress;
                     }
                 }
                 if (! empty($updates)) {
@@ -181,14 +185,17 @@ class PatientController extends Controller
                 $status = 200;
                 $message = 'Existing patient profile loaded';
             } else {
-                $patient = Patient::create([
+                $createData = [
                     'first_name' => $firstName,
                     'last_name' => $lastName,
                     'birthdate' => $birthdate,
                     'gender' => in_array($validated['gender'] ?? '', ['male', 'female']) ? $validated['gender'] : null,
-                    'street' => $homeAddress,
                     'is_unidentified' => false,
-                ]);
+                ];
+                if ($addressCol) {
+                    $createData[$addressCol] = $homeAddress;
+                }
+                $patient = Patient::create($createData);
                 $status = 201;
                 $message = 'Patient created successfully';
             }
@@ -243,17 +250,20 @@ class PatientController extends Controller
 
         $address = $validated['address'] ?? null;
 
-        $patient->update([
+        $updateData = [
             'patient_first_name' => trim($validated['first_name']),
             'patient_middle_name' => ! empty($validated['middle_name']) ? trim($validated['middle_name']) : null,
             'patient_last_name' => trim($validated['last_name']),
             'patient_birthdate' => $birthdate,
             'patient_gender' => $validated['gender'] ?? null,
-            'street' => $address ? mb_substr(trim($address), 0, 255) : null,
             'is_unidentified' => false,
             'identified_at' => now(),
             'identified_by_role' => 'responder',
-        ]);
+        ];
+        if ($addressCol = Patient::addressColumn()) {
+            $updateData[$addressCol] = $address ? mb_substr(trim($address), 0, 255) : null;
+        }
+        $patient->update($updateData);
 
         $calculatedAge = $patient->birthdate ? Carbon::parse($patient->birthdate)->age : null;
 

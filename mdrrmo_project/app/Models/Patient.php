@@ -3,10 +3,30 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class Patient extends Model
 {
     protected $guarded = [];
+
+    protected static ?string $cachedAddressColumn = null;
+    protected static bool $addressColumnChecked = false;
+
+    public static function addressColumn(): ?string
+    {
+        if (! static::$addressColumnChecked) {
+            static::$addressColumnChecked = true;
+            if (Schema::hasColumn('patients', 'street')) {
+                static::$cachedAddressColumn = 'street';
+            } elseif (Schema::hasColumn('patients', 'home_address')) {
+                static::$cachedAddressColumn = 'home_address';
+            } else {
+                static::$cachedAddressColumn = null;
+            }
+        }
+
+        return static::$cachedAddressColumn;
+    }
 
     protected $casts = [
         'is_unidentified' => 'boolean',
@@ -96,7 +116,10 @@ class Patient extends Model
 
     public function setHomeAddressAttribute($value): void
     {
-        $this->attributes['street'] = $value ? mb_substr(trim((string) $value), 0, 255) : null;
+        $col = static::addressColumn();
+        if ($col) {
+            $this->attributes[$col] = $value ? mb_substr(trim((string) $value), 0, 255) : null;
+        }
     }
 
     public function barangay()
