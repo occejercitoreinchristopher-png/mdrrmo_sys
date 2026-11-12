@@ -298,10 +298,24 @@ class IncidentController extends Controller
 
         $reason = $validated['reason'] ?? 'Cancelled by reporting resident';
 
-        $incident->update([
+        $updatePayload = [
             'incident_status' => 'cancelled',
-            'notes' => trim(($incident->notes ?? '') . " [Report cancelled by resident: {$reason}]"),
-        ]);
+            'resolved_at' => now(),
+        ];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('incidents', 'verification_remarks')) {
+            $updatePayload['verification_remarks'] = mb_substr("Cancelled by resident: {$reason}", 0, 100);
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('incidents', 'rejection_reason')) {
+            $updatePayload['rejection_reason'] = mb_substr("Cancelled by resident: {$reason}", 0, 500);
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('incidents', 'notes')) {
+            $updatePayload['notes'] = "Cancelled by resident: {$reason}";
+        }
+
+        $incident->update($updatePayload);
 
         try {
             event(new IncidentRejected($incident));

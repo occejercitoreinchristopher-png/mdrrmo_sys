@@ -56,6 +56,15 @@ class Incident extends Model
         $this->attributes['incident_description'] = $value;
     }
 
+    public function setNotesAttribute($value): void
+    {
+        if (\Illuminate\Support\Facades\Schema::hasColumn('incidents', 'notes')) {
+            $this->attributes['notes'] = $value;
+        } elseif (\Illuminate\Support\Facades\Schema::hasColumn('incidents', 'verification_remarks')) {
+            $this->attributes['verification_remarks'] = mb_substr((string) $value, 0, 100);
+        }
+    }
+
     public function setChiefComplaintAttribute($value): void
     {
         $existing = $this->attributes['incident_description'] ?? '';
