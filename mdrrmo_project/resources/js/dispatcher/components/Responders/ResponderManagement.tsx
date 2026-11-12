@@ -43,6 +43,34 @@ export default function ResponderManagement({ users = [], pagination = null }: R
     const [statusFilter, setStatusFilter] = useState('');
     const [selectedResponder, setSelectedResponder] = useState<any | null>(null);
     const [statusUpdating, setStatusUpdating] = useState(false);
+    const [editingBadge, setEditingBadge] = useState(false);
+    const [badgeInput, setBadgeInput] = useState('');
+    const [badgeUpdating, setBadgeUpdating] = useState(false);
+
+    const handleSelectResponder = (responder: any) => {
+        setSelectedResponder(responder);
+        const currentBadge = responder?.badge_number || responder?.badge_id || responder?.responder_profile?.badge_number || `RSP-${String(responder?.id).padStart(4, '0')}`;
+        setBadgeInput(currentBadge);
+        setEditingBadge(false);
+    };
+
+    const handleUpdateBadge = () => {
+        if (!selectedResponder || !badgeInput.trim()) return;
+        setBadgeUpdating(true);
+        router.patch(`/dispatcher/responders/${selectedResponder.id}/badge`, {
+            badge_number: badgeInput.trim(),
+        }, {
+            onFinish: () => {
+                setBadgeUpdating(false);
+                setEditingBadge(false);
+                setSelectedResponder((prev: any) => prev ? ({
+                    ...prev,
+                    badge_number: badgeInput.trim(),
+                    badge_id: badgeInput.trim(),
+                }) : null);
+            }
+        });
+    };
 
     const filtered = users.filter((u: any) => {
         const q = search.toLowerCase();
@@ -50,6 +78,10 @@ export default function ResponderManagement({ users = [], pagination = null }: R
             !q ||
             u.first_name?.toLowerCase().includes(q) ||
             u.last_name?.toLowerCase().includes(q) ||
+            u.badge_number?.toLowerCase().includes(q) ||
+            u.badge_id?.toLowerCase().includes(q) ||
+            u.responder_profile?.badge_number?.toLowerCase().includes(q) ||
+            String(u.id).includes(q) ||
             u.display_role?.toLowerCase().includes(q) ||
             u.permanent_crew?.toLowerCase().includes(q) ||
             u.role?.toLowerCase().includes(q);
@@ -176,6 +208,24 @@ export default function ResponderManagement({ users = [], pagination = null }: R
             )
         },
         {
+            key: 'badge_id',
+            header: 'Badge ID',
+            render: (_: any, row: any) => {
+                const badge = row.badge_number || row.badge_id || row.responder_profile?.badge_number || `RSP-${String(row.id).padStart(4, '0')}`;
+                return (
+                    <div className="flex flex-col">
+                        <span className="inline-flex items-center gap-1.5 font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40 w-fit">
+                            <Shield className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            {badge}
+                        </span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 pl-0.5">
+                            ID: #{row.id}
+                        </span>
+                    </div>
+                );
+            }
+        },
+        {
             key: 'permanent_crew',
             header: 'Team / Pool',
             render: (_: any, row: any) => (
@@ -263,7 +313,7 @@ export default function ResponderManagement({ users = [], pagination = null }: R
                 <Button 
                     variant="ghost" 
                     size="sm" 
-                    onClick={() => setSelectedResponder(row)}
+                    onClick={() => handleSelectResponder(row)}
                     className="text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
                 >
                     Details <ChevronRight className="w-3.5 h-3.5" />
@@ -356,6 +406,76 @@ export default function ResponderManagement({ users = [], pagination = null }: R
                                     {getStatusBadge(selectedResponder)}
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Responder Official ID & Badge Card */}
+                        <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-800/30 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                                <div className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-widest flex items-center gap-1.5">
+                                    <Shield className="w-3.5 h-3.5 text-blue-600" /> Official Badge & ID
+                                </div>
+                                {!editingBadge ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const currentBadge = selectedResponder.badge_number || selectedResponder.badge_id || selectedResponder.responder_profile?.badge_number || `RSP-${String(selectedResponder.id).padStart(4, '0')}`;
+                                            setBadgeInput(currentBadge);
+                                            setEditingBadge(true);
+                                        }}
+                                        className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                                    >
+                                        Edit Badge ID
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditingBadge(false)}
+                                        className="text-[11px] font-medium text-slate-500 hover:text-slate-700 cursor-pointer"
+                                    >
+                                        Cancel
+                                    </button>
+                                )}
+                            </div>
+
+                            {!editingBadge ? (
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-mono text-sm font-bold text-blue-800 dark:text-blue-200 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800/40 shadow-xs">
+                                            {selectedResponder.badge_number || selectedResponder.badge_id || selectedResponder.responder_profile?.badge_number || `RSP-${String(selectedResponder.id).padStart(4, '0')}`}
+                                        </span>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                            (User #{selectedResponder.id})
+                                        </span>
+                                    </div>
+                                    <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-100/70 dark:bg-blue-900/40 px-2 py-0.5 rounded-md">
+                                        Active Badge
+                                    </span>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 pt-1">
+                                    <input
+                                        type="text"
+                                        value={badgeInput}
+                                        onChange={(e) => setBadgeInput(e.target.value)}
+                                        placeholder="e.g. RSP-0012 or BADGE-1"
+                                        className="flex-1 px-3 py-1.5 text-xs font-mono font-bold rounded-xl border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        autoFocus
+                                    />
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="default"
+                                        loading={badgeUpdating}
+                                        onClick={handleUpdateBadge}
+                                        className="text-xs px-3 py-1.5 h-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
+                                    >
+                                        Save
+                                    </Button>
+                                </div>
+                            )}
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                                This Badge ID is displayed in the responder table and shown to residents in place of personal names for responder privacy.
+                            </p>
                         </div>
 
                         {/* Permanent Crew Information */}

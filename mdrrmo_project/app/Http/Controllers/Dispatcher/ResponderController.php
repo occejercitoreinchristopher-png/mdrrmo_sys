@@ -45,6 +45,12 @@ class ResponderController extends Controller
                 default => ucfirst(str_replace('_', ' ', (string) $rawRole)),
             };
 
+            $rawBadge = $user->responderProfile?->badge_number;
+            $badgeNumber = ! empty($rawBadge) ? $rawBadge : sprintf('RSP-%04d', $user->id);
+
+            $user->badge_id = $badgeNumber;
+            $user->badge_number = $badgeNumber;
+
             $isReliever = (bool) $user->responderProfile?->is_reliever;
             $rawTeam = $user->responderProfile?->team;
             $permanentCrew = $isReliever 
@@ -129,5 +135,28 @@ class ResponderController extends Controller
         };
 
         return back()->with('success', "{$user->first_name} {$user->last_name} marked as {$statusLabel}.");
+    }
+
+    public function updateBadge(Request $request, User $user)
+    {
+        $validated = $request->validate([
+            'badge_number' => 'required|string|max:50',
+        ]);
+
+        $badgeNumber = trim($validated['badge_number']);
+
+        if ($user->responderProfile) {
+            $user->responderProfile->update(['badge_number' => $badgeNumber]);
+        } else {
+            \App\Models\ResponderProfile::create([
+                'user_id' => $user->id,
+                'badge_number' => $badgeNumber,
+                'position' => in_array($user->role, ['driver', 'emt']) ? $user->role : 'driver',
+                'team' => 'Alpha',
+                'availability' => 'available',
+            ]);
+        }
+
+        return back()->with('success', "Badge ID updated to {$badgeNumber} for {$user->first_name} {$user->last_name}.");
     }
 }

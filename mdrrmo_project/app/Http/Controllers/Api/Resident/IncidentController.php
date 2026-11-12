@@ -32,12 +32,41 @@ class IncidentController extends Controller
             ->with([
                 'incidentType',
                 'images',
-                'dispatches' => fn ($q) => $q->with(['ambulance', 'teamLeader', 'driver', 'emt'])->latest(),
+                'dispatches' => fn ($q) => $q->with([
+                    'ambulance', 
+                    'teamLeader.responderProfile', 
+                    'driver.responderProfile', 
+                    'emt.responderProfile',
+                ])->latest(),
             ])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($incident) {
                 $activeDispatch = $incident->dispatches->first(fn ($d) => ! in_array($d->dispatch_status, ['completed', 'cancelled']));
+                if ($activeDispatch) {
+                    // For resident privacy and security, do not expose responder real names, only their ID / Badge ID
+                    if ($activeDispatch->driver) {
+                        $badge = $activeDispatch->driver->responderProfile?->badge_number ?: sprintf('RSP-%04d', $activeDispatch->driver->id);
+                        $activeDispatch->driver->badge_number = $badge;
+                        $activeDispatch->driver->badge_id = $badge;
+                        $activeDispatch->driver->first_name = 'Responder';
+                        $activeDispatch->driver->last_name = $badge;
+                    }
+                    if ($activeDispatch->teamLeader) {
+                        $badge = $activeDispatch->teamLeader->responderProfile?->badge_number ?: sprintf('RSP-%04d', $activeDispatch->teamLeader->id);
+                        $activeDispatch->teamLeader->badge_number = $badge;
+                        $activeDispatch->teamLeader->badge_id = $badge;
+                        $activeDispatch->teamLeader->first_name = 'Responder';
+                        $activeDispatch->teamLeader->last_name = $badge;
+                    }
+                    if ($activeDispatch->emt) {
+                        $badge = $activeDispatch->emt->responderProfile?->badge_number ?: sprintf('RSP-%04d', $activeDispatch->emt->id);
+                        $activeDispatch->emt->badge_number = $badge;
+                        $activeDispatch->emt->badge_id = $badge;
+                        $activeDispatch->emt->first_name = 'Responder';
+                        $activeDispatch->emt->last_name = $badge;
+                    }
+                }
                 $incident->setAttribute('active_dispatch', $activeDispatch);
 
                 return $incident;

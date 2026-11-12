@@ -146,6 +146,7 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
     // Responders & Users
     Route::get('/responders', [ResponderController::class, 'index'])->name('responders');
     Route::patch('/responders/{user}/status', [ResponderController::class, 'updateStatus'])->name('responders.status');
+    Route::patch('/responders/{user}/badge', [ResponderController::class, 'updateBadge'])->name('responders.badge');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');
 
     // Patients
