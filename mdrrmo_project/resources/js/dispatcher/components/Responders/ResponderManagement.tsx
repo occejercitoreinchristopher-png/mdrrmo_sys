@@ -36,10 +36,11 @@ const AVAILABILITY_OPTIONS = [
 interface ResponderManagementProps {
     users?: any[];
     pagination?: any;
+    initialSearch?: string;
 }
 
-export default function ResponderManagement({ users = [], pagination = null }: ResponderManagementProps) {
-    const [search, setSearch] = useState('');
+export default function ResponderManagement({ users = [], pagination = null, initialSearch = '' }: ResponderManagementProps) {
+    const [search, setSearch] = useState(initialSearch);
     const [statusFilter, setStatusFilter] = useState('');
     const [selectedResponder, setSelectedResponder] = useState<any | null>(null);
     const [statusUpdating, setStatusUpdating] = useState(false);
@@ -73,15 +74,21 @@ export default function ResponderManagement({ users = [], pagination = null }: R
     };
 
     const filtered = users.filter((u: any) => {
-        const q = search.toLowerCase();
+        const q = search.trim().toLowerCase();
+        const badge = (u.badge_number || u.badge_id || u.responder_profile?.badge_number || `RSP-${String(u.id).padStart(4, '0')}`).toLowerCase();
+        const rawBadge = (u.responder_profile?.badge_number || '').toLowerCase();
+        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase();
+        const idStr = String(u.id);
+
         const matchQ =
             !q ||
+            fullName.includes(q) ||
             u.first_name?.toLowerCase().includes(q) ||
             u.last_name?.toLowerCase().includes(q) ||
-            u.badge_number?.toLowerCase().includes(q) ||
-            u.badge_id?.toLowerCase().includes(q) ||
-            u.responder_profile?.badge_number?.toLowerCase().includes(q) ||
-            String(u.id).includes(q) ||
+            badge.includes(q) ||
+            rawBadge.includes(q) ||
+            idStr === q ||
+            idStr.includes(q) ||
             u.display_role?.toLowerCase().includes(q) ||
             u.permanent_crew?.toLowerCase().includes(q) ||
             u.role?.toLowerCase().includes(q);
@@ -333,7 +340,7 @@ export default function ResponderManagement({ users = [], pagination = null }: R
                 <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02]">
                     <div className="flex items-center gap-3 flex-1 max-w-lg">
                         <SearchInput 
-                            placeholder="Search by name, crew, role..." 
+                            placeholder="Search by name, Badge ID (e.g. RSP-0001), team..." 
                             value={search}
                             onChange={setSearch} 
                             className="flex-1" 

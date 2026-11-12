@@ -34,7 +34,22 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
-    protected $appends = ['name', 'birthday', 'profile_photo_url', 'position', 'is_verified'];
+    protected $appends = ['name', 'birthday', 'profile_photo_url', 'position', 'is_verified', 'badge_number', 'badge_id'];
+
+    public function getBadgeNumberAttribute(): ?string
+    {
+        if (! in_array($this->role, ['responder', 'team_leader', 'emt', 'driver'])) {
+            return null;
+        }
+
+        $raw = $this->responderProfile?->badge_number;
+        return ! empty($raw) ? $raw : sprintf('RSP-%04d', $this->id);
+    }
+
+    public function getBadgeIdAttribute(): ?string
+    {
+        return $this->badge_number;
+    }
 
     public function getIsVerifiedAttribute(): bool
     {

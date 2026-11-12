@@ -13,12 +13,35 @@ class ResponderController extends Controller
 {
     public function index(Request $request)
     {
+        $search = trim((string) $request->input('search', $request->input('q', '')));
+
         // Only fetch users with responder roles
-        $users = User::whereIn('role', ['responder', 'team_leader', 'emt', 'driver'])
+        $query = User::whereIn('role', ['responder', 'team_leader', 'emt', 'driver'])
             ->with(['responderProfile'])
-            ->withCount('tokens')
-            ->orderBy('id', 'asc')
-            ->paginate(10);
+            ->withCount('tokens');
+
+        if (! empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('id', $search)
+                    ->orWhereHas('responderProfile', function ($rq) use ($search) {
+                        $rq->where('badge_number', 'like', "%{$search}%")
+                            ->orWhere('team', 'like', "%{$search}%")
+                            ->orWhere('position', 'like', "%{$search}%");
+                    });
+
+                if (preg_match('/^rsp-0*(\d+)$/i', $search, $matches)) {
+                    $q->orWhere('id', (int) $matches[1]);
+                }
+            });
+        }
+
+        $users = $query->orderBy('id', 'asc')
+            ->paginate(25)
+            ->withQueryString();
 
         // Fetch active dispatches for these users
         $userIds = $users->pluck('id')->toArray();
@@ -95,6 +118,9 @@ class ResponderController extends Controller
                 'last_page' => $users->lastPage(),
                 'per_page' => $users->perPage(),
                 'total' => $users->total(),
+            ],
+            'filters' => [
+                'search' => $search,
             ],
         ]);
     }
