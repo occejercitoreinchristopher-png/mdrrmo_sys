@@ -559,11 +559,12 @@ class DispatchController extends Controller
 
             if ($dispatch->incident) {
                 $isPrank = ($validated['category'] === 'prank');
+                $fullReason = '[Reported on Scene by Responders] '.$validated['reason'];
                 $dispatch->incident->update([
                     'incident_status' => 'rejected',
                     'is_prank' => $isPrank,
                     'rejection_category' => $validated['category'],
-                    'rejection_reason' => '[Reported on Scene by Responders] '.$validated['reason'],
+                    'rejection_reason' => mb_substr($fullReason, 0, 500),
                     'resolved_at' => now(),
                     'verified_by' => $user->id,
                 ]);
