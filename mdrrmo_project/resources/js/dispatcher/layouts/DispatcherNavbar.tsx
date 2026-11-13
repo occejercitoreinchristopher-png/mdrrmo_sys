@@ -1,12 +1,10 @@
-import { Menu, X, Bell, LogOut, PhoneCall, Clock, Volume2 } from 'lucide-react';
+import { Menu, X, Bell, LogOut, PhoneCall, Clock } from 'lucide-react';
 import { usePage, router, Link } from '@inertiajs/react';
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect } from 'react';
 import ThemeToggle from '@/shared/components/ThemeToggle';
-import { AlarmContext } from '../contexts/AlarmContext';
 
 export default function DispatcherNavbar({ collapsed, onToggle }) {
     const { auth } = usePage().props;
-    const { isPlaying, testAlarm } = useContext(AlarmContext);
     const [notifOpen, setNotifOpen] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [mounted, setMounted] = useState(false);
@@ -82,20 +80,6 @@ export default function DispatcherNavbar({ collapsed, onToggle }) {
 
             {/* Right Section: Alerts, Theme Toggle, Profile & Logout */}
             <div className="flex items-center gap-2 sm:gap-3">
-                {/* Siren Audio Test Button */}
-                <button
-                    onClick={testAlarm}
-                    className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                        isPlaying
-                            ? 'bg-red-500 text-white border-red-600 animate-pulse shadow-md shadow-red-500/30'
-                            : 'bg-slate-100/80 hover:bg-slate-200/80 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-white/10'
-                    }`}
-                    title={isPlaying ? 'Stop siren test' : 'Test emergency audio siren'}
-                >
-                    <Volume2 className={`w-3.5 h-3.5 ${isPlaying ? 'text-white animate-bounce' : 'text-[#F61509]'}`} />
-                    <span className="hidden lg:inline">{isPlaying ? 'Stop Siren' : 'Test Siren'}</span>
-                </button>
-
                 {/* Alert bell */}
                 <div className="relative">
                     <button
