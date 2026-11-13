@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Resident;
 
+use App\Events\IncidentCancelled;
 use App\Events\IncidentCreated;
 use App\Events\IncidentRejected;
 use App\Events\ResidentCalledHotline;
@@ -318,6 +319,7 @@ class IncidentController extends Controller
         $incident->update($updatePayload);
 
         try {
+            event(new IncidentCancelled($incident));
             event(new IncidentRejected($incident));
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('Broadcast error on resident incident cancellation: ' . $e->getMessage());

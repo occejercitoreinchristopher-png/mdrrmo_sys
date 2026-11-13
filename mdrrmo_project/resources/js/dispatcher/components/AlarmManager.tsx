@@ -55,16 +55,41 @@ export default function AlarmManager() {
                 console.error('[AlarmManager] Channel subscription error:', err);
             });
 
+            const handleIncidentCancelled = (e: any) => {
+                const incident = e?.incident || e;
+                if (!incident) return;
+
+                if (activeAlarm && (activeAlarm.id === incident.id || activeAlarm.incident_number === incident.incident_number)) {
+                    acknowledgeAlarm();
+                }
+
+                toast.info(`ℹ️ Emergency report #${incident.incident_number || incident.id} was cancelled by resident.`, {
+                    duration: 6000,
+                });
+
+                router.reload();
+            };
+
             channel.listen('IncidentCreated', handleIncidentCreated);
             channel.listen('.IncidentCreated', handleIncidentCreated);
             channel.listen('App\\Events\\IncidentCreated', handleIncidentCreated);
             channel.listen('.App\\Events\\IncidentCreated', handleIncidentCreated);
+
+            channel.listen('IncidentCancelled', handleIncidentCancelled);
+            channel.listen('.IncidentCancelled', handleIncidentCancelled);
+            channel.listen('IncidentRejected', handleIncidentCancelled);
+            channel.listen('.IncidentRejected', handleIncidentCancelled);
 
             return () => {
                 channel.stopListening('IncidentCreated');
                 channel.stopListening('.IncidentCreated');
                 channel.stopListening('App\\Events\\IncidentCreated');
                 channel.stopListening('.App\\Events\\IncidentCreated');
+
+                channel.stopListening('IncidentCancelled');
+                channel.stopListening('.IncidentCancelled');
+                channel.stopListening('IncidentRejected');
+                channel.stopListening('.IncidentRejected');
             };
         }
     }, [triggerAlarm]);

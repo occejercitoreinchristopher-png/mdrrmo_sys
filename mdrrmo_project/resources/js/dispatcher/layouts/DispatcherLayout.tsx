@@ -22,6 +22,8 @@ export default function DispatcherLayout({ children, title }) {
 
             const events = [
                 { name: 'IncidentVerified', msg: 'Incident has been verified.' },
+                { name: 'IncidentCancelled', msg: 'An emergency report was cancelled by the resident.' },
+                { name: 'IncidentRejected', msg: 'An incident report was rejected or cancelled.' },
                 { name: 'DispatchCreated', msg: 'New dispatch created successfully.' },
                 { name: 'DispatchAccepted', msg: 'A responder has accepted the dispatch.' },
                 { name: 'DispatchStatusUpdated', msg: 'Dispatch status updated.' },

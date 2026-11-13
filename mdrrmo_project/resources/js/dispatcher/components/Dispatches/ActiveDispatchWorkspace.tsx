@@ -82,6 +82,10 @@ export default function ActiveDispatchWorkspace({
             channel.listen('.IncidentVerified', refreshData);
             channel.listen('IncidentCreated', refreshData);
             channel.listen('.IncidentCreated', refreshData);
+            channel.listen('IncidentCancelled', refreshData);
+            channel.listen('.IncidentCancelled', refreshData);
+            channel.listen('IncidentRejected', refreshData);
+            channel.listen('.IncidentRejected', refreshData);
             channel.listen('DispatchCreated', refreshData);
             channel.listen('.DispatchCreated', refreshData);
             channel.listen('DispatchCompleted', refreshData);
@@ -121,6 +125,10 @@ export default function ActiveDispatchWorkspace({
                 channel.stopListening('.IncidentVerified');
                 channel.stopListening('IncidentCreated');
                 channel.stopListening('.IncidentCreated');
+                channel.stopListening('IncidentCancelled');
+                channel.stopListening('.IncidentCancelled');
+                channel.stopListening('IncidentRejected');
+                channel.stopListening('.IncidentRejected');
                 channel.stopListening('DispatchCreated');
                 channel.stopListening('.DispatchCreated');
                 channel.stopListening('DispatchCompleted');
