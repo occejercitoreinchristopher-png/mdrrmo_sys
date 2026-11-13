@@ -1,10 +1,13 @@
-import React, { useContext, useEffect } from 'react';
+import React, { useContext, useEffect, useRef } from 'react';
 import { AlarmContext } from '../contexts/AlarmContext';
 import { AlertTriangle, MapPin, Clock, Volume2 } from 'lucide-react';
 import { router } from '@inertiajs/react';
+import { toast } from 'sonner';
 
 export default function AlarmManager() {
     const { activeAlarm, triggerAlarm, acknowledgeAlarm } = useContext(AlarmContext);
+    const lastHandledIdRef = useRef<number | string | null>(null);
+    const lastHandledTimeRef = useRef<number>(0);
 
     useEffect(() => {
         // @ts-ignore
@@ -13,7 +16,16 @@ export default function AlarmManager() {
             const channel = window.Echo.private('dispatcher');
             
             const handleIncidentCreated = (e: any) => {
-                const incident = e.incident || e;
+                const incident = e?.incident || e;
+                if (!incident) return;
+
+                const incidentId = incident.id || incident.incident_number;
+                const now = Date.now();
+                if (incidentId && incidentId === lastHandledIdRef.current && (now - lastHandledTimeRef.current) < 3000) {
+                    return;
+                }
+                lastHandledIdRef.current = incidentId;
+                lastHandledTimeRef.current = now;
 
                 // Backend & Frontend Guard: Phone/SIM incidents and non-pending incidents must never sound the alarm
                 if (incident.incident_status && incident.incident_status !== 'pending') {
@@ -25,6 +37,11 @@ export default function AlarmManager() {
                     return;
                 }
 
+                toast.error('🚨 New Emergency Incident Reported!', {
+                    description: `${incident.incident_number ? incident.incident_number + ' • ' : ''}${incident.incident_type?.name || incident.incidentType?.name || 'Emergency Request'}`,
+                    duration: 10000,
+                });
+
                 triggerAlarm(incident);
                 
                 // Still reload the router so the new incident appears in the lists
@@ -32,9 +49,15 @@ export default function AlarmManager() {
             };
 
             channel.listen('IncidentCreated', handleIncidentCreated);
+            channel.listen('.IncidentCreated', handleIncidentCreated);
+            channel.listen('App\\Events\\IncidentCreated', handleIncidentCreated);
+            channel.listen('.App\\Events\\IncidentCreated', handleIncidentCreated);
 
             return () => {
                 channel.stopListening('IncidentCreated');
+                channel.stopListening('.IncidentCreated');
+                channel.stopListening('App\\Events\\IncidentCreated');
+                channel.stopListening('.App\\Events\\IncidentCreated');
             };
         }
     }, [triggerAlarm]);
@@ -91,7 +114,7 @@ export default function AlarmManager() {
                         <div className="flex flex-col">
                             <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1">Incident Type</span>
                             <span className="text-lg font-bold text-slate-900 dark:text-white">
-                                {activeAlarm.incident_type?.name || activeAlarm.type || 'Emergency Request'}
+                                {activeAlarm.incident_type?.name || activeAlarm.incidentType?.name || activeAlarm.type || 'Emergency Request'}
                             </span>
                         </div>
                         
@@ -107,7 +130,7 @@ export default function AlarmManager() {
                             <div className="flex items-start gap-2">
                                 <MapPin className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
                                 <span className="text-base font-medium text-slate-800 dark:text-slate-200">
-                                    {activeAlarm.barangay || activeAlarm.location_address || 'Location provided in details'}
+                                    {activeAlarm.barangay || activeAlarm.place_of_incident || activeAlarm.incident_address || activeAlarm.location_address || 'Location provided in details'}
                                 </span>
                             </div>
                         </div>

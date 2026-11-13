@@ -22,6 +22,7 @@ export const AlarmProvider = ({ children }: { children: React.ReactNode }) => {
     const [activeAlarm, setActiveAlarm] = useState<any>(null);
     const [isPlaying, setIsPlaying] = useState<boolean>(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const directAudioRef = useRef<HTMLAudioElement | null>(null);
     const audioCtxRef = useRef<AudioContext | null>(null);
     const isAudioSetupRef = useRef<boolean>(false);
     const fallbackIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -113,6 +114,33 @@ export const AlarmProvider = ({ children }: { children: React.ReactNode }) => {
 
     const testTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+    const playDirectAudio = useCallback(() => {
+        try {
+            if (!directAudioRef.current) {
+                const direct = new Audio('/sounds/dispatcher_alarm.mp3');
+                direct.loop = true;
+                direct.preload = 'auto';
+                directAudioRef.current = direct;
+            }
+            directAudioRef.current.currentTime = 0;
+            directAudioRef.current.volume = 1.0;
+            const promise = directAudioRef.current.play();
+            if (promise !== undefined) {
+                promise.catch((err) => {
+                    console.warn('Direct audio play blocked:', err);
+                    playFallbackSynthTone();
+                    if (fallbackIntervalRef.current) clearInterval(fallbackIntervalRef.current);
+                    fallbackIntervalRef.current = setInterval(playFallbackSynthTone, 650);
+                });
+            }
+        } catch (e) {
+            console.error('Direct audio error:', e);
+            playFallbackSynthTone();
+            if (fallbackIntervalRef.current) clearInterval(fallbackIntervalRef.current);
+            fallbackIntervalRef.current = setInterval(playFallbackSynthTone, 650);
+        }
+    }, [playFallbackSynthTone]);
+
     const startSound = useCallback(() => {
         initAudioGraph();
 
@@ -122,24 +150,22 @@ export const AlarmProvider = ({ children }: { children: React.ReactNode }) => {
 
         setIsPlaying(true);
 
-        if (audioRef.current) {
+        // If Web Audio context is active and running, use the amplified audio pipeline
+        if (audioRef.current && audioCtxRef.current && audioCtxRef.current.state === 'running') {
             audioRef.current.currentTime = 0;
             audioRef.current.volume = 1.0;
             const playPromise = audioRef.current.play();
             if (playPromise !== undefined) {
                 playPromise.catch((err) => {
-                    console.warn('Audio play blocked or waiting for user interaction:', err);
-                    playFallbackSynthTone();
-                    if (fallbackIntervalRef.current) clearInterval(fallbackIntervalRef.current);
-                    fallbackIntervalRef.current = setInterval(playFallbackSynthTone, 650);
+                    console.warn('Amplified audio blocked, trying direct audio:', err);
+                    playDirectAudio();
                 });
             }
         } else {
-            playFallbackSynthTone();
-            if (fallbackIntervalRef.current) clearInterval(fallbackIntervalRef.current);
-            fallbackIntervalRef.current = setInterval(playFallbackSynthTone, 650);
+            // AudioContext is suspended or unavailable: play standard HTML5 audio directly
+            playDirectAudio();
         }
-    }, [initAudioGraph, playFallbackSynthTone]);
+    }, [initAudioGraph, playDirectAudio]);
 
     const stopSound = useCallback(() => {
         setIsPlaying(false);
@@ -150,6 +176,10 @@ export const AlarmProvider = ({ children }: { children: React.ReactNode }) => {
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
+        }
+        if (directAudioRef.current) {
+            directAudioRef.current.pause();
+            directAudioRef.current.currentTime = 0;
         }
         if (fallbackIntervalRef.current) {
             clearInterval(fallbackIntervalRef.current);
@@ -187,6 +217,15 @@ export const AlarmProvider = ({ children }: { children: React.ReactNode }) => {
     useEffect(() => {
         const unlockAudio = () => {
             initAudioGraph();
+            if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+                audioCtxRef.current.resume().catch(() => {});
+            }
+            if (!directAudioRef.current) {
+                const direct = new Audio('/sounds/dispatcher_alarm.mp3');
+                direct.loop = true;
+                direct.preload = 'auto';
+                directAudioRef.current = direct;
+            }
             window.removeEventListener('click', unlockAudio);
             window.removeEventListener('keydown', unlockAudio);
             window.removeEventListener('touchstart', unlockAudio);

@@ -20,33 +20,42 @@ export default function DispatcherLayout({ children, title }) {
                 router.reload();
             };
 
-            channel.listen('IncidentVerified', () => handleEvent('Incident has been verified.'));
-            channel.listen('DispatchCreated', () => handleEvent('New dispatch created successfully.'));
-            channel.listen('DispatchAccepted', () => handleEvent('A responder has accepted the dispatch.'));
-            channel.listen('DispatchStatusUpdated', () => handleEvent('Dispatch status updated.'));
-            // AmbulanceLocationUpdated is handled specifically by LiveMonitoringMap without page reload
-            channel.listen('ResponderStatusUpdated', () => handleEvent('A responder updated their status.'));
-            channel.listen('LeaveRequestSubmitted', () => handleEvent('New leave request submitted.'));
-            channel.listen('LeaveApproved', () => handleEvent('Leave request approved.'));
-            channel.listen('PatientCareRecordSubmitted', () => handleEvent('New Patient Care Record submitted.'));
-            channel.listen('DispatchCompleted', () => handleEvent('A dispatch has been completed.'));
-            channel.listen('ResidentCalledResponder', (e: any) => handleEvent(`Resident ${e?.resident_name || ''} is calling the responder for Incident #${e?.incident_id || 'Unknown'}! Location updated.`));
-            channel.listen('ResidentCalledHotline', (e: any) => handleEvent(`Resident ${e?.resident_name || ''} is calling the MDRRMO Hotline! Location: [${e?.latitude}, ${e?.longitude}]`));
+            const events = [
+                { name: 'IncidentVerified', msg: 'Incident has been verified.' },
+                { name: 'DispatchCreated', msg: 'New dispatch created successfully.' },
+                { name: 'DispatchAccepted', msg: 'A responder has accepted the dispatch.' },
+                { name: 'DispatchStatusUpdated', msg: 'Dispatch status updated.' },
+                { name: 'ResponderStatusUpdated', msg: 'A responder updated their status.' },
+                { name: 'LeaveRequestSubmitted', msg: 'New leave request submitted.' },
+                { name: 'LeaveApproved', msg: 'Leave request approved.' },
+                { name: 'PatientCareRecordSubmitted', msg: 'New Patient Care Record submitted.' },
+                { name: 'DispatchCompleted', msg: 'A dispatch has been completed.' },
+            ];
+
+            events.forEach(({ name, msg }) => {
+                channel.listen(name, () => handleEvent(msg));
+                channel.listen(`.${name}`, () => handleEvent(msg));
+            });
+
+            const handleResidentCallResponder = (e: any) => handleEvent(`Resident ${e?.resident_name || ''} is calling the responder for Incident #${e?.incident_id || 'Unknown'}! Location updated.`);
+            channel.listen('ResidentCalledResponder', handleResidentCallResponder);
+            channel.listen('.ResidentCalledResponder', handleResidentCallResponder);
+
+            const handleResidentCallHotline = (e: any) => handleEvent(`Resident ${e?.resident_name || ''} is calling the MDRRMO Hotline! Location: [${e?.latitude}, ${e?.longitude}]`);
+            channel.listen('ResidentCalledHotline', handleResidentCallHotline);
+            channel.listen('.ResidentCalledHotline', handleResidentCallHotline);
 
             return () => {
-                channel.stopListening('IncidentVerified');
-                channel.stopListening('DispatchCreated');
-                channel.stopListening('DispatchAccepted');
-                channel.stopListening('DispatchStatusUpdated');
+                events.forEach(({ name }) => {
+                    channel.stopListening(name);
+                    channel.stopListening(`.${name}`);
+                });
                 channel.stopListening('AmbulanceLocationUpdated');
                 channel.stopListening('.AmbulanceLocationUpdated');
-                channel.stopListening('ResponderStatusUpdated');
-                channel.stopListening('LeaveRequestSubmitted');
-                channel.stopListening('LeaveApproved');
-                channel.stopListening('PatientCareRecordSubmitted');
-                channel.stopListening('DispatchCompleted');
                 channel.stopListening('ResidentCalledResponder');
+                channel.stopListening('.ResidentCalledResponder');
                 channel.stopListening('ResidentCalledHotline');
+                channel.stopListening('.ResidentCalledHotline');
             };
         }
     }, []);

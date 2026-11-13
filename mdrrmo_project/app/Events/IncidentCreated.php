@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Models\Incident;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -30,6 +31,32 @@ class IncidentCreated implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        return is_array(new PrivateChannel('dispatcher')) ? new PrivateChannel('dispatcher') : [new PrivateChannel('dispatcher')];
+        return [new PrivateChannel('dispatcher')];
+    }
+
+    public function broadcastAs(): string
+    {
+        return 'IncidentCreated';
+    }
+
+    public function broadcastWith(): array
+    {
+        $this->incident->loadMissing([
+            'incidentType',
+            'resident.residentProfile.barangay',
+            'images',
+        ]);
+
+        if (!isset($this->incident->reporter_prank_history)) {
+            $this->incident->reporter_prank_history = Incident::getPrankHistoryForReporter(
+                $this->incident->resident_id,
+                $this->incident->resident?->phone_number
+            );
+        }
+
+        return [
+            'incident' => $this->incident,
+        ];
     }
 }
+
