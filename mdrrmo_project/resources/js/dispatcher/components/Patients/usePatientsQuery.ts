@@ -29,8 +29,9 @@ export function usePatientsQuery({
     debounceMs = 300,
     enabled = true,
 }: UsePatientsQueryOptions = {}) {
-    const [search, setSearch] = useState('');
-    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const initialSearchParam = typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('search') || '') : '';
+    const [search, setSearch] = useState(initialSearchParam);
+    const [debouncedSearch, setDebouncedSearch] = useState(initialSearchParam);
     const debounceTimerRef = useRef<any>(null);
 
     // Handle debouncing

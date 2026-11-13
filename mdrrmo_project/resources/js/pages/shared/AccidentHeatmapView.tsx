@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { useState, useRef, useEffect, useMemo, Fragment } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
 import Map, { Marker, Popup, Source, Layer, type MapRef } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import ReactApexChart from 'react-apexcharts';
@@ -33,17 +33,31 @@ import {
     Building2,
     AlertCircle,
     Compass,
-    Radio
+    Radio,
+    Phone,
+    User,
+    Truck,
+    Camera,
+    Copy,
+    Check,
+    FileText,
+    Smartphone,
+    PhoneCall,
+    UserCheck,
+    HeartPulse,
+    Users
 } from 'lucide-react';
 
 interface IncidentRecord {
     id: number;
     incident_id: number;
+    incident_number?: string;
     incident_type: string;
     incident_type_id: number;
     status: string;
     priority: string;
     address: string;
+    purok_or_location?: string;
     barangay: string;
     description: string;
     chief_complaint: string;
@@ -52,21 +66,73 @@ interface IncidentRecord {
     has_coords: boolean;
     created_at: string | null;
     formatted_date: string;
+    incident_date?: string;
+    incident_time?: string;
     time_ago: string;
+    caller_name?: string;
+    caller_phone?: string;
+    report_source?: string;
+    verified_by?: string | null;
+    verification_remarks?: string | null;
+    reported_at?: string | null;
+    verified_at?: string | null;
+    resolved_at?: string | null;
+    images?: Array<{
+        id: number;
+        image_path: string;
+        url: string;
+    }>;
+    dispatches?: Array<{
+        id: number;
+        status: string;
+        ambulance_unit: string;
+        ambulance_plate: string;
+        driver_name: string;
+        crew_members: string[];
+        pcr_patient?: string | null;
+        pcr_hospital?: string | null;
+        pcr_condition?: string | null;
+        dispatched_at?: string | null;
+        arrived_at?: string | null;
+        completed_at?: string | null;
+    }>;
+    patients?: Array<{
+        id: number;
+        pcr_id: number;
+        patient_id?: number | null;
+        name: string;
+        gender?: string;
+        birthdate?: string | null;
+        age?: number | null;
+        address?: string;
+        is_unidentified?: boolean;
+        chief_complaint?: string;
+        destination_hospital?: string | null;
+        disposition?: string;
+        ambulance_unit?: string | null;
+        responders?: string | null;
+    }>;
 }
 
 interface HotspotRecord {
     cluster_key: string;
+    cluster_id?: string;
     latitude: number;
     longitude: number;
+    seed_latitude?: number;
+    seed_longitude?: number;
     location_name: string;
     barangay: string;
     incident_count: number;
     most_common_type: string;
+    classification?: string;
     intensity: 'Critical' | 'High' | 'Moderate';
     intensity_class: 'critical' | 'high' | 'moderate';
     color: string;
+    badge_text?: string;
+    radius_meters?: number;
     incident_ids: number[];
+    incidents?: IncidentRecord[];
     recent_incidents: Array<{
         id: number;
         type: string;
@@ -170,18 +236,96 @@ export default function AccidentHeatmapView({
     const [selectedTypeId, setSelectedTypeId] = useState(filters.incident_type_id ? String(filters.incident_type_id) : 'all');
     const [selectedDatePreset, setSelectedDatePreset] = useState<string>('all');
     const [selectedStatus, setSelectedStatus] = useState<string>(filters.status || 'all');
-    const [minThreshold, setMinThreshold] = useState<number>(filters.min_threshold ?? 2);
+    const [minThreshold, setMinThreshold] = useState<number>(filters.min_threshold ?? 1);
+
+    // Keep local filter state synced if server props update
+    useEffect(() => {
+        if (filters.incident_type_id !== undefined && filters.incident_type_id !== null) {
+            setSelectedTypeId(String(filters.incident_type_id));
+        }
+        if (filters.barangay !== undefined && filters.barangay !== null) {
+            setSelectedBarangay(filters.barangay);
+        }
+        if (filters.status !== undefined && filters.status !== null) {
+            setSelectedStatus(filters.status);
+        }
+        if (filters.min_threshold !== undefined && filters.min_threshold !== null) {
+            setMinThreshold(Number(filters.min_threshold));
+        }
+    }, [filters.incident_type_id, filters.barangay, filters.status, filters.min_threshold]);
 
     // Map view and layer controls
     const [viewState, setViewState] = useState(OPOL_CENTER);
     const [mapStyle, setMapStyle] = useState<'dark' | 'satellite'>('dark');
-    const [showHeatmapLayer, setShowHeatmapLayer] = useState(true);
     const [showMarkers, setShowMarkers] = useState(true);
     const [showBarangayBoundaries, setShowBarangayBoundaries] = useState(true);
     const [popupInfo, setPopupInfo] = useState<any | null>(null);
     const [selectedIncidentModal, setSelectedIncidentModal] = useState<IncidentRecord | null>(null);
+    const [selectedClusterModal, setSelectedClusterModal] = useState<HotspotRecord | null>(null);
     const [selectedHotspot, setSelectedHotspot] = useState<HotspotRecord | null>(null);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [copiedCoord, setCopiedCoord] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
+
+    // Realtime Automatic Updates via WebSocket (Echo private-dispatcher channel) & Polling Heartbeat
+    useEffect(() => {
+        if (typeof window === 'undefined' || !(window as any).Echo) return;
+
+        // @ts-ignore
+        const channel = (window as any).Echo.private('dispatcher');
+        if (!channel) return;
+
+        const handleRealtimeIncidentUpdate = (eventName: string, payload?: any) => {
+            console.log(`[Incident Heatmap] Realtime event: ${eventName}, automatically recalculating 20m clusters...`, payload);
+            // Refresh data from server while keeping map pan/zoom position and interactive state
+            router.reload({
+                only: ['incidents', 'hotspots', 'analytics', 'totalIncidentsCount', 'validCoordinatesCount'],
+                data: {
+                    barangay: selectedBarangay,
+                    incident_type_id: selectedTypeId,
+                    status: selectedStatus,
+                    min_threshold: minThreshold,
+                },
+            });
+        };
+
+        const liveEvents = [
+            'IncidentCreated',
+            'IncidentVerified',
+            'IncidentCancelled',
+            'IncidentRejected',
+            'IncidentUpdated',
+            'DispatchCreated',
+            'DispatchCompleted',
+            'ResidentCalledResponder',
+        ];
+
+        liveEvents.forEach((ev) => {
+            channel.listen(ev, (data: any) => handleRealtimeIncidentUpdate(ev, data));
+            channel.listen(`.${ev}`, (data: any) => handleRealtimeIncidentUpdate(`.${ev}`, data));
+        });
+
+        // 30-second automated heartbeat refresh to guarantee zero stale data
+        const heartbeat = setInterval(() => {
+            router.reload({
+                only: ['incidents', 'hotspots', 'analytics', 'totalIncidentsCount', 'validCoordinatesCount'],
+                data: {
+                    barangay: selectedBarangay,
+                    incident_type_id: selectedTypeId,
+                    status: selectedStatus,
+                    min_threshold: minThreshold,
+                },
+            });
+        }, 30000);
+
+        return () => {
+            liveEvents.forEach((ev) => {
+                channel.stopListening(ev);
+                channel.stopListening(`.${ev}`);
+            });
+            clearInterval(heartbeat);
+        };
+    }, [selectedBarangay, selectedTypeId, selectedStatus, minThreshold]);
 
     // Auto-resize Mapbox canvas whenever container geometry changes
     useEffect(() => {
@@ -203,11 +347,16 @@ export default function AccidentHeatmapView({
 
     // Handle filter application via Inertia router
     const applyFilters = (overrides: Record<string, any> = {}) => {
+        const nextBarangay = overrides.barangay !== undefined ? overrides.barangay : selectedBarangay;
+        const nextTypeId = overrides.incident_type_id !== undefined ? overrides.incident_type_id : selectedTypeId;
+        const nextStatus = overrides.status !== undefined ? overrides.status : selectedStatus;
+        const nextThreshold = overrides.min_threshold !== undefined ? overrides.min_threshold : minThreshold;
+
         const params: Record<string, any> = {
-            barangay: overrides.barangay !== undefined ? overrides.barangay : selectedBarangay,
-            incident_type_id: overrides.incident_type_id !== undefined ? overrides.incident_type_id : selectedTypeId,
-            status: overrides.status !== undefined ? overrides.status : selectedStatus,
-            min_threshold: overrides.min_threshold !== undefined ? overrides.min_threshold : minThreshold,
+            barangay: nextBarangay,
+            incident_type_id: nextTypeId,
+            status: nextStatus,
+            min_threshold: nextThreshold,
         };
 
         const preset = overrides.datePreset !== undefined ? overrides.datePreset : selectedDatePreset;
@@ -223,10 +372,15 @@ export default function AccidentHeatmapView({
             params.date_to = now.toISOString().split('T')[0];
         }
 
-        const currentRoute = userRole === 'admin' ? '/admin/accident-heatmap' : '/dispatcher/accident-heatmap';
+        // Always post to current URL path (whether /admin/accident-heatmap or /dispatcher/accident-heatmap)
+        const currentRoute = typeof window !== 'undefined' && window.location.pathname
+            ? window.location.pathname
+            : (userRole === 'admin' ? '/admin/accident-heatmap' : '/dispatcher/accident-heatmap');
+
         router.get(currentRoute, params, {
             preserveState: true,
             preserveScroll: true,
+            replace: true,
         });
     };
 
@@ -235,23 +389,114 @@ export default function AccidentHeatmapView({
         setSelectedTypeId('all');
         setSelectedDatePreset('all');
         setSelectedStatus('all');
-        setMinThreshold(2);
+        setMinThreshold(1);
         setSearchQuery('');
         setSelectedHotspot(null);
         setPopupInfo(null);
 
-        const currentRoute = userRole === 'admin' ? '/admin/accident-heatmap' : '/dispatcher/accident-heatmap';
+        const currentRoute = typeof window !== 'undefined' && window.location.pathname
+            ? window.location.pathname
+            : (userRole === 'admin' ? '/admin/accident-heatmap' : '/dispatcher/accident-heatmap');
+
         router.get(currentRoute, {}, {
             preserveState: true,
             preserveScroll: true,
+            replace: true,
         });
     };
 
-    // Filter recent incidents panel list locally by search query
-    const filteredRecentIncidents = useMemo(() => {
-        if (!searchQuery.trim()) return incidents;
-        const q = searchQuery.toLowerCase().trim();
+    // 1. Reactive Active Incidents: strictly filters incidents by selected type and barangay
+    const activeIncidents = useMemo(() => {
         return incidents.filter((inc) => {
+            // Exclude cancelled and rejected reports from heatmap
+            const st = (inc.status || '').toLowerCase();
+            if (st === 'cancelled' || st === 'rejected') {
+                return false;
+            }
+
+            // Emergency Type Filter
+            if (selectedTypeId && selectedTypeId !== 'all') {
+                if (String(inc.incident_type_id) !== String(selectedTypeId)) {
+                    return false;
+                }
+            }
+
+            // Barangay Filter
+            if (selectedBarangay && selectedBarangay !== 'all') {
+                const incBrgy = (inc.barangay || '').replace(/[\s-]/g, '').toLowerCase();
+                const targetBrgy = selectedBarangay.replace(/[\s-]/g, '').toLowerCase();
+                if (incBrgy !== targetBrgy && !incBrgy.includes(targetBrgy) && !targetBrgy.includes(incBrgy)) {
+                    return false;
+                }
+            }
+
+            // Status Filter
+            if (selectedStatus && selectedStatus !== 'all') {
+                if (inc.status !== selectedStatus) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }, [incidents, selectedTypeId, selectedBarangay, selectedStatus]);
+
+    // 2. Reactive Active Hotspots: dynamically recalculates/filters 20m clusters based on active matching incidents
+    const activeHotspots = useMemo(() => {
+        const isFilterActive =
+            (selectedTypeId && selectedTypeId !== 'all') ||
+            (selectedBarangay && selectedBarangay !== 'all') ||
+            (selectedStatus && selectedStatus !== 'all');
+
+        if (!isFilterActive) {
+            return hotspots.filter((h) => h.incident_count >= minThreshold);
+        }
+
+        const activeIncidentIds = new Set(activeIncidents.map((i) => i.id));
+
+        return hotspots
+            .map((spot) => {
+                const matchedIds = (spot.incident_ids || []).filter((id) => activeIncidentIds.has(id));
+                if (matchedIds.length === 0) return null;
+
+                const count = matchedIds.length;
+                const isRed = count >= 4;
+                const isOrange = count === 3;
+                const color = isRed ? '#EF4444' : isOrange ? '#F97316' : '#EAB308';
+                const classification = isRed
+                    ? 'High Incident Concentration'
+                    : isOrange
+                    ? 'Moderate Incident Concentration'
+                    : 'Low Incident Concentration';
+                const intensity = isRed ? 'Critical' : isOrange ? 'High' : 'Moderate';
+                const intensityClass = isRed ? 'critical' : isOrange ? 'high' : 'moderate';
+                const badgeText = isRed ? 'High (4+)' : isOrange ? 'Moderate (3)' : 'Low (1-2)';
+
+                const filteredContainedIncidents = spot.incidents
+                    ? spot.incidents.filter((i) => activeIncidentIds.has(i.id))
+                    : undefined;
+
+                return {
+                    ...spot,
+                    incident_count: count,
+                    incident_ids: matchedIds,
+                    incidents: filteredContainedIncidents,
+                    color,
+                    classification,
+                    intensity,
+                    intensity_class: intensityClass,
+                    badge_text: badgeText,
+                    meets_threshold: count >= minThreshold,
+                } as HotspotRecord;
+            })
+            .filter((spot): spot is HotspotRecord => spot !== null && spot.incident_count >= minThreshold);
+    }, [hotspots, activeIncidents, selectedTypeId, selectedBarangay, selectedStatus, minThreshold]);
+
+    // Filter recent incidents panel list locally by search query from active filtered incidents
+    const filteredRecentIncidents = useMemo(() => {
+        if (!searchQuery.trim()) return activeIncidents;
+        const q = searchQuery.toLowerCase().trim();
+        return activeIncidents.filter((inc) => {
             return (
                 String(inc.id).includes(q) ||
                 inc.incident_type.toLowerCase().includes(q) ||
@@ -261,36 +506,31 @@ export default function AccidentHeatmapView({
                 inc.status.toLowerCase().includes(q)
             );
         });
-    }, [incidents, searchQuery]);
+    }, [activeIncidents, searchQuery]);
 
-    // GeoJSON Feature Collection for Mapbox Heatmap Layer
-    const incidentsGeojson = useMemo(() => {
-        const features = incidents
-            .filter((i) => i.has_coords && i.latitude !== null && i.longitude !== null)
-            .map((i) => ({
-                type: 'Feature' as const,
-                properties: {
-                    id: i.id,
-                    incident_type: i.incident_type,
-                    address: i.address,
-                    barangay: i.barangay,
-                    status: i.status,
-                    priority: i.priority,
-                    formatted_date: i.formatted_date,
-                    // Weight multiplier: critical incidents have slightly higher heat weight
-                    weight: i.priority === 'Critical' ? 1.5 : i.priority === 'High' ? 1.2 : 1.0,
-                },
-                geometry: {
-                    type: 'Point' as const,
-                    coordinates: [i.longitude as number, i.latitude as number],
-                },
-            }));
+    // GeoJSON Feature Collection for 20-Meter Cluster Monochromatic Radial Glows from activeHotspots
+    const clustersGeojson = useMemo(() => {
+        const features = activeHotspots.map((spot) => ({
+            type: 'Feature' as const,
+            properties: {
+                cluster_key: spot.cluster_key,
+                color: spot.color,
+                incident_count: spot.incident_count,
+                classification: spot.classification,
+                location_name: spot.location_name,
+                is_red: spot.incident_count >= 4,
+            },
+            geometry: {
+                type: 'Point' as const,
+                coordinates: [spot.longitude, spot.latitude],
+            },
+        }));
 
         return {
             type: 'FeatureCollection' as const,
             features,
         };
-    }, [incidents]);
+    }, [activeHotspots]);
 
     // Fly to specific incident on the map
     const focusIncidentOnMap = (inc: IncidentRecord) => {
@@ -309,13 +549,14 @@ export default function AccidentHeatmapView({
         });
     };
 
-    // Fly to specific hotspot cluster
+    // Fly to specific 20-meter cluster and inspect its contained incidents
     const focusHotspotOnMap = (spot: HotspotRecord) => {
         setSelectedHotspot(spot);
+        setSelectedClusterModal(spot);
         mapRef.current?.flyTo({
             center: [spot.longitude, spot.latitude],
-            zoom: 15.2,
-            duration: 1300,
+            zoom: 16.5,
+            duration: 1200,
             essential: true,
         });
         setPopupInfo({
@@ -338,49 +579,70 @@ export default function AccidentHeatmapView({
         });
     };
 
-    // Color mapper for emergency incident types
+    // Color mapper for emergency incident types (Strict Color Coding: Fire = Red, Medical = Blue, Vehicular = Orange, Rescue = Green)
     const getTypeBadgeColor = (type: string) => {
         const lower = (type || '').toLowerCase();
-        if (lower.includes('vehicular') || lower.includes('accident') || lower.includes('traffic')) {
+        if (lower.includes('fire')) {
             return {
-                bg: 'bg-rose-500/15 border-rose-500/30 text-rose-300',
-                dot: 'bg-rose-500',
-                hex: '#f43f5e',
+                bg: 'bg-red-500/15 border-red-500/30 text-red-300',
+                dot: 'bg-red-500',
+                hex: '#EF4444',
+            };
+        }
+        if (lower.includes('vehicular') || lower.includes('accident') || lower.includes('traffic') || lower.includes('collision')) {
+            return {
+                bg: 'bg-orange-500/15 border-orange-500/30 text-orange-300',
+                dot: 'bg-orange-500',
+                hex: '#F97316',
             };
         }
         if (lower.includes('medical') || lower.includes('cardiac') || lower.includes('trauma')) {
             return {
-                bg: 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300',
-                dot: 'bg-cyan-500',
-                hex: '#06b6d4',
-            };
-        }
-        if (lower.includes('fire')) {
-            return {
-                bg: 'bg-amber-500/15 border-amber-500/30 text-amber-300',
-                dot: 'bg-amber-500',
-                hex: '#f59e0b',
-            };
-        }
-        if (lower.includes('weather') || lower.includes('flood')) {
-            return {
                 bg: 'bg-blue-500/15 border-blue-500/30 text-blue-300',
                 dot: 'bg-blue-500',
-                hex: '#3b82f6',
+                hex: '#3B82F6',
             };
         }
         if (lower.includes('search') || lower.includes('rescue') || lower.includes('drown') || lower.includes('water')) {
             return {
                 bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
                 dot: 'bg-emerald-500',
-                hex: '#10b981',
+                hex: '#10B981',
+            };
+        }
+        if (lower.includes('weather') || lower.includes('flood') || lower.includes('typhoon')) {
+            return {
+                bg: 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300',
+                dot: 'bg-cyan-500',
+                hex: '#06B6D4',
             };
         }
         return {
             bg: 'bg-violet-500/15 border-violet-500/30 text-violet-300',
             dot: 'bg-violet-500',
-            hex: '#8b5cf6',
+            hex: '#8B5CF6',
         };
+    };
+
+    // Helper to format cluster header label ensuring Barangay is prominently displayed
+    const getClusterBarangayLabel = (spot: HotspotRecord) => {
+        const rawBrgy = (spot.barangay || '').trim();
+        const hasSpecificBrgy = rawBrgy && rawBrgy.toLowerCase() !== 'opol';
+        const brgyPrefix = hasSpecificBrgy ? `Brgy. ${rawBrgy}` : 'Brgy. Poblacion';
+
+        const loc = (spot.location_name || '').trim();
+        const isGeneric =
+            !loc ||
+            loc.toLowerCase() === 'opol' ||
+            loc.toLowerCase().includes('opol, misamis oriental') ||
+            loc.toLowerCase() === rawBrgy.toLowerCase() ||
+            loc.toLowerCase() === `brgy. ${rawBrgy}`.toLowerCase();
+
+        if (!isGeneric) {
+            return `${brgyPrefix} • ${loc}`;
+        }
+
+        return brgyPrefix;
     };
 
     // ApexCharts Theme Configuration (Cyber Navy & Cyan Dark Command Center)
@@ -521,14 +783,7 @@ export default function AccidentHeatmapView({
                     box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7) !important;
                 }
                 .mapboxgl-popup-close-button {
-                    color: #94a3b8 !important;
-                    font-size: 16px !important;
-                    padding: 6px 10px !important;
-                    z-index: 40 !important;
-                }
-                .mapboxgl-popup-close-button:hover {
-                    color: #f43f5e !important;
-                    background: transparent !important;
+                    display: none !important;
                 }
                 .mapboxgl-popup-tip {
                     border-top-color: #0b1329 !important;
@@ -684,11 +939,12 @@ export default function AccidentHeatmapView({
                                 applyFilters({ min_threshold: val });
                             }}
                             className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
-                            title="Minimum recurring incident volume required to classify as a hotspot"
+                            title="Minimum incident count required to display a 20-meter cluster"
                         >
+                            <option value={1}>Threshold: All Clusters (≥1)</option>
                             <option value={2}>Threshold: ≥ 2 incidents</option>
-                            <option value={3}>Threshold: ≥ 3 incidents</option>
-                            <option value={5}>Threshold: ≥ 5 incidents (Critical)</option>
+                            <option value={3}>Threshold: Moderate & High (≥3)</option>
+                            <option value={4}>Threshold: High Only (≥4 Red)</option>
                         </select>
 
                         {/* Reset Filter Button */}
@@ -704,19 +960,6 @@ export default function AccidentHeatmapView({
 
                     {/* Map Layers & Style Toggles */}
                     <div className="flex items-center gap-1.5">
-                        <button
-                            type="button"
-                            onClick={() => setShowHeatmapLayer(!showHeatmapLayer)}
-                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                                showHeatmapLayer
-                                    ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
-                                    : 'bg-slate-900 border-white/10 text-slate-400 hover:text-slate-200'
-                            }`}
-                        >
-                            <Flame className="w-3 h-3" />
-                            <span>Heatmap</span>
-                        </button>
-
                         <button
                             type="button"
                             onClick={() => setShowMarkers(!showMarkers)}
@@ -868,9 +1111,9 @@ export default function AccidentHeatmapView({
 
                         {/* Left Panel Footer Summary */}
                         <div className="p-2.5 border-t border-white/10 bg-slate-900/60 text-[11px] text-slate-400 flex items-center justify-between">
-                            <span>GPS Mapped: <strong className="text-cyan-300">{validCoordinatesCount}</strong></span>
-                            {missingCoordinatesCount > 0 && (
-                                <span className="text-amber-400/90 text-[10px]">({missingCoordinatesCount} unmapped)</span>
+                            <span>GPS Mapped: <strong className="text-cyan-300">{activeIncidents.filter((i) => i.has_coords && i.latitude !== null && i.longitude !== null).length}</strong></span>
+                            {activeIncidents.filter((i) => !i.has_coords || i.latitude === null || i.longitude === null).length > 0 && (
+                                <span className="text-amber-400/90 text-[10px]">({activeIncidents.filter((i) => !i.has_coords || i.latitude === null || i.longitude === null).length} unmapped)</span>
                             )}
                         </div>
                     </aside>
@@ -903,164 +1146,121 @@ export default function AccidentHeatmapView({
                                                 id="opol-boundary-fill"
                                                 type="fill"
                                                 paint={{
-                                                    'fill-color': '#06b6d4',
-                                                    'fill-opacity': 0.04,
+                                                    'fill-color': '#64748b',
+                                                    'fill-opacity': 0.02,
                                                 }}
                                             />
                                             <Layer
                                                 id="opol-boundary-lines"
                                                 type="line"
                                                 paint={{
-                                                    'line-color': '#06b6d4',
+                                                    'line-color': '#475569',
                                                     'line-width': 1.2,
-                                                    'line-opacity': 0.35,
+                                                    'line-opacity': 0.4,
                                                     'line-dasharray': [3, 2],
                                                 }}
                                             />
                                         </Source>
                                     )}
 
-                                    {/* 2. Mapbox Built-in Density Heatmap Layer */}
-                                    {showHeatmapLayer && (
-                                        <Source id="incidents-density-source" type="geojson" data={incidentsGeojson}>
+                                    {/* 2. 20-Meter Monochromatic Cluster Radial Glow Layer (Pure Red, Orange, Yellow) */}
+                                    {clustersGeojson && (
+                                        <Source id="clusters-zones-source" type="geojson" data={clustersGeojson}>
                                             <Layer
-                                                id="incidents-heatmap-layer"
-                                                type="heatmap"
-                                                maxzoom={24}
-                                                paint={{
-                                                    'heatmap-weight': [
-                                                        'interpolate',
-                                                        ['linear'],
-                                                        ['get', 'weight'],
-                                                        0.8, 0.8,
-                                                        1.5, 1.8
-                                                    ],
-                                                    'heatmap-intensity': [
-                                                        'interpolate',
-                                                        ['linear'],
-                                                        ['zoom'],
-                                                        9, 1.0,
-                                                        12, 1.8,
-                                                        15, 3.2,
-                                                        17, 5.0,
-                                                        19, 7.5,
-                                                        21, 10.0,
-                                                    ],
-                                                    // Emergency heat color ramp: transparent -> cyan -> blue -> amber -> red
-                                                    'heatmap-color': [
-                                                        'interpolate',
-                                                        ['linear'],
-                                                        ['heatmap-density'],
-                                                        0, 'rgba(6, 182, 212, 0)',
-                                                        0.05, 'rgba(6, 182, 212, 0.45)',
-                                                        0.2, 'rgba(59, 130, 246, 0.75)',
-                                                        0.45, 'rgba(245, 158, 11, 0.88)',
-                                                        0.75, 'rgba(239, 68, 68, 0.95)',
-                                                        1.0, 'rgba(225, 29, 72, 1.0)',
-                                                    ],
-                                                    'heatmap-radius': [
-                                                        'interpolate',
-                                                        ['linear'],
-                                                        ['zoom'],
-                                                        9, 14,
-                                                        12, 24,
-                                                        15, 42,
-                                                        17, 65,
-                                                        19, 90,
-                                                        21, 120,
-                                                    ],
-                                                    'heatmap-opacity': 0.88,
-                                                }}
-                                            />
-                                            {/* Street-Level Heat Glow Circle Layer for close-up street zoom (zoom >= 14) */}
-                                            <Layer
-                                                id="incidents-street-heat-glow"
+                                                id="clusters-radial-glow"
                                                 type="circle"
-                                                minzoom={14}
-                                                maxzoom={24}
                                                 paint={{
                                                     'circle-radius': [
                                                         'interpolate',
-                                                        ['linear'],
+                                                        ['exponential', 2],
                                                         ['zoom'],
-                                                        14, 18,
-                                                        16, 34,
-                                                        18, 58,
-                                                        20, 88,
+                                                        13, 8,
+                                                        15, 20,
+                                                        16, 38,
+                                                        17, 72,
+                                                        18, 140,
+                                                        19, 280,
                                                     ],
-                                                    'circle-color': [
-                                                        'case',
-                                                        ['==', ['get', 'priority'], 'Critical'],
-                                                        '#e11d48',
-                                                        ['==', ['get', 'priority'], 'High'],
-                                                        '#f59e0b',
-                                                        '#06b6d4',
-                                                    ],
-                                                    'circle-opacity': [
-                                                        'interpolate',
-                                                        ['linear'],
-                                                        ['zoom'],
-                                                        14, 0.25,
-                                                        16, 0.55,
-                                                        18, 0.75,
-                                                        20, 0.85,
-                                                    ],
-                                                    'circle-blur': 0.85,
+                                                    'circle-color': ['get', 'color'],
+                                                    'circle-opacity': 0.38,
+                                                    'circle-blur': 0.72,
                                                 }}
                                             />
                                         </Source>
                                     )}
 
-                                    {/* 3. Hotspot Cluster Indicators */}
-                                    {hotspots.map((spot, idx) => {
+                                    {/* 3. Floating Cluster Label Pills & Pulsing Red Beat (Like reference image) */}
+                                    {activeHotspots.map((spot, idx) => {
                                         const isSelected = selectedHotspot?.cluster_key === spot.cluster_key;
-                                        return (
-                                            <Marker
-                                                key={`hotspot-${spot.cluster_key}-${idx}`}
-                                                longitude={spot.longitude}
-                                                latitude={spot.latitude}
-                                                anchor="center"
-                                                onClick={(e) => {
-                                                    e.originalEvent.stopPropagation();
-                                                    focusHotspotOnMap(spot);
-                                                }}
-                                            >
-                                                <div className="relative group cursor-pointer">
-                                                    {/* Outer pulsing ring for critical/high hotspots */}
-                                                    {spot.intensity === 'Critical' && (
-                                                        <span className="absolute -inset-2 rounded-full bg-rose-500/40 animate-ping" />
-                                                    )}
-                                                    {spot.intensity === 'High' && (
-                                                        <span className="absolute -inset-1.5 rounded-full bg-amber-500/35 animate-pulse" />
-                                                    )}
+                                        const isRed = spot.incident_count >= 4;
+                                        const isOrange = spot.incident_count === 3;
+                                        const clusterColor = isRed ? '#EF4444' : isOrange ? '#F97316' : '#EAB308';
+                                        const clusterLevel = isRed ? 'High' : isOrange ? 'Moderate' : 'Low';
 
-                                                    {/* Central Badge */}
-                                                    <div
-                                                        className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs text-white shadow-lg border-2 transition-transform duration-200 group-hover:scale-125 ${
-                                                            isSelected ? 'ring-4 ring-cyan-400 scale-125' : ''
-                                                        }`}
-                                                        style={{
-                                                            backgroundColor: spot.color,
-                                                            borderColor: '#ffffff',
-                                                            boxShadow: `0 0 16px ${spot.color}`,
-                                                        }}
+                                        return (
+                                            <Fragment key={`hotspot-group-${spot.cluster_key}-${idx}`}>
+                                                {/* Pulsing Red Radar Beat Ring at Center of High (4+) Clusters */}
+                                                {isRed && (
+                                                    <Marker
+                                                        longitude={spot.longitude}
+                                                        latitude={spot.latitude}
+                                                        anchor="center"
                                                     >
-                                                        {spot.incident_count}
+                                                        <div className="relative flex items-center justify-center pointer-events-none">
+                                                            <span className="w-16 h-16 rounded-full bg-red-500/40 animate-ping absolute" />
+                                                            <span className="w-4 h-4 rounded-full bg-red-500/60 animate-pulse absolute" />
+                                                        </div>
+                                                    </Marker>
+                                                )}
+
+                                                {/* Floating Cluster Label Pill (Above the cluster area, prominently displaying Barangay) */}
+                                                <Marker
+                                                    longitude={spot.longitude}
+                                                    latitude={spot.latitude}
+                                                    anchor="bottom"
+                                                    offset={[0, -36]}
+                                                    onClick={(e) => {
+                                                        e.originalEvent.stopPropagation();
+                                                        focusHotspotOnMap(spot);
+                                                    }}
+                                                >
+                                                    <div
+                                                        className={`group cursor-pointer flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/95 hover:bg-slate-800 border shadow-2xl transition-all duration-200 hover:scale-105 select-none ${
+                                                            isSelected ? 'border-white ring-2 ring-white scale-105' : 'border-white/20'
+                                                        }`}
+                                                        title={`Click to inspect all ${spot.incident_count} incidents in this 20m cluster`}
+                                                    >
+                                                        <span
+                                                            className="w-2.5 h-2.5 rounded-full flex-shrink-0 animate-pulse"
+                                                            style={{ backgroundColor: clusterColor }}
+                                                        />
+                                                        <span className="text-xs font-bold text-slate-100 whitespace-nowrap">
+                                                            {getClusterBarangayLabel(spot)}
+                                                        </span>
+                                                        <span
+                                                            className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md whitespace-nowrap"
+                                                            style={{
+                                                                color: clusterColor,
+                                                                backgroundColor: `${clusterColor}25`,
+                                                            }}
+                                                        >
+                                                            {clusterLevel} ({spot.incident_count})
+                                                        </span>
                                                     </div>
-                                                </div>
-                                            </Marker>
+                                                </Marker>
+                                            </Fragment>
                                         );
                                     })}
 
-                                    {/* 4. Individual Incident Markers */}
+                                    {/* 4. Individual Incident Location Pins (Professional SVG Teardrop Pins, Color-Coded by Emergency Type) */}
                                     {showMarkers &&
-                                        incidents
+                                        activeIncidents
                                             .filter((i) => i.has_coords && i.latitude !== null && i.longitude !== null)
                                             .map((inc) => {
                                                 const badge = getTypeBadgeColor(inc.incident_type);
                                                 return (
                                                     <Marker
-                                                        key={`inc-marker-${inc.id}`}
+                                                        key={`inc-pin-${inc.id}`}
                                                         longitude={inc.longitude as number}
                                                         latitude={inc.latitude as number}
                                                         anchor="bottom"
@@ -1069,12 +1269,56 @@ export default function AccidentHeatmapView({
                                                             focusIncidentOnMap(inc);
                                                         }}
                                                     >
-                                                        <div className="cursor-pointer group relative">
-                                                            <div
-                                                                className="w-4 h-4 rounded-full border border-white shadow-md flex items-center justify-center transition-transform group-hover:scale-125"
-                                                                style={{ backgroundColor: badge.hex }}
-                                                            >
-                                                                <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                                                        <div
+                                                            className="cursor-pointer group relative flex flex-col items-center"
+                                                            title={`#INC-${inc.id}: ${inc.incident_type} (${inc.address || inc.barangay})`}
+                                                        >
+                                                            {/* Professional 3D-Look Teardrop Emergency Map Pin (NOT a circle) */}
+                                                            <div className="relative transition-transform duration-200 group-hover:scale-130 group-hover:-translate-y-1">
+                                                                <svg
+                                                                    width="24"
+                                                                    height="32"
+                                                                    viewBox="0 0 24 32"
+                                                                    fill="none"
+                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                    className="filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.65)]"
+                                                                >
+                                                                    {/* Teardrop Pin Body pointing down to GPS coordinates */}
+                                                                    <path
+                                                                        d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
+                                                                        fill={badge.hex}
+                                                                        stroke="#FFFFFF"
+                                                                        strokeWidth="2"
+                                                                        strokeLinejoin="round"
+                                                                    />
+                                                                    {/* Inner white circle target */}
+                                                                    <circle
+                                                                        cx="12"
+                                                                        cy="11.5"
+                                                                        r="4.8"
+                                                                        fill="#FFFFFF"
+                                                                    />
+                                                                    {/* Inner emergency color core dot */}
+                                                                    <circle
+                                                                        cx="12"
+                                                                        cy="11.5"
+                                                                        r="2.6"
+                                                                        fill={badge.hex}
+                                                                    />
+                                                                </svg>
+                                                                {/* Ground shadow beneath the pin point */}
+                                                                <div className="w-2.5 h-1 rounded-full bg-black/60 blur-[1px] mx-auto -mt-0.5" />
+                                                            </div>
+
+                                                            {/* Floating Tooltip on Hover */}
+                                                            <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center pointer-events-none z-50">
+                                                                <div className="px-2.5 py-1.5 rounded-lg bg-slate-950/95 border border-white/20 shadow-2xl text-[11px] text-white whitespace-nowrap flex items-center gap-2">
+                                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: badge.hex }} />
+                                                                    <span className="font-bold">{inc.incident_type}</span>
+                                                                    <span className="text-slate-400 font-mono text-[10px]">#INC-{inc.id}</span>
+                                                                    <span className="text-slate-400 text-[10px]">Brgy. {inc.barangay}</span>
+                                                                </div>
+                                                                <div className="w-2 h-2 bg-slate-950 rotate-45 -mt-1 border-r border-b border-white/20" />
                                                             </div>
                                                         </div>
                                                     </Marker>
@@ -1087,26 +1331,37 @@ export default function AccidentHeatmapView({
                                             longitude={popupInfo.longitude}
                                             latitude={popupInfo.latitude}
                                             anchor="top"
+                                            closeButton={false}
                                             closeOnClick={false}
                                             onClose={() => setPopupInfo(null)}
                                             offset={14}
                                         >
-                                            <div className="w-64 bg-[#0b1329] border border-cyan-500/40 rounded-xl p-3 shadow-2xl text-slate-100">
+                                            <div className="w-68 bg-[#0b1329] border border-cyan-500/40 rounded-xl p-3.5 shadow-2xl text-slate-100">
                                                 {popupInfo.type === 'hotspot' ? (
                                                     <div>
-                                                        <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2">
+                                                        <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2.5">
                                                             <div className="flex items-center gap-1.5">
                                                                 <Flame className="w-4 h-4 text-amber-400" />
                                                                 <span className="text-xs font-bold uppercase tracking-wider text-amber-300">
-                                                                    Hotspot Area
+                                                                    20m Cluster
                                                                 </span>
                                                             </div>
-                                                            <span
-                                                                className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded text-white"
-                                                                style={{ backgroundColor: popupInfo.data.color }}
-                                                            >
-                                                                {popupInfo.data.intensity} ({popupInfo.data.incident_count})
-                                                            </span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span
+                                                                    className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded text-white"
+                                                                    style={{ backgroundColor: popupInfo.data.color }}
+                                                                >
+                                                                    {popupInfo.data.badge_text || `${popupInfo.data.incident_count} Incidents`}
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setPopupInfo(null)}
+                                                                    className="w-5 h-5 rounded hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                                                                    title="Close"
+                                                                >
+                                                                    <X className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
                                                         </div>
 
                                                         <p className="text-xs font-bold text-white mb-1">
@@ -1116,30 +1371,58 @@ export default function AccidentHeatmapView({
                                                             Brgy. {popupInfo.data.barangay}
                                                         </p>
 
-                                                        <div className="bg-slate-900/80 rounded-lg p-2 text-[10px] text-slate-300 space-y-1 mb-2.5">
+                                                        <div className="bg-slate-900/80 rounded-lg p-2 text-[10px] text-slate-300 space-y-1 mb-2.5 border border-white/5">
                                                             <div>
-                                                                <span className="text-slate-400">Primary Incident Type:</span>{' '}
+                                                                <span className="text-slate-400">Total in 20m:</span>{' '}
+                                                                <strong className="text-amber-300 font-bold">{popupInfo.data.incident_count} incidents</strong>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-slate-400">Dominant Type:</span>{' '}
                                                                 <strong className="text-white">{popupInfo.data.most_common_type}</strong>
                                                             </div>
                                                             <div>
-                                                                <span className="text-slate-400">Total Recorded:</span>{' '}
-                                                                <strong className="text-amber-300">{popupInfo.data.incident_count} incidents</strong>
+                                                                <span className="text-slate-400">Concentration:</span>{' '}
+                                                                <strong className="text-cyan-300">{popupInfo.data.classification || '20-Meter Cluster'}</strong>
                                                             </div>
                                                         </div>
 
-                                                        <p className="text-[10px] text-slate-400 italic">
-                                                            Recurring hotspot meeting frequency threshold.
-                                                        </p>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setSelectedClusterModal(popupInfo.data);
+                                                            }}
+                                                            className="w-full py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md"
+                                                        >
+                                                            <span>Inspect All ({popupInfo.data.incident_count}) Incidents</span>
+                                                            <ExternalLink className="w-3 h-3" />
+                                                        </button>
                                                     </div>
                                                 ) : (
                                                     <div>
-                                                        <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2">
-                                                            <span className="text-[10px] font-mono font-bold text-cyan-400">
-                                                                #INC-{popupInfo.data.id}
-                                                            </span>
-                                                            <span className="text-[10px] uppercase font-bold text-slate-400">
-                                                                {popupInfo.data.status}
-                                                            </span>
+                                                        {/* Header row with Incident ID, Status Badge, and non-overlapping Close Button */}
+                                                        <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2.5">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-mono font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                                                                    #INC-{popupInfo.data.id}
+                                                                </span>
+                                                                <span
+                                                                    className={`text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded ${
+                                                                        popupInfo.data.status === 'resolved'
+                                                                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                                                            : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                                                                    }`}
+                                                                >
+                                                                    {popupInfo.data.status}
+                                                                </span>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPopupInfo(null)}
+                                                                className="w-5 h-5 rounded hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                                                                title="Close popup"
+                                                            >
+                                                                <X className="w-3.5 h-3.5" />
+                                                            </button>
                                                         </div>
                                                         <h4 className="text-xs font-bold text-white mb-1">
                                                             {popupInfo.data.incident_type}
@@ -1174,21 +1457,86 @@ export default function AccidentHeatmapView({
                                 </div>
                             )}
 
-                            {/* ON-MAP FLOATING LEGEND (Bottom Left) */}
-                            <div className="absolute bottom-3 left-3 bg-[#0b1329]/90 border border-white/15 backdrop-blur-md rounded-xl p-3 shadow-xl max-w-[240px] z-10">
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
-                                        Heatmap Density
+                            {/* ON-MAP FLOATING LEGEND (Bottom Left, like reference image) */}
+                            <div className="absolute bottom-3 left-3 bg-[#0b1329]/95 border border-white/15 backdrop-blur-md rounded-xl p-3 shadow-2xl max-w-[280px] z-10 text-xs">
+                                {/* Section 1: Cluster Risk Level (Glow) */}
+                                <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-white/10">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+                                        <Flame className="w-3.5 h-3.5 text-amber-400" />
+                                        <span>20m Cluster Risk</span>
                                     </span>
-                                    <span className="text-[9px] text-cyan-400 font-mono">Kernel KDE</span>
+                                    <span className="text-[9px] text-amber-400 font-mono font-bold">Radius: 20m</span>
                                 </div>
-                                {/* Gradient intensity bar */}
-                                <div className="h-2.5 rounded-full w-full bg-gradient-to-r from-cyan-500 via-blue-500 via-amber-400 to-rose-600 shadow-inner mb-1.5" />
-                                <div className="flex justify-between text-[9px] text-slate-400 font-semibold uppercase">
-                                    <span>Low</span>
-                                    <span>Moderate</span>
-                                    <span>High</span>
-                                    <span className="text-rose-400">Critical</span>
+                                <div className="flex items-center justify-between gap-1 mb-2.5">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="w-3 h-3 rounded-full bg-yellow-400 shadow-sm" />
+                                        <span className="text-[10px] text-yellow-300 font-bold">Low (1–2)</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="w-3 h-3 rounded-full bg-orange-500 shadow-sm" />
+                                        <span className="text-[10px] text-orange-300 font-bold">Moderate (3)</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="w-3 h-3 rounded-full bg-red-500 shadow-sm" />
+                                        <span className="text-[10px] text-red-300 font-bold">High (4+)</span>
+                                    </div>
+                                </div>
+
+                                {/* Section 2: Incident Pin Color Coding */}
+                                <div className="pt-2 border-t border-white/10">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                                        Incident Pins (Emergency Type)
+                                    </span>
+                                    <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10px]">
+                                        <div className="flex items-center gap-1.5">
+                                            <svg width="12" height="16" viewBox="0 0 24 32" fill="none" className="flex-shrink-0">
+                                                <path
+                                                    d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
+                                                    fill="#EF4444"
+                                                    stroke="#FFFFFF"
+                                                    strokeWidth="2"
+                                                />
+                                                <circle cx="12" cy="11.5" r="4" fill="#FFFFFF" />
+                                            </svg>
+                                            <span className="text-slate-200 truncate">Fire</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <svg width="12" height="16" viewBox="0 0 24 32" fill="none" className="flex-shrink-0">
+                                                <path
+                                                    d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
+                                                    fill="#3B82F6"
+                                                    stroke="#FFFFFF"
+                                                    strokeWidth="2"
+                                                />
+                                                <circle cx="12" cy="11.5" r="4" fill="#FFFFFF" />
+                                            </svg>
+                                            <span className="text-slate-200 truncate">Medical</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <svg width="12" height="16" viewBox="0 0 24 32" fill="none" className="flex-shrink-0">
+                                                <path
+                                                    d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
+                                                    fill="#F97316"
+                                                    stroke="#FFFFFF"
+                                                    strokeWidth="2"
+                                                />
+                                                <circle cx="12" cy="11.5" r="4" fill="#FFFFFF" />
+                                            </svg>
+                                            <span className="text-slate-200 truncate">Vehicular</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <svg width="12" height="16" viewBox="0 0 24 32" fill="none" className="flex-shrink-0">
+                                                <path
+                                                    d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
+                                                    fill="#10B981"
+                                                    stroke="#FFFFFF"
+                                                    strokeWidth="2"
+                                                />
+                                                <circle cx="12" cy="11.5" r="4" fill="#FFFFFF" />
+                                            </svg>
+                                            <span className="text-slate-200 truncate">Rescue</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1236,7 +1584,7 @@ export default function AccidentHeatmapView({
                                     </h2>
                                 </div>
                                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                                    {hotspots.length} Clusters
+                                    {activeHotspots.length} Clusters
                                 </span>
                             </div>
                             <p className="text-[10px] text-slate-400 leading-tight">
@@ -1246,7 +1594,7 @@ export default function AccidentHeatmapView({
 
                         {/* Hotspots List */}
                         <div className="flex-1 overflow-y-auto max-h-[620px] p-2 space-y-2">
-                            {hotspots.length === 0 ? (
+                            {activeHotspots.length === 0 ? (
                                 <div className="py-14 px-4 text-center">
                                     <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
                                     <p className="text-xs font-semibold text-slate-300">No Hotspots at Threshold ≥{minThreshold}</p>
@@ -1267,7 +1615,7 @@ export default function AccidentHeatmapView({
                                     )}
                                 </div>
                             ) : (
-                                hotspots.map((spot, idx) => {
+                                activeHotspots.map((spot, idx) => {
                                     const isSelected = selectedHotspot?.cluster_key === spot.cluster_key;
                                     return (
                                         <div
@@ -1282,15 +1630,8 @@ export default function AccidentHeatmapView({
                                             <div className="flex items-start justify-between gap-2 mb-2">
                                                 <div className="flex items-center gap-2">
                                                     <span
-                                                        className={`w-6 h-6 rounded-lg font-black text-xs flex items-center justify-center text-white ${
-                                                            idx === 0
-                                                                ? 'bg-rose-600 shadow-md shadow-rose-600/30'
-                                                                : idx === 1
-                                                                ? 'bg-amber-600'
-                                                                : idx === 2
-                                                                ? 'bg-blue-600'
-                                                                : 'bg-slate-700'
-                                                        }`}
+                                                        className="w-6 h-6 rounded-lg font-black text-xs flex items-center justify-center text-white shadow-md"
+                                                        style={{ backgroundColor: spot.color }}
                                                     >
                                                         #{spot.rank ?? idx + 1}
                                                     </span>
@@ -1305,15 +1646,14 @@ export default function AccidentHeatmapView({
                                                 </div>
 
                                                 <span
-                                                    className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full border ${
-                                                        spot.intensity === 'Critical'
-                                                            ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
-                                                            : spot.intensity === 'High'
-                                                            ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-                                                            : 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
-                                                    }`}
+                                                    className="text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full border shadow-sm"
+                                                    style={{
+                                                        backgroundColor: `${spot.color}25`,
+                                                        borderColor: `${spot.color}60`,
+                                                        color: spot.color,
+                                                    }}
                                                 >
-                                                    {spot.intensity}
+                                                    {spot.badge_text || (spot.incident_count >= 4 ? 'High (4+)' : spot.incident_count === 3 ? 'Moderate (3)' : 'Low (1-2)')}
                                                 </span>
                                             </div>
 
@@ -1450,88 +1790,663 @@ export default function AccidentHeatmapView({
                 </section>
             </main>
 
-            {/* INCIDENT DETAILS INSPECTION MODAL */}
-            {selectedIncidentModal && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-[#0b1329] border border-cyan-500/40 rounded-2xl w-full max-w-lg p-5 shadow-2xl relative text-slate-100">
-                        {/* Close button */}
-                        <button
-                            type="button"
-                            onClick={() => setSelectedIncidentModal(null)}
-                            className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
-
-                        <div className="flex items-center gap-2 mb-3">
-                            <span className="text-xs font-mono font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/30">
-                                #INC-{selectedIncidentModal.id}
-                            </span>
-                            <span className="text-xs font-extrabold uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                                {selectedIncidentModal.status}
-                            </span>
-                        </div>
-
-                        <h3 className="text-lg font-bold text-white mb-1">
-                            {selectedIncidentModal.incident_type}
-                        </h3>
-
-                        <div className="space-y-3 my-4">
-                            <div className="p-3 rounded-xl bg-slate-900 border border-white/5 space-y-1.5 text-xs">
-                                <div>
-                                    <span className="text-slate-400">Location:</span>{' '}
-                                    <strong className="text-white">{selectedIncidentModal.address}</strong>
+            {/* 20-METER CLUSTER INSPECTION MODAL */}
+            {selectedClusterModal && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+                    <div className="bg-[#0b1329] border border-cyan-500/40 rounded-2xl w-full max-w-2xl max-h-[88vh] flex flex-col shadow-2xl relative text-slate-100 overflow-hidden">
+                        {/* Modal Header */}
+                        <div className="p-4 sm:p-5 border-b border-white/10 bg-slate-900/80 flex items-start justify-between gap-3">
+                            <div>
+                                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                    <span
+                                        className="text-xs font-black uppercase px-2.5 py-0.5 rounded-full border shadow-sm"
+                                        style={{
+                                            backgroundColor: `${selectedClusterModal.color}25`,
+                                            borderColor: `${selectedClusterModal.color}80`,
+                                            color: selectedClusterModal.color,
+                                        }}
+                                    >
+                                        {selectedClusterModal.classification || `${selectedClusterModal.incident_count} Incidents in 20m`}
+                                    </span>
+                                    <span className="text-[11px] font-mono font-bold text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/30">
+                                        20-Meter Radius
+                                    </span>
+                                    <span className="text-[11px] text-slate-400">
+                                        Rank #{selectedClusterModal.rank ?? 1}
+                                    </span>
                                 </div>
-                                <div>
-                                    <span className="text-slate-400">Barangay:</span>{' '}
-                                    <strong className="text-cyan-300">Brgy. {selectedIncidentModal.barangay}</strong>
-                                </div>
-                                <div>
-                                    <span className="text-slate-400">GPS Coordinates:</span>{' '}
-                                    <strong className="font-mono text-emerald-300">
-                                        {selectedIncidentModal.latitude && selectedIncidentModal.longitude
-                                            ? `${selectedIncidentModal.latitude.toFixed(6)}, ${selectedIncidentModal.longitude.toFixed(6)}`
-                                            : 'Not recorded'}
-                                    </strong>
-                                </div>
-                                <div>
-                                    <span className="text-slate-400">Date Reported:</span>{' '}
-                                    <strong className="text-slate-200">{selectedIncidentModal.formatted_date}</strong>
-                                </div>
+                                <h3 className="text-base sm:text-lg font-bold text-white leading-snug">
+                                    {selectedClusterModal.location_name}
+                                </h3>
+                                <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-2 flex-wrap">
+                                    <span>Brgy. {selectedClusterModal.barangay}</span>
+                                    <span className="text-slate-500">•</span>
+                                    <span className="font-mono text-emerald-400">
+                                        GPS: {selectedClusterModal.latitude.toFixed(6)}, {selectedClusterModal.longitude.toFixed(6)}
+                                    </span>
+                                </p>
                             </div>
 
-                            {selectedIncidentModal.description && (
-                                <div className="p-3 rounded-xl bg-slate-900 border border-white/5 text-xs">
-                                    <span className="text-slate-400 block mb-1 font-semibold">Incident Details:</span>
-                                    <p className="text-slate-200 leading-relaxed">
-                                        {selectedIncidentModal.description}
-                                    </p>
-                                </div>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedClusterModal(null)}
+                                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+                                title="Close Cluster Details"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Cluster Overview Stats Bar */}
+                        <div className="px-5 py-2.5 bg-slate-950/70 border-b border-white/5 flex items-center justify-between text-xs text-slate-300">
+                            <div>
+                                Total Incidents: <strong className="text-white text-sm">{selectedClusterModal.incident_count}</strong>
+                            </div>
+                            <div>
+                                Dominant Type: <strong className="text-amber-300">{selectedClusterModal.most_common_type}</strong>
+                            </div>
+                            <div className="hidden sm:block text-[11px] text-slate-400">
+                                Proximity: ≤20.0 meters (Haversine)
+                            </div>
+                        </div>
+
+                        {/* List of ALL Incidents in this 20-Meter Cluster */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {(!selectedClusterModal.incidents || selectedClusterModal.incidents.length === 0) ? (
+                                <p className="text-xs text-slate-400 text-center py-8">
+                                    No incident details available for this cluster.
+                                </p>
+                            ) : (
+                                selectedClusterModal.incidents.map((inc, iIdx) => {
+                                    const badge = getTypeBadgeColor(inc.incident_type);
+                                    return (
+                                        <div
+                                            key={`cluster-inc-${inc.id}-${iIdx}`}
+                                            className="bg-slate-900/50 hover:bg-slate-800/60 p-3.5 rounded-xl border border-white/5 hover:border-cyan-500/30 transition-all shadow-sm"
+                                        >
+                                            <div className="flex items-center justify-between gap-2 mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`w-2.5 h-2.5 rounded-full ${badge.dot}`} />
+                                                    <span className="text-xs font-bold text-white">
+                                                        {inc.incident_type}
+                                                    </span>
+                                                    <span className="text-[10px] font-mono font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
+                                                        {inc.incident_number || `#INC-${inc.id}`}
+                                                    </span>
+                                                </div>
+                                                <span
+                                                    className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded ${
+                                                        inc.status === 'resolved'
+                                                            ? 'bg-emerald-500/15 text-emerald-400'
+                                                            : inc.status === 'verified'
+                                                            ? 'bg-blue-500/15 text-blue-400'
+                                                            : 'bg-amber-500/15 text-amber-400'
+                                                    }`}
+                                                >
+                                                    {inc.status}
+                                                </span>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300 mb-2.5">
+                                                <div className="flex items-center gap-1.5">
+                                                    <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                                    <span className="truncate">{inc.purok_or_location || inc.address}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <Building2 className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                                    <span>Brgy. {inc.barangay}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                                    <span>{inc.incident_date || inc.formatted_date}</span>
+                                                    {inc.incident_time && (
+                                                        <span className="text-slate-500">at {inc.incident_time}</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-1.5 font-mono text-emerald-400/90 text-[10px]">
+                                                    <Compass className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                                    <span>
+                                                        {inc.latitude && inc.longitude
+                                                            ? `${inc.latitude.toFixed(6)}, ${inc.longitude.toFixed(6)}`
+                                                            : 'No GPS'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {inc.chief_complaint && (
+                                                <p className="text-[11px] text-slate-400 bg-slate-950/60 p-2 rounded-lg border border-white/5 mb-2.5">
+                                                    <strong className="text-slate-300">Complaint / Details:</strong> {inc.chief_complaint}
+                                                </p>
+                                            )}
+
+                                            <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                                                <span className="text-[10px] text-slate-500 font-mono">
+                                                    {inc.time_ago}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedIncidentModal(inc);
+                                                    }}
+                                                    className="px-3 py-1 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/60 border border-cyan-500/40 text-cyan-200 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                                >
+                                                    <span>Inspect Full Details</span>
+                                                    <ExternalLink className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })
                             )}
                         </div>
 
-                        <div className="flex gap-2">
-                            {selectedIncidentModal.has_coords && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        focusIncidentOnMap(selectedIncidentModal);
-                                        setSelectedIncidentModal(null);
-                                    }}
-                                    className="flex-1 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
-                                >
-                                    <MapPin className="w-3.5 h-3.5" />
-                                    <span>Locate on Map</span>
-                                </button>
-                            )}
+                        {/* Modal Footer */}
+                        <div className="p-3.5 bg-slate-900/80 border-t border-white/10 flex justify-between items-center text-xs">
+                            <span className="text-slate-400 text-[11px]">
+                                Showing all {selectedClusterModal.incident_count} incidents clustered within 20m.
+                            </span>
                             <button
                                 type="button"
-                                onClick={() => setSelectedIncidentModal(null)}
-                                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+                                onClick={() => setSelectedClusterModal(null)}
+                                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors"
                             >
                                 Close
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* COMPREHENSIVE INCIDENT DETAILS INSPECTION MODAL */}
+            {selectedIncidentModal && (
+                <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+                    <div className="bg-[#0b1329] border border-cyan-500/40 rounded-2xl w-full max-w-2xl shadow-2xl relative text-slate-100 flex flex-col max-h-[90vh] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
+                        {/* Modal Header */}
+                        <div className="p-4 sm:p-5 border-b border-white/10 bg-slate-900/80 flex items-start justify-between gap-3">
+                            <div>
+                                <div className="flex items-center gap-2 flex-wrap mb-2">
+                                    <span className="text-xs font-mono font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-0.5 rounded border border-cyan-500/30">
+                                        #INC-{selectedIncidentModal.id}
+                                    </span>
+                                    
+                                    {/* Priority Badge */}
+                                    <span
+                                        className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${
+                                            (selectedIncidentModal.priority || '').toLowerCase() === 'critical'
+                                                ? 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+                                                : (selectedIncidentModal.priority || '').toLowerCase() === 'high'
+                                                ? 'bg-orange-500/15 border-orange-500/30 text-orange-300'
+                                                : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                                        }`}
+                                    >
+                                        Priority: {selectedIncidentModal.priority || 'Moderate'}
+                                    </span>
+
+                                    {/* Status Badge */}
+                                    <span
+                                        className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                            selectedIncidentModal.status === 'resolved'
+                                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                                : selectedIncidentModal.status === 'verified'
+                                                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                        }`}
+                                    >
+                                        {selectedIncidentModal.status}
+                                    </span>
+
+                                    {/* Report Source Badge */}
+                                    {selectedIncidentModal.report_source === 'walk_in' ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                                            <UserCheck className="w-3 h-3" />
+                                            Walk-In
+                                        </span>
+                                    ) : selectedIncidentModal.report_source === 'phone_sim' || selectedIncidentModal.report_source === 'dispatcher' ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/10 text-sky-300 border border-sky-500/30">
+                                            <PhoneCall className="w-3 h-3" />
+                                            Phone / SIM Call
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                                            <Smartphone className="w-3 h-3" />
+                                            Resident Mobile App
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <span
+                                        className="w-3 h-3 rounded-full flex-shrink-0 animate-pulse"
+                                        style={{ backgroundColor: getTypeBadgeColor(selectedIncidentModal.incident_type).hex }}
+                                    />
+                                    <h3 className="text-lg sm:text-xl font-black text-white">
+                                        {selectedIncidentModal.incident_type}
+                                    </h3>
+                                </div>
+                            </div>
+
+                            {/* Close button */}
+                            <button
+                                type="button"
+                                onClick={() => setSelectedIncidentModal(null)}
+                                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+                                title="Close modal"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body - Scrollable */}
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+                            {/* 1. Location & Geographic Coordinates Card */}
+                            <div className="p-3.5 rounded-xl bg-slate-900/80 border border-white/10 space-y-2">
+                                <div className="flex items-center gap-2 text-xs font-bold text-cyan-400 uppercase tracking-wider">
+                                    <MapPin className="w-3.5 h-3.5" />
+                                    <span>Incident Location & Geographical Details</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                                    <div>
+                                        <span className="text-slate-400 block text-[11px]">Address / Landmark:</span>
+                                        <span className="font-semibold text-white">{selectedIncidentModal.address || 'Opol, Misamis Oriental'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-400 block text-[11px]">Barangay:</span>
+                                        <span className="font-bold text-cyan-300">Brgy. {selectedIncidentModal.barangay}</span>
+                                    </div>
+                                    <div className="sm:col-span-2 flex items-center justify-between gap-2 pt-1 border-t border-white/5">
+                                        <div>
+                                            <span className="text-slate-400 block text-[11px]">Exact GPS Coordinates:</span>
+                                            <span className="font-mono text-emerald-300 font-bold">
+                                                {selectedIncidentModal.latitude && selectedIncidentModal.longitude
+                                                    ? `${selectedIncidentModal.latitude.toFixed(6)}, ${selectedIncidentModal.longitude.toFixed(6)}`
+                                                    : 'Not recorded'}
+                                            </span>
+                                        </div>
+                                        {selectedIncidentModal.latitude && selectedIncidentModal.longitude && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(`${selectedIncidentModal.latitude}, ${selectedIncidentModal.longitude}`);
+                                                    setCopiedCoord(true);
+                                                    setTimeout(() => setCopiedCoord(false), 2000);
+                                                }}
+                                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 hover:text-white border border-white/10 transition-colors"
+                                            >
+                                                {copiedCoord ? (
+                                                    <>
+                                                        <Check className="w-3 h-3 text-emerald-400" />
+                                                        <span className="text-emerald-300">Copied!</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Copy className="w-3 h-3 text-slate-400" />
+                                                        <span>Copy GPS</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 2. Reporter & Caller Information Card */}
+                            <div className="p-3.5 rounded-xl bg-slate-900/80 border border-white/10 space-y-2">
+                                <div className="flex items-center gap-2 text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                                    <User className="w-3.5 h-3.5" />
+                                    <span>Caller / Reporter Details</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                                    <div>
+                                        <span className="text-slate-400 block text-[11px]">Reported By:</span>
+                                        <span className="font-semibold text-white">{selectedIncidentModal.caller_name || 'Anonymous / Walk-In'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-400 block text-[11px]">Contact Number:</span>
+                                        <span className="font-mono text-cyan-200">{selectedIncidentModal.caller_phone || 'None provided'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 3. Incident Description / Chief Complaint Card */}
+                            {(selectedIncidentModal.description || selectedIncidentModal.chief_complaint) && (
+                                <div className="p-3.5 rounded-xl bg-slate-900/80 border border-white/10 space-y-1.5">
+                                    <div className="flex items-center gap-2 text-xs font-bold text-amber-400 uppercase tracking-wider">
+                                        <FileText className="w-3.5 h-3.5" />
+                                        <span>Incident Description & Chief Complaint</span>
+                                    </div>
+                                    <p className="text-xs text-slate-200 leading-relaxed pt-1 whitespace-pre-wrap">
+                                        {selectedIncidentModal.description || selectedIncidentModal.chief_complaint}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* 4. Operational Timeline Card */}
+                            <div className="p-3.5 rounded-xl bg-slate-900/80 border border-white/10 space-y-2">
+                                <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>Incident Milestones & Timeline</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-1">
+                                    <div className="p-2 rounded-lg bg-slate-950/60 border border-white/5">
+                                        <span className="text-slate-400 block text-[10px]">Reported:</span>
+                                        <span className="font-semibold text-slate-200 text-[11px]">
+                                            {selectedIncidentModal.reported_at || selectedIncidentModal.formatted_date || 'N/A'}
+                                        </span>
+                                    </div>
+                                    <div className="p-2 rounded-lg bg-slate-950/60 border border-white/5">
+                                        <span className="text-slate-400 block text-[10px]">Verified:</span>
+                                        <span className="font-semibold text-blue-300 text-[11px]">
+                                            {selectedIncidentModal.verified_at || 'Pending'}
+                                        </span>
+                                        {selectedIncidentModal.verified_by && (
+                                            <span className="text-[10px] text-slate-400 block truncate">By: {selectedIncidentModal.verified_by}</span>
+                                        )}
+                                    </div>
+                                    <div className="p-2 rounded-lg bg-slate-950/60 border border-white/5">
+                                        <span className="text-slate-400 block text-[10px]">Resolved:</span>
+                                        <span className="font-semibold text-emerald-300 text-[11px]">
+                                            {selectedIncidentModal.resolved_at || (selectedIncidentModal.status === 'resolved' ? 'Resolved' : 'Ongoing')}
+                                        </span>
+                                    </div>
+                                </div>
+                                {selectedIncidentModal.verification_remarks && (
+                                    <div className="p-2 rounded-lg bg-slate-950/40 border border-white/5 text-xs text-slate-300">
+                                        <span className="text-slate-400 text-[10px] block font-semibold">Verification Remarks:</span>
+                                        <p className="italic text-[11px] text-slate-300">{selectedIncidentModal.verification_remarks}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 5. Patients Catered / Medical Care Records */}
+                            <div className="p-3.5 rounded-xl bg-slate-900/80 border border-white/10 space-y-2">
+                                <div className="flex items-center justify-between text-xs font-bold text-rose-400 uppercase tracking-wider">
+                                    <div className="flex items-center gap-2">
+                                        <HeartPulse className="w-3.5 h-3.5 text-rose-400" />
+                                        <span>Patients Catered / Medical Care Records ({selectedIncidentModal.patients?.length || 0})</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Link
+                                            href="/dispatcher/patients"
+                                            className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold normal-case text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer"
+                                            title="Open Master Patient Directory Table"
+                                        >
+                                            <span>Patient Directory</span>
+                                            <ChevronRight className="w-3 h-3" />
+                                        </Link>
+                                        {selectedIncidentModal.patients && selectedIncidentModal.patients.length > 0 && (
+                                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20 font-semibold lowercase">
+                                                {selectedIncidentModal.patients.length} patient{selectedIncidentModal.patients.length > 1 ? 's' : ''}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {selectedIncidentModal.patients && selectedIncidentModal.patients.length > 0 ? (
+                                    <div className="space-y-2.5 pt-1">
+                                        {selectedIncidentModal.patients.map((pat, pIdx) => (
+                                            <div
+                                                key={`modal-pat-${pat.id || pIdx}`}
+                                                className="p-3 rounded-xl bg-slate-950/70 border border-white/10 text-xs space-y-2"
+                                            >
+                                                {/* Patient Header: Name, Tag, Disposition */}
+                                                <div className="flex flex-wrap items-center justify-between gap-1.5 pb-1.5 border-b border-white/5">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-6 h-6 rounded-full bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-[11px] font-bold text-rose-300">
+                                                            {pIdx + 1}
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-bold text-white text-sm">
+                                                                {pat.name}
+                                                            </span>
+                                                            {pat.is_unidentified && (
+                                                                <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                                                    Unidentified
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {pat.disposition && (
+                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                                                            {pat.disposition}
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Demographics & Address */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300">
+                                                    <div>
+                                                        <span className="text-slate-400">Demographics:</span>{' '}
+                                                        <strong className="text-slate-200">
+                                                            {pat.gender || 'Unspecified'}
+                                                            {pat.age ? `, ${pat.age} yrs old` : ''}
+                                                        </strong>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-slate-400">Address:</span>{' '}
+                                                        <span className="text-slate-200">{pat.address || 'Not specified'}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Chief Complaint / Clinical Findings */}
+                                                {pat.chief_complaint && (
+                                                    <div className="p-2 rounded-lg bg-slate-900 border border-white/5 text-[11px] text-slate-300 space-y-0.5">
+                                                        <span className="text-amber-400 font-bold block text-[10px] uppercase">
+                                                            Chief Complaint / Clinical Notes
+                                                        </span>
+                                                        <p className="text-slate-200 leading-relaxed">{pat.chief_complaint}</p>
+                                                    </div>
+                                                )}
+
+                                                {/* Destination Hospital & Attending Responders */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300 pt-0.5">
+                                                    {pat.destination_hospital && (
+                                                        <div>
+                                                            <span className="text-slate-400">Destination Hospital:</span>{' '}
+                                                            <strong className="text-cyan-300">{pat.destination_hospital}</strong>
+                                                        </div>
+                                                    )}
+                                                    {pat.ambulance_unit && (
+                                                        <div>
+                                                            <span className="text-slate-400">Attending Unit:</span>{' '}
+                                                            <span className="text-slate-200">{pat.ambulance_unit}</span>
+                                                        </div>
+                                                    )}
+                                                    {pat.responders && (
+                                                        <div className="sm:col-span-2">
+                                                            <span className="text-slate-400">Responders / EMT:</span>{' '}
+                                                            <span className="text-slate-200">{pat.responders}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Action Buttons: Redirect to Patient Table & View Full PCR Details (Same Tab Navigation) */}
+                                                <div className="pt-2.5 mt-2 border-t border-white/5 flex flex-wrap items-center justify-between gap-2">
+                                                    <div className="text-[11px] text-slate-400 flex items-center gap-1.5 font-mono">
+                                                        <FileText className="w-3.5 h-3.5 text-rose-400" />
+                                                        <span>PCR #{pat.pcr_id}</span>
+                                                    </div>
+
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        {/* Button: Open Master Patient Table filtered by this patient */}
+                                                        <Link
+                                                            href={`/dispatcher/patients?search=${encodeURIComponent(pat.name)}`}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-white/10 hover:border-white/25 text-xs font-semibold transition-all shadow-sm cursor-pointer"
+                                                            title="Redirect to Patient Table directory"
+                                                        >
+                                                            <Users className="w-3.5 h-3.5 text-indigo-400" />
+                                                            <span>Patient Table</span>
+                                                        </Link>
+
+                                                        {/* Button: View Full Patient Profile & PCR Details */}
+                                                        {pat.patient_id ? (
+                                                            <Link
+                                                                href={`/dispatcher/patients/${pat.patient_id}`}
+                                                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-md shadow-rose-600/30 hover:scale-[1.02] cursor-pointer"
+                                                                title="View full patient profile and complete medical PCR history"
+                                                            >
+                                                                <Eye className="w-3.5 h-3.5" />
+                                                                <span>View Full PCR Details</span>
+                                                            </Link>
+                                                        ) : (
+                                                            <Link
+                                                                href="/dispatcher/patient-care-records"
+                                                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-md shadow-rose-600/30 cursor-pointer"
+                                                                title="Open Patient Care Records table"
+                                                            >
+                                                                <Eye className="w-3.5 h-3.5" />
+                                                                <span>View Care Records</span>
+                                                            </Link>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="py-2.5 px-3 rounded-xl bg-slate-950/40 border border-white/5 text-center text-slate-400 text-xs">
+                                        <span className="italic">No patients recorded or catered for this incident.</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 6. Assigned Dispatch & Responder Units Card (if any) */}
+                            {selectedIncidentModal.dispatches && selectedIncidentModal.dispatches.length > 0 && (
+                                <div className="p-3.5 rounded-xl bg-slate-900/80 border border-white/10 space-y-2">
+                                    <div className="flex items-center gap-2 text-xs font-bold text-sky-400 uppercase tracking-wider">
+                                        <Truck className="w-3.5 h-3.5" />
+                                        <span>Assigned Emergency Units & Responders ({selectedIncidentModal.dispatches.length})</span>
+                                    </div>
+                                    <div className="space-y-2 pt-1">
+                                        {selectedIncidentModal.dispatches.map((disp, dIdx) => (
+                                            <div key={`modal-disp-${disp.id}-${dIdx}`} className="p-2.5 rounded-lg bg-slate-950/70 border border-white/5 text-xs space-y-1.5">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="font-bold text-white flex items-center gap-1.5">
+                                                        <Truck className="w-3 h-3 text-cyan-400" />
+                                                        {disp.ambulance_unit}
+                                                    </span>
+                                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                                                        {disp.status}
+                                                    </span>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] text-slate-300">
+                                                    <div>
+                                                        <span className="text-slate-400">Driver:</span>{' '}
+                                                        <strong className="text-slate-200">{disp.driver_name}</strong>
+                                                    </div>
+                                                    {disp.crew_members && disp.crew_members.length > 0 && (
+                                                        <div>
+                                                            <span className="text-slate-400">Crew / EMTs:</span>{' '}
+                                                            <strong className="text-slate-200">{disp.crew_members.join(', ')}</strong>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {(disp.pcr_patient || disp.pcr_hospital || disp.pcr_condition) && (
+                                                    <div className="p-2 rounded bg-slate-900 border border-white/5 text-[11px] text-slate-300 space-y-0.5">
+                                                        <span className="text-cyan-400 font-bold block text-[10px] uppercase">Patient Care Record (PCR)</span>
+                                                        {disp.pcr_patient && disp.pcr_patient !== 'N/A' && (
+                                                            <div><span className="text-slate-400">Patient:</span> {disp.pcr_patient}</div>
+                                                        )}
+                                                        {disp.pcr_hospital && disp.pcr_hospital !== 'N/A' && (
+                                                            <div><span className="text-slate-400">Hospital:</span> {disp.pcr_hospital}</div>
+                                                        )}
+                                                        {disp.pcr_condition && (
+                                                            <div><span className="text-slate-400">Chief Complaint:</span> {disp.pcr_condition}</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 7. Photo Evidence (if any) */}
+                            {selectedIncidentModal.images && selectedIncidentModal.images.length > 0 && (
+                                <div className="p-3.5 rounded-xl bg-slate-900/80 border border-white/10 space-y-2">
+                                    <div className="flex items-center gap-2 text-xs font-bold text-rose-400 uppercase tracking-wider">
+                                        <Camera className="w-3.5 h-3.5" />
+                                        <span>Incident Photo Evidence ({selectedIncidentModal.images.length})</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                                        {selectedIncidentModal.images.map((img, imgIdx) => (
+                                            <div
+                                                key={`modal-img-${img.id || imgIdx}`}
+                                                className="group relative rounded-xl overflow-hidden border border-white/10 aspect-video bg-black cursor-pointer shadow-md"
+                                                onClick={() => setPreviewImage(img.url)}
+                                            >
+                                                <img
+                                                    src={img.url}
+                                                    alt={`Evidence #${imgIdx + 1}`}
+                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                                />
+                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <span className="text-[10px] font-bold text-white bg-black/60 px-2 py-1 rounded-md backdrop-blur-sm flex items-center gap-1">
+                                                        <ExternalLink className="w-3 h-3" />
+                                                        View Full
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-4 border-t border-white/10 bg-slate-900/80 flex items-center justify-between gap-3">
+                            <span className="text-[11px] text-slate-400">
+                                Recorded in MDRRMO Opol Emergency System
+                            </span>
+                            <div className="flex items-center gap-2">
+                                {selectedIncidentModal.has_coords && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            focusIncidentOnMap(selectedIncidentModal);
+                                            setSelectedIncidentModal(null);
+                                        }}
+                                        className="py-2 px-4 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-lg shadow-cyan-600/30"
+                                    >
+                                        <MapPin className="w-3.5 h-3.5" />
+                                        <span>Locate on Map</span>
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedIncidentModal(null)}
+                                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* FULLSCREEN PHOTO LIGHTBOX PREVIEW */}
+            {previewImage && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+                    onClick={() => setPreviewImage(null)}
+                >
+                    <button
+                        type="button"
+                        onClick={() => setPreviewImage(null)}
+                        className="absolute top-4 right-4 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-white/20 text-xs font-bold transition-all"
+                    >
+                        <X className="w-4 h-4" />
+                        <span>Close Preview</span>
+                    </button>
+                    <div
+                        className="relative max-w-4xl max-h-[85vh] w-full flex items-center justify-center"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <img
+                            src={previewImage}
+                            alt="Incident Full Evidence"
+                            className="max-w-full max-h-[85vh] object-contain rounded-xl border border-white/10 shadow-2xl"
+                        />
                     </div>
                 </div>
             )}
