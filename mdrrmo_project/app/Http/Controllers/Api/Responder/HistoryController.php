@@ -35,11 +35,19 @@ class HistoryController extends Controller
             })
             ->whereIn('dispatch_status', ['completed', 'cancelled']);
 
-        // Type Filter (e.g. 1, 2)
+        // Type Filter (e.g. 1, 5, or name like 'Search and Rescue')
         if ($request->filled('type') && $request->type !== 'all') {
             $type = $request->type;
             $query->whereHas('incident', function ($q) use ($type) {
-                $q->where('incident_type_id', $type);
+                if (is_numeric($type)) {
+                    $q->where('incident_type_id', $type);
+                } else {
+                    $q->where(function ($sub) use ($type) {
+                        $sub->whereHas('incidentType', function ($itq) use ($type) {
+                            $itq->where('incident_type_name', 'like', "%{$type}%");
+                        })->orWhere('reported_chief_complaint', 'like', "%{$type}%");
+                    });
+                }
             });
         }
 
@@ -228,10 +236,11 @@ class HistoryController extends Controller
             'id' => 'DSP-'.str_pad($dispatch->id, 3, '0', STR_PAD_LEFT),
             'raw_id' => $dispatch->id,
             'incident_id' => $incident?->id,
+            'incident_type_id' => $incident?->incident_type_id,
             'incident_number' => $incident?->incident_number ?: ($incident ? 'INC-'.str_pad($incident->id, 4, '0', STR_PAD_LEFT) : null),
             'status' => ucfirst($dispatch->dispatch_status),
             'raw_status' => $dispatch->dispatch_status,
-            'type' => optional(optional($incident)->incidentType)->name ?? 'General Emergency',
+            'type' => $incident?->incidentType?->incident_type_name ?: ($incident?->incidentType?->name ?: ($incident?->reported_chief_complaint ?: 'General Emergency')),
             'priority' => $incident?->priority ?? 'Moderate',
             'location' => $locationName,
             'barangay' => $barangay,
