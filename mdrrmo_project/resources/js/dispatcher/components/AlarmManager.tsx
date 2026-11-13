@@ -48,6 +48,13 @@ export default function AlarmManager() {
                 router.reload();
             };
 
+            channel.subscribed(() => {
+                console.log('[AlarmManager] Successfully subscribed to private-dispatcher channel!');
+            });
+            channel.error((err: any) => {
+                console.error('[AlarmManager] Channel subscription error:', err);
+            });
+
             channel.listen('IncidentCreated', handleIncidentCreated);
             channel.listen('.IncidentCreated', handleIncidentCreated);
             channel.listen('App\\Events\\IncidentCreated', handleIncidentCreated);

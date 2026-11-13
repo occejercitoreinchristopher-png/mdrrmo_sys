@@ -7,7 +7,8 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 });
 
 Broadcast::channel('dispatcher', function ($user) {
-    return in_array($user->role, ['admin', 'dispatcher']);
+    $role = strtolower(trim((string) ($user->role ?? '')));
+    return in_array($role, ['admin', 'dispatcher']);
 });
 
 Broadcast::channel('responder.{id}', function ($user, $id) {

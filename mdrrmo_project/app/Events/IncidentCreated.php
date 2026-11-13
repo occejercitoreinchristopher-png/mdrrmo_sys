@@ -47,12 +47,18 @@ class IncidentCreated implements ShouldBroadcastNow
             'images',
         ]);
 
-        if (!isset($this->incident->reporter_prank_history)) {
-            $this->incident->reporter_prank_history = Incident::getPrankHistoryForReporter(
-                $this->incident->resident_id,
-                $this->incident->resident?->phone_number
-            );
+        try {
+            if (!isset($this->incident->reporter_prank_history)) {
+                $this->incident->reporter_prank_history = Incident::getPrankHistoryForReporter(
+                    $this->incident->resident_id,
+                    $this->incident->resident?->phone_number
+                );
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('[IncidentCreated] Prank history error: ' . $e->getMessage());
         }
+
+        \Illuminate\Support\Facades\Log::info('[IncidentCreated] Broadcasting event to private-dispatcher channel for incident #' . ($this->incident->incident_number ?? $this->incident->id));
 
         return [
             'incident' => $this->incident,
