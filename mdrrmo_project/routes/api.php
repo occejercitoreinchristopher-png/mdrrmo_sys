@@ -71,6 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/dispatches/{dispatch}/pcr', [PatientCareRecordController::class, 'update']);
         Route::post('/dispatches/{dispatch}/pcr/photo', [PatientCareRecordController::class, 'uploadPhoto']);
         Route::post('/dispatches/{dispatch}/pcr/submit', [PatientCareRecordController::class, 'submit']);
+        Route::delete('/dispatches/{dispatch}/pcr/{pcr}', [PatientCareRecordController::class, 'destroy']);
 
         Route::post('/sync/batch', [ResponderDispatchController::class, 'syncBatch']);
     });

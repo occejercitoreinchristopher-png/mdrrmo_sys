@@ -72,7 +72,10 @@ class DispatchController extends Controller
                 'teamLeader',
                 'patientCareRecord',
                 'patientCareRecord.patient',
-                'patientCareRecord.images'
+                'patientCareRecord.images',
+                'patientCareRecords',
+                'patientCareRecords.patient',
+                'patientCareRecords.images'
             ])
             ->get();
 

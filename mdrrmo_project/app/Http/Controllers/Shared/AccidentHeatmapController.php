@@ -33,6 +33,7 @@ class AccidentHeatmapController extends Controller
             'dispatches.driver',
             'dispatches.crew',
             'dispatches.patientCareRecord.patient.barangay',
+            'dispatches.patientCareRecords.patient.barangay',
         ]);
 
         // Exclude prank reports
@@ -110,12 +111,15 @@ class AccidentHeatmapController extends Controller
                 'completed_at' => $d->completed_at ? Carbon::parse($d->completed_at)->format('M d, Y h:i A') : null,
             ])->values()->all() : [];
 
-            // Compile all patients catered to in this incident from PCRs
+            // Compile all patients catered to in this incident from PCRs (supports single and multi-patient incidents)
             $patientsList = [];
             if ($inc->dispatches) {
                 foreach ($inc->dispatches as $d) {
-                    $pcr = $d->patientCareRecord;
-                    if ($pcr) {
+                    $records = $d->relationLoaded('patientCareRecords') && $d->patientCareRecords->isNotEmpty()
+                        ? $d->patientCareRecords
+                        : ($d->patientCareRecord ? collect([$d->patientCareRecord]) : collect());
+
+                    foreach ($records as $pcr) {
                         $patient = $pcr->patient;
                         $age = null;
                         if ($patient?->birthdate) {

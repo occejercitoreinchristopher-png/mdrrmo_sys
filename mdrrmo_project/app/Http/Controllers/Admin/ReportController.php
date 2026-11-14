@@ -21,6 +21,7 @@ class ReportController extends Controller
             'dispatches.ambulance',
             'dispatches.crew',
             'dispatches.patientCareRecord',
+            'dispatches.patientCareRecords',
         ]);
 
         // Date Range Filter
@@ -96,9 +97,13 @@ class ReportController extends Controller
                     $missionDurations[] = $dispatch->en_route_at->diffInSeconds($dispatch->completed_at);
                 }
 
-                if ($dispatch->patientCareRecord) {
+                $pcrs = $dispatch->relationLoaded('patientCareRecords') && $dispatch->patientCareRecords->isNotEmpty()
+                    ? $dispatch->patientCareRecords
+                    : ($dispatch->patientCareRecord ? collect([$dispatch->patientCareRecord]) : collect());
+
+                foreach ($pcrs as $pcrItem) {
                     $patientsAttended++;
-                    $disp = $dispatch->patientCareRecord->disposition ?? [];
+                    $disp = $pcrItem->disposition ?? [];
                     if (is_string($disp)) {
                         $disp = json_decode($disp, true) ?? [];
                     }
@@ -110,7 +115,7 @@ class ReportController extends Controller
                         }
                     }
 
-                    $cc = $dispatch->patientCareRecord->clinical_chief_complaint;
+                    $cc = $pcrItem->clinical_chief_complaint;
                     if ($cc) {
                         $chiefComplaints[$cc] = ($chiefComplaints[$cc] ?? 0) + 1;
                     }

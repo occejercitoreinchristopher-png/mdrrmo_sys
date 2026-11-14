@@ -39,7 +39,12 @@ class Dispatch extends Model
 
     public function patientCareRecord()
     {
-        return $this->hasOne(PatientCareRecord::class);
+        return $this->hasOne(PatientCareRecord::class)->latestOfMany();
+    }
+
+    public function patientCareRecords()
+    {
+        return $this->hasMany(PatientCareRecord::class);
     }
 
     public function pcrRecord()

@@ -162,7 +162,11 @@ class Incident extends Model
     {
         if ($this->relationLoaded('dispatches')) {
             foreach ($this->dispatches as $d) {
-                if ($d->relationLoaded('patientCareRecord') && $d->patientCareRecord?->chief_complaint) {
+                if ($d->relationLoaded('patientCareRecords') && $d->patientCareRecords->isNotEmpty()) {
+                    foreach ($d->patientCareRecords as $rec) {
+                        if ($rec->chief_complaint) return $rec->chief_complaint;
+                    }
+                } elseif ($d->relationLoaded('patientCareRecord') && $d->patientCareRecord?->chief_complaint) {
                     return $d->patientCareRecord->chief_complaint;
                 }
             }
@@ -173,9 +177,17 @@ class Incident extends Model
     public function getPcrChiefComplaintsAttribute(): array
     {
         if ($this->relationLoaded('dispatches')) {
-            return $this->dispatches->map(function ($d) {
-                return $d->relationLoaded('patientCareRecord') ? $d->patientCareRecord?->chief_complaint : null;
-            })->filter()->unique()->values()->all();
+            $complaints = [];
+            foreach ($this->dispatches as $d) {
+                if ($d->relationLoaded('patientCareRecords') && $d->patientCareRecords->isNotEmpty()) {
+                    foreach ($d->patientCareRecords as $rec) {
+                        if ($rec->chief_complaint) $complaints[] = $rec->chief_complaint;
+                    }
+                } elseif ($d->relationLoaded('patientCareRecord') && $d->patientCareRecord?->chief_complaint) {
+                    $complaints[] = $d->patientCareRecord->chief_complaint;
+                }
+            }
+            return array_values(array_unique(array_filter($complaints)));
         }
         return [];
     }
@@ -318,6 +330,11 @@ class Incident extends Model
     public function dispatches()
     {
         return $this->hasMany(Dispatch::class);
+    }
+
+    public function patientCareRecords()
+    {
+        return $this->hasManyThrough(PatientCareRecord::class, Dispatch::class);
     }
 
     public function images()

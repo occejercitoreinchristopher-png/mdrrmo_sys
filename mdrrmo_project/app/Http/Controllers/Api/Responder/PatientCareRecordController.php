@@ -38,6 +38,7 @@ class PatientCareRecordController extends Controller
         }
 
         $validated = $request->validate([
+            'pcr_id' => 'nullable|integer|exists:patient_care_records,id',
             'patient_id' => 'required|exists:patients,id',
             'contact_number' => 'nullable|string',
             'gender' => 'nullable|string|in:male,female',
@@ -83,6 +84,7 @@ class PatientCareRecordController extends Controller
         ]);
 
         $pcrData = collect($validated)->except([
+            'pcr_id',
             'age', 
             'incident_address', 
             'gender',
@@ -104,10 +106,27 @@ class PatientCareRecordController extends Controller
             $pcrData['waiver_signed'] = !empty($sig) && $sig !== 'UNABLE_TO_SIGN';
         }
 
-        $pcr = $dispatch->patientCareRecord()->updateOrCreate(
-            ['dispatch_id' => $dispatch->id],
-            $pcrData
-        );
+        // Multi-Patient Support: If pcr_id is supplied, update that specific record;
+        // otherwise match or create by (dispatch_id, patient_id) to allow multiple patients on one dispatch.
+        $pcr = null;
+        if (!empty($validated['pcr_id'])) {
+            $pcr = \App\Models\PatientCareRecord::where('dispatch_id', $dispatch->id)
+                ->where('id', $validated['pcr_id'])
+                ->first();
+            if ($pcr) {
+                $pcr->update($pcrData);
+            }
+        }
+
+        if (!$pcr) {
+            $pcr = \App\Models\PatientCareRecord::updateOrCreate(
+                [
+                    'dispatch_id' => $dispatch->id,
+                    'patient_id' => $validated['patient_id'],
+                ],
+                $pcrData
+            );
+        }
 
         // Allow responders to review and correct operational timestamps in PCR
         $dispatchTimeUpdates = [];
@@ -201,12 +220,18 @@ class PatientCareRecordController extends Controller
         // Broadcast to other crew members on the same dispatch
         // broadcast(new PatientCareRecordUpdatedEvent($pcr))->toOthers();
 
-        return response()->json(['message' => 'PCR updated', 'data' => $pcr->load(['patient', 'dispatch'])]);
+        return response()->json([
+            'message' => 'PCR updated',
+            'data' => $pcr->load(['patient', 'dispatch']),
+            'all_pcrs' => $dispatch->patientCareRecords()->with(['patient', 'images'])->get(),
+        ]);
     }
 
     public function submit(Request $request, Dispatch $dispatch)
     {
         $request->validate([
+            'pcr_id' => 'nullable|integer|exists:patient_care_records,id',
+            'complete_mission' => 'nullable',
             'photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
             'photos' => 'nullable|array',
             'photos.*' => 'image|mimes:jpeg,png,jpg,webp|max:10240',
@@ -217,17 +242,29 @@ class PatientCareRecordController extends Controller
             return response()->json(['message' => 'Unauthorized to submit PCR for this dispatch.'], 403);
         }
 
-        $pcr = $dispatch->patientCareRecord;
-        if (! $pcr) {
-            return response()->json(['message' => 'No PCR found'], 404);
+        $pcr = null;
+        if ($request->filled('pcr_id')) {
+            $pcr = \App\Models\PatientCareRecord::where('dispatch_id', $dispatch->id)->find($request->input('pcr_id'));
+        }
+        if (!$pcr) {
+            $pcr = $dispatch->patientCareRecords()->latest('id')->first() ?? $dispatch->patientCareRecord;
         }
 
-        // Idempotency check: If already completed, return successful response
-        if ($dispatch->dispatch_status === 'completed') {
+        if (! $pcr) {
+            return response()->json(['message' => 'No PCR found for this dispatch.'], 404);
+        }
+
+        $shouldCompleteMission = $request->has('complete_mission')
+            ? filter_var($request->input('complete_mission'), FILTER_VALIDATE_BOOLEAN)
+            : true;
+
+        // Idempotency check: If already completed and user requested final complete
+        if ($dispatch->dispatch_status === 'completed' && $shouldCompleteMission) {
             return response()->json([
                 'message' => 'PCR Submitted and Dispatch Completed',
                 'data' => $pcr,
                 'already_processed' => true,
+                'all_pcrs' => $dispatch->patientCareRecords()->with(['patient', 'images'])->get(),
             ]);
         }
 
@@ -241,21 +278,6 @@ class PatientCareRecordController extends Controller
             try {
                 $completedAt = is_numeric($rawTime) ? Carbon::createFromTimestampMs((int)$rawTime) : Carbon::parse($rawTime);
             } catch (\Throwable $e) {}
-        }
-
-        // Mark the dispatch as completed
-        $dispatch->update([
-            'dispatch_status' => 'completed',
-            'completed_at' => $dispatch->completed_at ?? $completedAt,
-            'last_location_updated_at' => now(),
-        ]);
-
-        // Mark the overall incident as resolved
-        if ($dispatch->incident) {
-            $dispatch->incident->update([
-                'incident_status' => 'resolved',
-                'resolved_at' => $dispatch->incident->resolved_at ?? now(),
-            ]);
         }
 
         // Optional photo(s) attached during submission
@@ -295,29 +317,76 @@ class PatientCareRecordController extends Controller
             }
         }
 
-        if ($dispatch->ambulance_id) {
-            Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
-        }
+        if ($shouldCompleteMission) {
+            // Mark the dispatch as completed
+            $dispatch->update([
+                'dispatch_status' => 'completed',
+                'completed_at' => $dispatch->completed_at ?? $completedAt,
+                'last_location_updated_at' => now(),
+            ]);
 
-        $crewUserIds = $dispatch->crew()->pluck('users.id')->toArray();
-        $assignedUserIds = array_unique(array_filter(array_merge($crewUserIds, [
-            $dispatch->driver_id,
-            $dispatch->emt_id,
-        ])));
+            // Mark the overall incident as resolved
+            if ($dispatch->incident) {
+                $dispatch->incident->update([
+                    'incident_status' => 'resolved',
+                    'resolved_at' => $dispatch->incident->resolved_at ?? now(),
+                ]);
+            }
 
-        if (! empty($assignedUserIds)) {
-            ResponderProfile::whereIn('user_id', $assignedUserIds)->update(['availability' => 'available']);
+            if ($dispatch->ambulance_id) {
+                Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
+            }
+
+            $crewUserIds = $dispatch->crew()->pluck('users.id')->toArray();
+            $assignedUserIds = array_unique(array_filter(array_merge($crewUserIds, [
+                $dispatch->driver_id,
+                $dispatch->emt_id,
+            ])));
+
+            if (! empty($assignedUserIds)) {
+                ResponderProfile::whereIn('user_id', $assignedUserIds)->update(['availability' => 'available']);
+            }
         }
 
         // Broadcast to Dispatcher in real-time
         try {
             broadcast(new PatientCareRecordSubmitted($pcr));
-            broadcast(new DispatchCompleted($dispatch));
+            if ($shouldCompleteMission) {
+                broadcast(new DispatchCompleted($dispatch));
+            }
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('Websocket broadcast notice during PCR submission: '.$e->getMessage());
         }
 
-        return response()->json(['message' => 'PCR Submitted and Dispatch Completed']);
+        return response()->json([
+            'message' => $shouldCompleteMission ? 'PCR Submitted and Dispatch Completed' : 'Patient PCR saved. Mission remains active for next patient.',
+            'data' => $pcr->load(['patient', 'dispatch']),
+            'all_pcrs' => $dispatch->patientCareRecords()->with(['patient', 'images'])->get(),
+            'mission_completed' => $shouldCompleteMission,
+        ]);
+    }
+
+    public function destroy(Request $request, Dispatch $dispatch, \App\Models\PatientCareRecord $pcr)
+    {
+        $user = $request->user();
+        if (! $this->isUserAssignedToDispatch($user, $dispatch)) {
+            return response()->json(['message' => 'Unauthorized to remove PCR from this dispatch.'], 403);
+        }
+
+        if ((int)$pcr->dispatch_id !== (int)$dispatch->id) {
+            return response()->json(['message' => 'PCR does not belong to this dispatch.'], 404);
+        }
+
+        if ($dispatch->dispatch_status === 'completed') {
+            return response()->json(['message' => 'Cannot remove PCR from an already completed mission.'], 422);
+        }
+
+        $pcr->delete();
+
+        return response()->json([
+            'message' => 'PCR removed successfully.',
+            'all_pcrs' => $dispatch->patientCareRecords()->with(['patient', 'images'])->get(),
+        ]);
     }
 
     public function uploadPhoto(Request $request, Dispatch $dispatch)
@@ -328,6 +397,7 @@ class PatientCareRecordController extends Controller
         }
 
         $request->validate([
+            'pcr_id' => 'nullable|integer|exists:patient_care_records,id',
             'photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
             'photos' => 'nullable|array',
             'photos.*' => 'image|mimes:jpeg,png,jpg,webp|max:10240',
@@ -347,7 +417,13 @@ class PatientCareRecordController extends Controller
         $capturedAtRaw = $request->input('photo_captured_at') ?? $request->input('captured_at');
         $capturedAt = $capturedAtRaw ? \Carbon\Carbon::parse($capturedAtRaw) : now();
 
-        $pcr = $dispatch->patientCareRecord;
+        $pcr = null;
+        if ($request->filled('pcr_id')) {
+            $pcr = \App\Models\PatientCareRecord::where('dispatch_id', $dispatch->id)->find($request->input('pcr_id'));
+        }
+        if (!$pcr) {
+            $pcr = $dispatch->patientCareRecords()->latest('id')->first() ?? $dispatch->patientCareRecord;
+        }
         $createdImages = [];
 
         if ($request->hasFile('photo')) {
