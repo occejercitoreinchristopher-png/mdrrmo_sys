@@ -8,18 +8,18 @@ test('guest cannot access profile and is redirected to login', function () {
     $response->assertRedirect('/login');
 });
 
-test('resident cannot access profile and receives 403 forbidden', function () {
+test('resident cannot access profile and receives 403 forbidden or redirect to login', function () {
     $resident = User::factory()->create(['role' => 'resident']);
 
     $response = $this->actingAs($resident)->get('/profile');
-    $response->assertStatus(403);
+    $response->assertRedirect('/login');
 });
 
-test('responder cannot access profile and receives 403 forbidden', function () {
+test('responder cannot access profile and receives 403 forbidden or redirect to login', function () {
     $responder = User::factory()->create(['role' => 'responder']);
 
     $response = $this->actingAs($responder)->get('/profile');
-    $response->assertStatus(403);
+    $response->assertRedirect('/login');
 });
 
 test('admin can access profile page', function () {

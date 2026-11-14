@@ -73,6 +73,18 @@ class DispatchController extends Controller
         $driverId = ! empty($validated['driver_id']) ? $validated['driver_id'] : null;
         $emtIds = ! empty($validated['emt_ids']) ? (array) $validated['emt_ids'] : [];
 
+        // Auto-select organic on-duty driver from the assigned team if not explicitly specified
+        if (! $driverId && ! empty($validated['team'])) {
+            $teamClean = preg_replace('/^team\s*/i', '', trim($validated['team']));
+            $teamDriver = ResponderProfile::whereRaw('LOWER(TRIM(team)) = ?', [strtolower($teamClean)])
+                ->where('position', 'driver')
+                ->where('availability', 'available')
+                ->first();
+            if ($teamDriver) {
+                $driverId = $teamDriver->user_id;
+            }
+        }
+
         if (! $driverId && empty($emtIds)) {
             abort(422, 'Please select at least one crew member (Driver or EMT) to deploy.');
         }
@@ -101,6 +113,22 @@ class DispatchController extends Controller
                 $driverPos = $driver->responderProfile?->position;
                 if (! in_array($driverPos, ['driver', 'team_leader'])) {
                     abort(422, "User {$driver->first_name} {$driver->last_name} is not registered as a Driver.");
+                }
+
+                // Safeguard: Borrowing from another team is prohibited if the target team already has an available on-duty member for that role
+                $teamClean = preg_replace('/^team\s*/i', '', trim($validated['team']));
+                $driverTeam = $driver->responderProfile?->team;
+                if ($driverTeam && strcasecmp($driverTeam, $teamClean) !== 0 && ! $driver->responderProfile?->is_reliever) {
+                    $hasAvailableOrganicDriver = ResponderProfile::whereRaw('LOWER(TRIM(team)) = ?', [strtolower($teamClean)])
+                        ->where('position', 'driver')
+                        ->where('availability', 'available')
+                        ->where('is_reliever', false)
+                        ->where('user_id', '!=', $driver->id)
+                        ->exists();
+
+                    if ($hasAvailableOrganicDriver) {
+                        abort(422, "Team {$validated['team']} already has an available on-duty Driver. Borrowing from another team is prohibited.");
+                    }
                 }
             }
 
@@ -239,6 +267,16 @@ class DispatchController extends Controller
             $relievers = $dispatch->crew()->wherePivot('is_reliever_assignment', true)->get();
             foreach ($relievers as $reliever) {
                 $returnNotes[] = "Reliever {$reliever->first_name} {$reliever->last_name} returned to Reliever Pool.";
+            }
+
+            // Note borrowed responders returning to permanent crew
+            $allDeployedUsers = User::with('responderProfile')->whereIn('id', $crewUserIds)->get();
+            $dispatchTeam = $dispatch->team ? preg_replace('/^team\s*/i', '', trim($dispatch->team)) : null;
+            foreach ($allDeployedUsers as $deployedUser) {
+                $permTeam = $deployedUser->responderProfile?->team;
+                if ($permTeam && $dispatchTeam && strcasecmp($permTeam, $dispatchTeam) !== 0 && ! $deployedUser->responderProfile?->is_reliever) {
+                    $returnNotes[] = "Responder {$deployedUser->first_name} {$deployedUser->last_name} has been returned to Team {$permTeam}.";
+                }
             }
 
             broadcast(new DispatchStatusUpdated($dispatch));

@@ -25,8 +25,16 @@ class ProfileUpdateRequest extends FormRequest
             ]);
         }
         if (! $this->has('phone_number')) {
+            $userPhone = $this->user()?->phone_number;
+            $cleaned = preg_replace('/\D/', '', (string) $userPhone);
+            if (str_starts_with($cleaned, '639')) {
+                $cleaned = '09'.substr($cleaned, 3);
+            }
+            if (empty($cleaned) || strlen($cleaned) !== 11 || !str_starts_with($cleaned, '09')) {
+                $cleaned = '09123456789';
+            }
             $this->merge([
-                'phone_number' => $this->user()?->phone_number ?? '09123456789',
+                'phone_number' => $cleaned,
             ]);
         } elseif ($this->input('phone_number')) {
             $cleaned = preg_replace('/\D/', '', (string) $this->input('phone_number'));

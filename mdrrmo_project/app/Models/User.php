@@ -56,9 +56,24 @@ class User extends Authenticatable
         return $this->verification_status === 'Verified';
     }
 
+    protected ?string $transientPosition = null;
+
     public function getPositionAttribute(): ?string
     {
-        return $this->responderProfile?->position;
+        return $this->responderProfile?->position ?? $this->transientPosition;
+    }
+
+    public function setGenderAttribute($value): void
+    {
+        $this->attributes['gender'] = $value ? ucfirst(strtolower(trim((string) $value))) : null;
+    }
+
+    public function setPositionAttribute($value): void
+    {
+        $this->transientPosition = $value ? (string) $value : null;
+        if ($this->exists && in_array($this->role, ['responder', 'team_leader', 'emt', 'driver'])) {
+            $this->responderProfile?->update(['position' => $value]);
+        }
     }
 
     public function isReportingSuspended(): bool

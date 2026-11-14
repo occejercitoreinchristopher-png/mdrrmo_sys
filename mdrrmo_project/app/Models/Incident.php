@@ -82,6 +82,42 @@ class Incident extends Model
         }
     }
 
+    public function setLocationAttribute($value): void
+    {
+        $this->attributes['incident_address'] = $value;
+    }
+
+    public function setLatitudeAttribute($value): void
+    {
+        $this->attributes['incident_latitude'] = $value;
+    }
+
+    public function setLongitudeAttribute($value): void
+    {
+        $this->attributes['incident_longitude'] = $value;
+    }
+
+    public function setReportedByIdAttribute($value): void
+    {
+        $this->attributes['resident_id'] = $value;
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function ($incident) {
+            if (empty($incident->reported_at)) {
+                $incident->reported_at = now();
+            }
+            if (empty($incident->incident_type_id)) {
+                $type = IncidentType::first() ?? IncidentType::create([
+                    'incident_type_name' => 'Medical Emergency',
+                    'type_description' => 'General Medical Emergency',
+                ]);
+                $incident->incident_type_id = $type->id;
+            }
+        });
+    }
+
     public function locationCode()
     {
         return $this->belongsTo(LocationCode::class, 'location_code_id');

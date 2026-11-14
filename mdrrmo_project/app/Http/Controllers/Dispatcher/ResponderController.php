@@ -93,17 +93,20 @@ class ResponderController extends Controller
                     'incident_code' => $dispatch->incident?->location_code,
                     'incident_type' => $dispatch->incident?->incidentType?->name ?? 'Emergency Incident',
                     'dispatch_team' => $dispatchTeam,
+                    'borrowed_to' => $dispatchTeam,
                     'dispatch_status' => $dispatch->dispatch_status,
                     'is_reliever' => $isReliever,
                     'permanent_crew' => $permanentCrew,
                 ];
             }
 
+            $isBorrowed = ($isReliever && (bool) $dispatch) || ($dispatch && $dispatchTeam && $permanentCrew !== 'Unassigned' && $dispatchTeam !== $permanentCrew);
+
             $user->is_reliever = $isReliever;
             $user->display_role = $displayRole;
             $user->permanent_crew = $permanentCrew;
             $user->temporary_mission = $temporaryMission;
-            $user->is_borrowed = $isReliever && (bool) $dispatch;
+            $user->is_borrowed = $isBorrowed;
             $user->current_status = $dispatch ? 'assigned' : ($user->responderProfile?->availability ?? 'offline');
             $user->is_logged_in = (int) ($user->tokens_count ?? 0) > 0;
             $user->dispatches = $dispatch ? [$dispatch] : [];

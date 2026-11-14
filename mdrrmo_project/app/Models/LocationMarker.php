@@ -68,4 +68,57 @@ class LocationMarker extends Model
     {
         return isset($this->attributes['location_longitude']) ? (float) $this->attributes['location_longitude'] : null;
     }
+
+    public function setCodeAttribute($value): void
+    {
+        $this->attributes['location_code'] = $value;
+    }
+
+    public function setMarkerNameAttribute($value): void
+    {
+        $this->attributes['location_name'] = $value;
+    }
+
+    public function setDescriptionAttribute($value): void
+    {
+        $this->attributes['location_description'] = $value;
+    }
+
+    public function setLatitudeAttribute($value): void
+    {
+        $this->attributes['location_latitude'] = $value;
+    }
+
+    public function setLongitudeAttribute($value): void
+    {
+        $this->attributes['location_longitude'] = $value;
+    }
+
+    public function setIsActiveAttribute($value): void
+    {
+        // location_codes has no is_active column; ignore
+    }
+
+    public function setBarangayAttribute($value): void
+    {
+        if (is_numeric($value)) {
+            $this->attributes['barangay_id'] = (int) $value;
+        } elseif (is_string($value) && trim($value) !== '') {
+            $b = Barangay::firstOrCreate(['barangay_name' => trim($value)]);
+            $this->attributes['barangay_id'] = $b->id;
+        }
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function ($model) {
+            if (empty($model->location_type)) {
+                $model->location_type = 'Landmark';
+            }
+            if (empty($model->barangay_id)) {
+                $b = Barangay::first() ?? Barangay::create(['barangay_name' => 'Poblacion']);
+                $model->barangay_id = $b->id;
+            }
+        });
+    }
 }

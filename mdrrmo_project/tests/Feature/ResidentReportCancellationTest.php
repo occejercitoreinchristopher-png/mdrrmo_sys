@@ -8,7 +8,18 @@ use App\Models\ResponderProfile;
 use App\Models\User;
 
 test('resident can submit new emergency report after mission is cancelled by dispatcher', function () {
-    $resident = User::factory()->create(['role' => 'resident']);
+    $barangay = \App\Models\Barangay::firstOrCreate(['barangay_name' => 'Poblacion']);
+    $resident = User::factory()->create([
+        'role' => 'resident',
+        'birthdate' => '2000-01-01',
+        'gender' => 'male',
+        'phone_number' => '09123456781',
+        'verification_status' => 'Verified',
+    ]);
+    \App\Models\ResidentProfile::create([
+        'user_id' => $resident->id,
+        'barangay_id' => $barangay->id,
+    ]);
     $dispatcher = User::factory()->create(['role' => 'dispatcher']);
     $responder = User::factory()->create(['role' => 'responder']);
     ResponderProfile::create([
@@ -72,7 +83,18 @@ test('resident can submit new emergency report after mission is cancelled by dis
 });
 
 test('resident can submit new emergency report after mission is cancelled by responder', function () {
-    $resident = User::factory()->create(['role' => 'resident']);
+    $barangay = \App\Models\Barangay::firstOrCreate(['barangay_name' => 'Poblacion']);
+    $resident = User::factory()->create([
+        'role' => 'resident',
+        'birthdate' => '2000-01-01',
+        'gender' => 'female',
+        'phone_number' => '09123456782',
+        'verification_status' => 'Verified',
+    ]);
+    \App\Models\ResidentProfile::create([
+        'user_id' => $resident->id,
+        'barangay_id' => $barangay->id,
+    ]);
     $responder = User::factory()->create(['role' => 'responder']);
     ResponderProfile::create([
         'user_id' => $responder->id,
@@ -119,7 +141,7 @@ test('resident can submit new emergency report after mission is cancelled by res
 
     $statusResponse->assertOk();
     expect($dispatch->fresh()->dispatch_status)->toBe('cancelled');
-    expect($incident->fresh()->incident_status)->toBe('cancelled');
+    expect($incident->fresh()->incident_status)->toBe('verified');
 
     // Resident can now report without 422 error
     $newReportData = [

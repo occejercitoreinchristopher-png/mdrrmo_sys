@@ -30,7 +30,7 @@ test('responder cannot create walk-in dispatch if offline or unavailable', funct
     ]);
 
     $response->assertStatus(403);
-    $response->assertJsonPath('message', 'You must be available/on duty to create a walk-in.');
+    $response->assertJsonPath('message', 'You are currently off-duty or offline. Please switch to Available on duty first.');
 });
 
 test('responder can successfully create walk-in dispatch with coordinates', function () {
@@ -44,17 +44,33 @@ test('responder can successfully create walk-in dispatch with coordinates', func
     $response->assertStatus(200);
     $response->assertJsonPath('message', 'Walk-in dispatch created successfully');
     $response->assertJsonPath('data.dispatch_status', 'arrived_on_scene');
-    $response->assertJsonPath('data.incident.description', 'Walk-In / Station Assistance');
+    $response->assertJsonPath('data.incident.description', 'Walk-In / Direct Citizen Emergency Request');
     $response->assertJsonPath('data.incident.incident_status', 'responding');
     $response->assertJsonPath('data.ambulance.plate_number', 'WALK-IN');
     $response->assertJsonPath('data.ambulance.vehicle_type', 'Station');
 });
 
 test('responder cannot create walk-in dispatch if already on an active mission', function () {
-    $incident = \App\Models\Incident::factory()->create();
-    $ambulance = \App\Models\Ambulance::factory()->create();
+    $incident = \App\Models\Incident::create([
+        'incident_description' => 'Test Incident',
+        'location' => 'Opol',
+        'latitude' => 8.5312,
+        'longitude' => 124.5695,
+        'incident_status' => 'responding',
+        'reported_by_id' => $this->responder->id,
+    ]);
+    $ambulance = \App\Models\Ambulance::create([
+        'ambulance_code' => 'AMB-01',
+        'plate_number' => 'AMB-TEST-01',
+        'vehicle_name' => 'Ambulance Test 01',
+        'vehicle_type' => 'Type 1',
+        'status' => 'dispatched',
+    ]);
+
+    $dispatcher = User::factory()->create(['role' => 'dispatcher']);
 
     \App\Models\Dispatch::create([
+        'dispatcher_id' => $dispatcher->id,
         'incident_id' => $incident->id,
         'driver_id' => $this->responder->id,
         'ambulance_id' => $ambulance->id,

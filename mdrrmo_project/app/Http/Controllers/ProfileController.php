@@ -96,6 +96,8 @@ class ProfileController extends Controller
 
         if ($user->role === 'responder' && isset($validated['position'])) {
             $user->responderProfile?->update(['position' => $validated['position']]);
+        } elseif (isset($validated['position'])) {
+            $user->position = $validated['position'];
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Profile updated successfully.']);
