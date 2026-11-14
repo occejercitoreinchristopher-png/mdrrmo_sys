@@ -358,6 +358,13 @@ class PatientCareRecordController extends Controller
             \Illuminate\Support\Facades\Log::warning('Websocket broadcast notice during PCR submission: '.$e->getMessage());
         }
 
+        // Automatically consolidate duplicate patient records on PCR submission
+        try {
+            \App\Models\Patient::consolidateDuplicates();
+        } catch (\Throwable $e) {
+            // safe fallback
+        }
+
         return response()->json([
             'message' => $shouldCompleteMission ? 'PCR Submitted and Dispatch Completed' : 'Patient PCR saved. Mission remains active for next patient.',
             'data' => $pcr->load(['patient', 'dispatch']),

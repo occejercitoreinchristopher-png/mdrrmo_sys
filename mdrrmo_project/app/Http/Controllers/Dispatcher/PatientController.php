@@ -13,6 +13,13 @@ class PatientController extends Controller
 {
     public function index(Request $request)
     {
+        // Automatically consolidate any duplicate patient profiles on page view
+        try {
+            Patient::consolidateDuplicates();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Auto patient consolidation failed: ' . $e->getMessage());
+        }
+
         $query = Patient::with([
             'barangay',
             'latestCareRecord',
