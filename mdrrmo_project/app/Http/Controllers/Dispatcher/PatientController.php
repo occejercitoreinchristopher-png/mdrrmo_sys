@@ -46,13 +46,24 @@ class PatientController extends Controller
 
         $transformedPatients = collect($patients->items())->map(function ($patient) {
             $latestPcr = $patient->latestCareRecord;
-            $residentProfile = $patient->registeredUser?->residentProfile;
+            $user = $patient->registeredUser;
+            $residentProfile = $user?->residentProfile;
 
-            $gender = $patient->gender ?? $residentProfile?->gender ?? $latestPcr?->gender ?? null;
-            $birthdate = $patient->birthdate ?? $residentProfile?->birthdate ?? null;
+            $gender = $patient->gender ?? $user?->gender ?? $latestPcr?->gender ?? null;
+            $birthdate = $patient->birthdate ?? $user?->birthdate ?? null;
             $age = null;
             if ($birthdate) {
-                $age = Carbon::parse($birthdate)->age;
+                try {
+                    $age = Carbon::parse($birthdate)->age;
+                } catch (\Throwable $e) {
+                    $age = null;
+                }
+            }
+            if ($age === null && $user?->age) {
+                $age = (int) $user->age;
+            }
+            if ($age === null && $latestPcr?->patient_age) {
+                $age = (int) $latestPcr->patient_age;
             }
 
             $barangayName = $patient->barangay?->barangay_name ?? $residentProfile?->barangay?->barangay_name ?? null;
@@ -136,13 +147,24 @@ class PatientController extends Controller
 
         $data = $patients->map(function ($patient) {
             $latestPcr = $patient->latestCareRecord;
-            $residentProfile = $patient->registeredUser?->residentProfile;
+            $user = $patient->registeredUser;
+            $residentProfile = $user?->residentProfile;
 
-            $gender = $patient->gender ?? $residentProfile?->gender ?? $latestPcr?->gender ?? null;
-            $birthdate = $patient->birthdate ?? $residentProfile?->birthdate ?? null;
+            $gender = $patient->gender ?? $user?->gender ?? $latestPcr?->gender ?? null;
+            $birthdate = $patient->birthdate ?? $user?->birthdate ?? null;
             $age = null;
             if ($birthdate) {
-                $age = Carbon::parse($birthdate)->age;
+                try {
+                    $age = Carbon::parse($birthdate)->age;
+                } catch (\Throwable $e) {
+                    $age = null;
+                }
+            }
+            if ($age === null && $user?->age) {
+                $age = (int) $user->age;
+            }
+            if ($age === null && $latestPcr?->patient_age) {
+                $age = (int) $latestPcr->patient_age;
             }
 
             $barangayName = $patient->barangay?->barangay_name ?? $residentProfile?->barangay?->barangay_name ?? null;
@@ -198,13 +220,24 @@ class PatientController extends Controller
         ]);
 
         $latestPcr = $patient->careRecords->first();
-        $residentProfile = $patient->registeredUser?->residentProfile;
+        $user = $patient->registeredUser;
+        $residentProfile = $user?->residentProfile;
 
-        $gender = $patient->gender ?? $residentProfile?->gender ?? $latestPcr?->gender ?? null;
-        $birthdate = $patient->birthdate ?? $residentProfile?->birthdate ?? null;
+        $gender = $patient->gender ?? $user?->gender ?? $latestPcr?->gender ?? null;
+        $birthdate = $patient->birthdate ?? $user?->birthdate ?? null;
         $age = null;
         if ($birthdate) {
-            $age = Carbon::parse($birthdate)->age;
+            try {
+                $age = Carbon::parse($birthdate)->age;
+            } catch (\Throwable $e) {
+                $age = null;
+            }
+        }
+        if ($age === null && $user?->age) {
+            $age = (int) $user->age;
+        }
+        if ($age === null && $latestPcr?->patient_age) {
+            $age = (int) $latestPcr->patient_age;
         }
 
         $barangayName = $patient->barangay?->barangay_name ?? $residentProfile?->barangay?->barangay_name ?? null;

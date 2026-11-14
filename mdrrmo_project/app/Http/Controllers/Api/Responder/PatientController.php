@@ -31,56 +31,113 @@ class PatientController extends Controller
                     });
             })
             ->limit(15)
-            ->get()
-            ->map(function ($patient) {
-                $fullName = trim("{$patient->first_name} {$patient->middle_name} {$patient->last_name}");
-                $latestPcr = $patient->latestCareRecord;
-                $residentProfile = $patient->registeredUser?->residentProfile;
+            ->get();
 
-                // Gender: check patient -> resident profile -> latest PCR
-                $gender = $patient->gender ?? $residentProfile?->gender ?? $latestPcr?->gender ?? null;
+        // Also check if any registered resident (User with role=resident) matches who doesn't have a linked patient yet
+        $existingLinkedUserIds = $patients->pluck('registered_user_id')->filter()->all();
+        $matchingUsers = \App\Models\User::where('role', 'resident')
+            ->whereNotIn('id', $existingLinkedUserIds)
+            ->where(function ($q) use ($query) {
+                $q->where(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', "%{$query}%")
+                    ->orWhere('first_name', 'LIKE', "%{$query}%")
+                    ->orWhere('last_name', 'LIKE', "%{$query}%")
+                    ->orWhere('phone_number', 'LIKE', "%{$query}%");
+            })
+            ->with(['residentProfile.barangay'])
+            ->limit(5)
+            ->get();
 
-                // Birthdate / Age: check patient -> resident profile
-                $birthdate = $patient->birthdate ?? $residentProfile?->birthdate ?? null;
-                $age = null;
-                if ($birthdate) {
-                    $age = Carbon::parse($birthdate)->age;
+        foreach ($matchingUsers as $user) {
+            $patient = Patient::whereRaw('LOWER(TRIM(patient_first_name)) = ?', [strtolower(trim($user->first_name))])
+                ->whereRaw('LOWER(TRIM(patient_last_name)) = ?', [strtolower(trim($user->last_name))])
+                ->first();
+
+            if ($patient) {
+                if (empty($patient->registered_user_id)) {
+                    $patient->registered_user_id = $user->id;
+                    $patient->save();
                 }
-
-                // Address: check patient -> resident profile
-                $barangayName = $patient->barangay?->barangay_name ?? $patient->barangay?->name ?? $residentProfile?->barangay?->barangay_name;
-                $addressParts = array_filter([
-                    $patient->home_address,
-                    $barangayName ? "Barangay {$barangayName}" : null,
-                    'Opol',
+                if (! $patients->contains('id', $patient->id)) {
+                    $patient->load(['barangay', 'latestCareRecord', 'registeredUser.residentProfile.barangay']);
+                    $patients->push($patient);
+                }
+            } else {
+                $newPatient = Patient::create([
+                    'patient_first_name' => $user->first_name,
+                    'patient_last_name' => $user->last_name,
+                    'patient_middle_name' => $user->middle_name,
+                    'patient_birthdate' => $user->birthdate,
+                    'patient_gender' => $user->gender,
+                    'home_address' => $user->address,
+                    'barangay_id' => $user->residentProfile?->barangay_id,
+                    'registered_user_id' => $user->id,
+                    'is_unidentified' => false,
                 ]);
-                $address = ! empty($addressParts) ? implode(', ', $addressParts) : ($barangayName ? "Barangay {$barangayName}, Opol" : null);
+                $newPatient->load(['barangay', 'latestCareRecord', 'registeredUser.residentProfile.barangay']);
+                $patients->push($newPatient);
+            }
+        }
 
-                // Contact number: check registered user -> latest PCR
-                $contact = $patient->registeredUser?->phone_number ?? $latestPcr?->contact_number ?? $latestPcr?->caller_no ?? null;
+        $formatted = $patients->map(function ($patient) {
+            $fullName = trim("{$patient->first_name} {$patient->middle_name} {$patient->last_name}");
+            $latestPcr = $patient->latestCareRecord;
+            $user = $patient->registeredUser;
+            $residentProfile = $user?->residentProfile;
 
-                // Civil status: check latest PCR
-                $civilStatus = $latestPcr?->civil_status ?? null;
+            // Gender: check patient -> registered user -> latest PCR
+            $gender = $patient->gender ?? $user?->gender ?? $latestPcr?->gender ?? null;
 
-                return [
-                    'id' => $patient->id,
-                    'patient_id' => $patient->id,
-                    'full_name' => $fullName,
-                    'first_name' => $patient->first_name,
-                    'last_name' => $patient->last_name,
-                    'birthdate' => $birthdate,
-                    'age' => $age,
-                    'gender' => $gender,
-                    'address' => $address,
-                    'incident_address' => $address,
-                    'barangay' => $barangayName,
-                    'contact_number' => $contact,
-                    'civil_status' => $civilStatus,
-                    'is_unidentified' => (bool) $patient->is_unidentified,
-                ];
-            });
+            // Birthdate / Age: check patient -> registered user
+            $birthdate = $patient->birthdate ?? $user?->birthdate ?? null;
+            $age = null;
+            if ($birthdate) {
+                try {
+                    $age = Carbon::parse($birthdate)->age;
+                } catch (\Throwable $e) {
+                    $age = null;
+                }
+            }
+            if ($age === null && $user?->age) {
+                $age = (int) $user->age;
+            }
+            if ($age === null && $latestPcr?->patient_age) {
+                $age = (int) $latestPcr->patient_age;
+            }
 
-        return response()->json($patients);
+            // Address: check patient -> resident profile / user address
+            $barangayName = $patient->barangay?->barangay_name ?? $patient->barangay?->name ?? $residentProfile?->barangay?->barangay_name;
+            $addressParts = array_filter([
+                $patient->home_address ?? $user?->address,
+                $barangayName ? "Barangay {$barangayName}" : null,
+                'Opol',
+            ]);
+            $address = ! empty($addressParts) ? implode(', ', $addressParts) : ($barangayName ? "Barangay {$barangayName}, Opol" : null);
+
+            // Contact number: check registered user -> latest PCR
+            $contact = $user?->phone_number ?? $latestPcr?->contact_number ?? $latestPcr?->caller_no ?? null;
+
+            // Civil status: check latest PCR
+            $civilStatus = $latestPcr?->civil_status ?? null;
+
+            return [
+                'id' => $patient->id,
+                'patient_id' => $patient->id,
+                'full_name' => $fullName,
+                'first_name' => $patient->first_name,
+                'last_name' => $patient->last_name,
+                'birthdate' => $birthdate,
+                'age' => $age,
+                'gender' => $gender,
+                'address' => $address,
+                'incident_address' => $address,
+                'barangay' => $barangayName,
+                'contact_number' => $contact,
+                'civil_status' => $civilStatus,
+                'is_unidentified' => (bool) $patient->is_unidentified,
+            ];
+        });
+
+        return response()->json($formatted);
     }
 
     public function store(Request $request)
@@ -148,25 +205,65 @@ class PatientController extends Controller
             $status = 201;
             $message = 'Unidentified patient profile created';
         } else {
-            // Check if patient already exists by first_name, last_name, and birthdate/address to prevent medical record collision
-            $patientMatchQuery = Patient::whereRaw('LOWER(patient_first_name) = ?', [strtolower($firstName)])
-                ->whereRaw('LOWER(patient_last_name) = ?', [strtolower($lastName)]);
+            // Find existing non-unidentified patients with same first and last name
+            $candidateQuery = Patient::where('is_unidentified', false)
+                ->whereRaw('LOWER(TRIM(patient_first_name)) = ?', [strtolower(trim($firstName))])
+                ->whereRaw('LOWER(TRIM(patient_last_name)) = ?', [strtolower(trim($lastName))]);
 
-            if (! empty($birthdate)) {
-                $patientMatchQuery->where('patient_birthdate', $birthdate);
-            } elseif (! empty($homeAddress) && $addressCol) {
-                $patientMatchQuery->where($addressCol, $homeAddress);
-            } else {
-                // Without birthdate or address, do not blindly merge to avoid dangerous cross-patient medical collisions
-                $patientMatchQuery->whereRaw('1 = 0');
+            $candidates = $candidateQuery->get();
+            $existingPatient = null;
+
+            if ($candidates->isNotEmpty()) {
+                // 1. Exact birthdate match
+                if (! empty($birthdate)) {
+                    $existingPatient = $candidates->first(function ($p) use ($birthdate) {
+                        return $p->patient_birthdate === $birthdate;
+                    });
+                }
+
+                // 2. Estimated birthdate range (within ±3 years) or candidate had empty/synthetic birthdate (-01-01)
+                if (! $existingPatient && ! empty($birthdate)) {
+                    $targetYear = (int) substr($birthdate, 0, 4);
+                    $existingPatient = $candidates->first(function ($p) use ($targetYear) {
+                        if (empty($p->patient_birthdate)) {
+                            return true;
+                        }
+                        $candYear = (int) substr($p->patient_birthdate, 0, 4);
+                        return abs($candYear - $targetYear) <= 3;
+                    });
+                }
+
+                // 3. Match by contact number / registered user phone
+                if (! $existingPatient && ! empty($validated['contact_number'])) {
+                    $cleanPhone = preg_replace('/[^0-9]/', '', $validated['contact_number']);
+                    if (strlen($cleanPhone) >= 7) {
+                        $existingPatient = $candidates->first(function ($p) use ($cleanPhone) {
+                            $uPhone = preg_replace('/[^0-9]/', '', $p->registeredUser?->phone_number ?? '');
+                            return ! empty($uPhone) && (str_contains($uPhone, $cleanPhone) || str_contains($cleanPhone, $uPhone));
+                        });
+                    }
+                }
+
+                // 4. Match by address
+                if (! $existingPatient && ! empty($homeAddress) && $addressCol) {
+                    $existingPatient = $candidates->first(function ($p) use ($addressCol, $homeAddress) {
+                        $pAddr = trim((string) ($p->{$addressCol} ?? ''));
+                        return ! empty($pAddr) && (stripos($pAddr, $homeAddress) !== false || stripos($homeAddress, $pAddr) !== false);
+                    });
+                }
+
+                // 5. If there is only ONE candidate with this first & last name in the system, it's the same person!
+                if (! $existingPatient && $candidates->count() === 1) {
+                    $existingPatient = $candidates->first();
+                }
             }
-
-            $existingPatient = $patientMatchQuery->first();
 
             if ($existingPatient) {
                 $patient = $existingPatient;
                 $updates = [];
-                if (empty($patient->birthdate) && $birthdate) {
+                // Update birthdate if existing is empty OR if existing was synthetic (-01-01) and new is exact (not -01-01)
+                $isCandSynthetic = ! empty($patient->patient_birthdate) && str_ends_with($patient->patient_birthdate, '-01-01');
+                if ($birthdate && (empty($patient->patient_birthdate) || $isCandSynthetic)) {
                     $updates['birthdate'] = $birthdate;
                 }
                 if (empty($patient->gender) && in_array($validated['gender'] ?? '', ['male', 'female'])) {
@@ -185,15 +282,23 @@ class PatientController extends Controller
                 $status = 200;
                 $message = 'Existing patient profile loaded';
             } else {
+                // Check if this patient corresponds to a registered resident user
+                $matchingUser = \App\Models\User::where('role', 'resident')
+                    ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower(trim($firstName))])
+                    ->whereRaw('LOWER(TRIM(last_name)) = ?', [strtolower(trim($lastName))])
+                    ->first();
+
                 $createData = [
                     'first_name' => $firstName,
                     'last_name' => $lastName,
-                    'birthdate' => $birthdate,
-                    'gender' => in_array($validated['gender'] ?? '', ['male', 'female']) ? $validated['gender'] : null,
+                    'birthdate' => $birthdate ?? $matchingUser?->birthdate,
+                    'gender' => in_array($validated['gender'] ?? '', ['male', 'female']) ? $validated['gender'] : ($matchingUser?->gender ?? null),
+                    'registered_user_id' => $matchingUser?->id,
+                    'barangay_id' => $matchingUser?->residentProfile?->barangay_id,
                     'is_unidentified' => false,
                 ];
                 if ($addressCol) {
-                    $createData[$addressCol] = $homeAddress;
+                    $createData[$addressCol] = $homeAddress ?? $matchingUser?->address;
                 }
                 $patient = Patient::create($createData);
                 $status = 201;
@@ -205,7 +310,7 @@ class PatientController extends Controller
             ? (string) $validated['age']
             : ($patient->birthdate
                 ? Carbon::parse($patient->birthdate)->age
-                : ($validated['age'] ?? null ? (int) $validated['age'] : null));
+                : ($patient->registeredUser?->age ?? ($validated['age'] ?? null ? (int) $validated['age'] : null)));
 
         return response()->json([
             'message' => $message,

@@ -228,4 +228,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(DispatchLog::class);
     }
+
+    public function patient()
+    {
+        return $this->hasOne(Patient::class, 'registered_user_id');
+    }
 }
