@@ -252,9 +252,16 @@ class PatientController extends Controller
                     });
                 }
 
-                // 5. If there is only ONE candidate with this first & last name in the system, it's the same person!
-                if (! $existingPatient && $candidates->count() === 1) {
-                    $existingPatient = $candidates->first();
+                // 5. Always reuse the best existing candidate with this name instead of creating a duplicate
+                if (! $existingPatient) {
+                    $existingPatient = $candidates->sortByDesc(function ($p) {
+                        $score = 0;
+                        if ($p->registered_user_id) $score += 25;
+                        $score += \App\Models\PatientCareRecord::where('patient_id', $p->id)->count() * 10;
+                        if ($p->barangay_id) $score += 5;
+                        if (!empty($p->patient_birthdate)) $score += 3;
+                        return $score;
+                    })->first();
                 }
             }
 

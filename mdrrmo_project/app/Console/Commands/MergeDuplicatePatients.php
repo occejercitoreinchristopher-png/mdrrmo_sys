@@ -3,98 +3,26 @@
 namespace App\Console\Commands;
 
 use App\Models\Patient;
-use App\Models\PatientCareRecord;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 
 class MergeDuplicatePatients extends Command
 {
     protected $signature = 'patients:merge-duplicates';
-    protected $description = 'Merge duplicate patient records with identical first and last names';
+    protected $description = 'Merge duplicate patient records with identical first and last names and consolidate their PCRs';
 
     public function handle()
     {
-        $allPatients = Patient::all();
-        $grouped = $allPatients->groupBy(function ($p) {
-            return strtolower(trim($p->first_name)).' '.strtolower(trim($p->last_name));
-        });
+        $this->info("Scanning for duplicate patient records...");
 
-        $mergedCount = 0;
+        $result = Patient::consolidateDuplicates();
 
-        foreach ($grouped as $key => $records) {
-            if ($records->count() <= 1) {
-                continue;
+        if (!empty($result['details'])) {
+            foreach ($result['details'] as $item) {
+                $this->info("Merged duplicate(s) for '{$item['name']}': {$item['duplicates_removed']} redundant records removed, {$item['pcrs_relinked']} PCR(s) re-linked to Master Patient #{$item['master_id']}.");
             }
-
-            $this->info("Merging duplicates for: {$key} ({$records->count()} records)");
-
-            // Sort: prioritize records with most filled attributes (birthdate, home_address, etc.)
-            $sorted = $records->sortByDesc(function ($p) {
-                $score = 0;
-                if ($p->registered_user_id) {
-                    $score += 10;
-                }
-                if ($p->birthdate) {
-                    $score += 5;
-                }
-                if ($p->home_address) {
-                    $score += 4;
-                }
-                if ($p->barangay_id) {
-                    $score += 3;
-                }
-                if ($p->gender) {
-                    $score += 2;
-                }
-
-                return $score;
-            })->values();
-
-            $master = $sorted->first();
-            $duplicates = $sorted->slice(1);
-
-            DB::transaction(function () use ($master, $duplicates, &$mergedCount) {
-                $updates = [];
-                foreach ($duplicates as $dup) {
-                    if (empty($master->patient_birthdate) && ! empty($dup->patient_birthdate)) {
-                        $master->patient_birthdate = $dup->patient_birthdate;
-                        $updates['patient_birthdate'] = $dup->patient_birthdate;
-                    }
-                    $addressCol = Patient::addressColumn();
-                    if ($addressCol && empty($master->{$addressCol}) && ! empty($dup->{$addressCol})) {
-                        $master->{$addressCol} = $dup->{$addressCol};
-                        $updates[$addressCol] = $dup->{$addressCol};
-                    }
-                    if (empty($master->patient_gender) && ! empty($dup->patient_gender)) {
-                        $master->patient_gender = $dup->patient_gender;
-                        $updates['patient_gender'] = $dup->patient_gender;
-                    }
-                    if (empty($master->barangay_id) && ! empty($dup->barangay_id)) {
-                        $master->barangay_id = $dup->barangay_id;
-                        $updates['barangay_id'] = $dup->barangay_id;
-                    }
-                    if (empty($master->registered_user_id) && ! empty($dup->registered_user_id)) {
-                        $master->registered_user_id = $dup->registered_user_id;
-                        $updates['registered_user_id'] = $dup->registered_user_id;
-                    }
-
-                    // Re-link any PCRs pointing to the duplicate
-                    PatientCareRecord::where('patient_id', $dup->id)->update([
-                        'patient_id' => $master->id,
-                    ]);
-
-                    // Delete the duplicate record
-                    $dup->delete();
-                    $mergedCount++;
-                }
-
-                if (! empty($updates)) {
-                    $master->save();
-                }
-            });
         }
 
-        $this->info("Successfully merged {$mergedCount} duplicate patient records.");
+        $this->info("Done! Successfully merged {$result['merged_patients']} duplicate patient records and consolidated {$result['relinked_pcrs']} care records.");
 
         return 0;
     }

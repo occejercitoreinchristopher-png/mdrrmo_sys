@@ -396,4 +396,20 @@ class PatientController extends Controller
 
         return back()->with('success', 'Patient identification completed successfully.');
     }
+
+    public function mergeDuplicates()
+    {
+        $result = Patient::consolidateDuplicates();
+
+        $merged = $result['merged_patients'];
+        $pcrs = $result['relinked_pcrs'];
+
+        if ($merged > 0) {
+            $msg = "Successfully merged {$merged} duplicate patient record(s) and consolidated {$pcrs} care record(s).";
+        } else {
+            $msg = "No duplicate patient records found. All patient profiles are unique!";
+        }
+
+        return back()->with('success', $msg);
+    }
 }

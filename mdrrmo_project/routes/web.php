@@ -152,6 +152,7 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
     // Patients
     Route::get('/patients', [PatientController::class, 'index'])->name('patients');
     Route::get('/patients/search', [PatientController::class, 'search'])->name('patients.search');
+    Route::post('/patients/merge-duplicates', [PatientController::class, 'mergeDuplicates'])->name('patients.merge-duplicates');
     Route::get('/patients/{patient}', [PatientController::class, 'show'])->name('patients.show');
     Route::put('/patients/{patient}/identify', [PatientController::class, 'updateIdentification'])->name('patients.identify');
 

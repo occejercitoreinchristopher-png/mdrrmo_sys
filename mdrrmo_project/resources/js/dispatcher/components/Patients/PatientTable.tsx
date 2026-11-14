@@ -14,6 +14,7 @@ import {
     AlertCircle,
     ExternalLink,
     UserCheck,
+    Users,
 } from 'lucide-react';
 import DataTable, { Column } from '@/shared/components/DataTable';
 import Button from '@/shared/components/Button';
@@ -45,6 +46,17 @@ export default function PatientTable({ patients = [], pagination = null }: Patie
 
     const [copiedId, setCopiedId] = useState<number | null>(null);
     const [identifyingPatient, setIdentifyingPatient] = useState<PatientRecord | null>(null);
+    const [isMerging, setIsMerging] = useState(false);
+
+    const handleConsolidateDuplicates = () => {
+        if (window.confirm('Are you sure you want to merge all duplicate patient profiles sharing the same name? All their PCR records will be consolidated under a single primary profile.')) {
+            setIsMerging(true);
+            router.post('/dispatcher/patients/merge-duplicates', {}, {
+                preserveScroll: true,
+                onFinish: () => setIsMerging(false),
+            });
+        }
+    };
 
     const handleCopyPhone = (e: React.MouseEvent, id: number, phone: string) => {
         e.stopPropagation();
@@ -257,6 +269,20 @@ export default function PatientTable({ patients = [], pagination = null }: Patie
                         <span className="text-slate-500 dark:text-slate-400">
                             Showing <span className="text-slate-900 dark:text-white font-semibold">{queryPatients.length}</span> patients
                         </span>
+                        <Button
+                            size="xs"
+                            variant="secondary"
+                            onClick={handleConsolidateDuplicates}
+                            disabled={isMerging}
+                            className="text-xs font-semibold border-slate-300 dark:border-white/10 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 ml-1"
+                        >
+                            {isMerging ? (
+                                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin text-blue-500" />
+                            ) : (
+                                <Users className="w-3.5 h-3.5 mr-1.5 text-blue-500" />
+                            )}
+                            Merge Duplicates
+                        </Button>
                     </div>
                 </div>
 
