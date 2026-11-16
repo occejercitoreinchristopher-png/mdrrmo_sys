@@ -59,9 +59,14 @@ class ImportElectricPostsCommand extends Command
         $filePath = $this->option('file');
         if (! $filePath) {
             $candidates = [
-                'c:/laragon/www/CAPSTONE_PROJECT/Opol_Electric_Post_Location_Codes.csv',
-                base_path('../Opol_Electric_Post_Location_Codes.csv'),
+                base_path('database/seeders/Opol_Electric_Post_Location_Codes_Updated.csv'),
+                base_path('database/seeders/Opol_Electric_Post_Location_Codes.csv'),
+                base_path('Opol_Electric_Post_Location_Codes_Updated.csv'),
                 base_path('Opol_Electric_Post_Location_Codes.csv'),
+                base_path('../Opol_Electric_Post_Location_Codes_Updated.csv'),
+                base_path('../Opol_Electric_Post_Location_Codes.csv'),
+                'c:/laragon/www/CAPSTONE_PROJECT/Opol_Electric_Post_Location_Codes_Updated.csv',
+                'c:/laragon/www/CAPSTONE_PROJECT/Opol_Electric_Post_Location_Codes.csv',
             ];
             foreach ($candidates as $candidate) {
                 if (file_exists($candidate)) {
@@ -105,8 +110,8 @@ class ImportElectricPostsCommand extends Command
 
         // 3. Option: fresh import
         if ($this->option('fresh')) {
-            $deleted = LocationCode::where('location_type', 'Post / Streetlight')->delete();
-            $this->warn("Cleared {$deleted} previous 'Post / Streetlight' records.");
+            $deleted = LocationCode::whereIn('location_type', ['Post / Streetlight', 'Bridge'])->delete();
+            $this->warn("Cleared {$deleted} previous 'Post / Streetlight' and 'Bridge' records.");
         }
 
         // 4. Preload already-used location codes in DB to avoid any collisions
@@ -181,6 +186,9 @@ class ImportElectricPostsCommand extends Command
                 $modifiedCodesCount++;
             }
 
+            $isBridge = stripos($poleDescription, 'bridge') !== false || stripos($finalCode, 'bridge') !== false;
+            $locationType = $isBridge ? 'Bridge' : 'Post / Streetlight';
+
             // Check if this exact post already exists at the same coordinate in this batch
             $coordKey = sprintf("%s_%.6f_%.6f", $normBKey, $latitude, $longitude);
             if (isset($postsByCoord[$coordKey])) {
@@ -189,6 +197,10 @@ class ImportElectricPostsCommand extends Command
                 $prevDesc = $rowsToInsert[$prevIndex]['location_description'];
                 if ($poleDescription && ! str_contains($prevDesc, $poleDescription)) {
                     $rowsToInsert[$prevIndex]['location_description'] .= " | Also: {$poleDescription} (#{$postNumber})";
+                }
+                if ($isBridge && $rowsToInsert[$prevIndex]['location_type'] !== 'Bridge') {
+                    $rowsToInsert[$prevIndex]['location_type'] = 'Bridge';
+                    $rowsToInsert[$prevIndex]['location_name'] = trim($poleDescription);
                 }
                 $mergedDuplicatesCount++;
 
@@ -216,11 +228,15 @@ class ImportElectricPostsCommand extends Command
             $usedCodes[$finalCode] = true;
 
             // Formulate clean name & description
-            $locationName = (strtoupper($existingPoleId) === 'OPOL')
-                ? "Pole: {$poleDescription} (#{$postNumber})"
-                : "Pole {$existingPoleId}";
+            $locationName = $isBridge
+                ? (trim($poleDescription) ?: "Bridge {$finalCode}")
+                : ((strtoupper($existingPoleId) === 'OPOL')
+                    ? "Pole: {$poleDescription} (#{$postNumber})"
+                    : "Pole {$existingPoleId}");
 
-            $cleanDesc = "Post #{$postNumber}, {$poleDescription}. Brgy. {$barangayName}";
+            $cleanDesc = $isBridge
+                ? "Bridge: {$poleDescription} (Post #{$postNumber}). Brgy. {$barangayName}"
+                : "Post #{$postNumber}, {$poleDescription}. Brgy. {$barangayName}";
             if ($origLocCode && $origLocCode !== $finalCode) {
                 $cleanDesc .= " (Ref: {$origLocCode})";
             }
@@ -231,7 +247,7 @@ class ImportElectricPostsCommand extends Command
             $rowsToInsert[] = [
                 'barangay_id' => $barangay->id,
                 'location_code' => $finalCode,
-                'location_type' => 'Post / Streetlight',
+                'location_type' => $locationType,
                 'location_name' => $locationName,
                 'location_description' => $cleanDesc,
                 'location_latitude' => $latitude,
@@ -248,7 +264,7 @@ class ImportElectricPostsCommand extends Command
         fclose($handle);
 
         $this->info("Total rows scanned: {$totalRead}");
-        $this->info("Unique physical post markers prepared: " . count($rowsToInsert));
+        $this->info("Unique physical location markers prepared: " . count($rowsToInsert));
         $this->info("Duplicate co-located lines consolidated: {$mergedDuplicatesCount}");
         $this->info("Codes modified for uniqueness/clarity: {$modifiedCodesCount}");
 
@@ -270,30 +286,47 @@ class ImportElectricPostsCommand extends Command
 
         $bar->finish();
         $this->newLine(2);
-        $this->info("Successfully inserted/updated {$totalInserted} electric post location codes in the database!");
+        $this->info("Successfully inserted/updated {$totalInserted} location codes (electric posts, bridges, markers) in the database!");
 
-        // 7. Update CSV file if requested or by default
-        $targetCsv = $filePath;
-        $writeHandle = @fopen($targetCsv, 'w');
-        if (! $writeHandle) {
-            $targetCsv = str_replace('.csv', '_Updated.csv', $filePath);
+        // 7. Update CSV file only if explicitly requested
+        if ($this->option('update-csv')) {
+            $targetCsv = $filePath;
             $writeHandle = @fopen($targetCsv, 'w');
+            if (! $writeHandle) {
+                $targetCsv = str_replace('.csv', '_Updated.csv', $filePath);
+                $writeHandle = @fopen($targetCsv, 'w');
+            }
+
+            if ($writeHandle) {
+                foreach ($updatedCsvRows as $row) {
+                    fputcsv($writeHandle, $row);
+                }
+                fclose($writeHandle);
+                $this->info("Updated CSV file created: {$targetCsv} with real physical location codes!");
+            } else {
+                $this->warn("Could not write updated CSV (file may be open in Excel or another program).");
+            }
         }
 
-        if ($writeHandle) {
-            foreach ($updatedCsvRows as $row) {
-                fputcsv($writeHandle, $row);
-            }
-            fclose($writeHandle);
-            $this->info("Updated CSV file created: {$targetCsv} with real physical location codes!");
-        } else {
-            $this->warn("Could not write updated CSV (file may be open in Excel or another program).");
+        // Print breakdown per location type
+        $this->newLine();
+        $this->info("=== Location Codes Summary by Type ===");
+        $typeCounts = LocationCode::select('location_type', DB::raw('count(*) as count'))
+            ->groupBy('location_type')
+            ->get();
+        $typeRows = [];
+        foreach ($typeCounts as $tc) {
+            $typeRows[] = [
+                'Type' => $tc->location_type,
+                'Count' => $tc->count,
+            ];
         }
+        $this->table(['Location Type', 'Count'], $typeRows);
 
         // Print breakdown per barangay
         $this->newLine();
-        $this->info("=== Posts Imported per Barangay ===");
-        $counts = LocationCode::where('location_type', 'Post / Streetlight')
+        $this->info("=== Posts & Bridges per Barangay ===");
+        $counts = LocationCode::whereIn('location_type', ['Post / Streetlight', 'Bridge'])
             ->select('barangay_id', DB::raw('count(*) as count'))
             ->groupBy('barangay_id')
             ->with('barangay')
@@ -303,10 +336,10 @@ class ImportElectricPostsCommand extends Command
         foreach ($counts as $item) {
             $tableRows[] = [
                 'Barangay' => $item->barangay?->barangay_name ?? 'Unknown',
-                'Posts Count' => $item->count,
+                'Count' => $item->count,
             ];
         }
-        $this->table(['Barangay', 'Posts Count'], $tableRows);
+        $this->table(['Barangay', 'Count'], $tableRows);
 
         $this->info("Import completed successfully!");
         return 0;
