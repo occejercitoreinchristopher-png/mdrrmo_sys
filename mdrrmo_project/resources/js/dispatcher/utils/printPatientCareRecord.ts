@@ -128,9 +128,10 @@ export function printPatientCareRecord(record: any): void {
 
     const cleanPlaceOfIncident = (raw?: string | null, fallbackB?: string | null): string => {
         const text = (raw || '').trim();
-        const hasCodeOrPole = /\b(pole|post|streetlight|marker|code|sl-|mkr-|brg-|jcb|lr\d|ir\d)\b/i.test(text)
+        const hasCodeOrPole = /\b(pole|post|streetlight|marker|code|sl-|mkr-|brg-|jcb|lr\d|ir\d|steel|concrete|wood|\d{1,3}ft)\b/i.test(text)
             || /#[0-9]+/i.test(text)
-            || /\b\d{2,4}-\d{3,6}\b/i.test(text);
+            || /\b\d{2,4}-\d{3,6}\b/i.test(text)
+            || /\/(steel|concrete|wood)/i.test(text);
         const hasCoordinates = /\b-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}\b/.test(text);
         const isCodeOnly = text.length > 0 && text.length <= 15 && /^[A-Z0-9@#_-]+$/i.test(text);
 

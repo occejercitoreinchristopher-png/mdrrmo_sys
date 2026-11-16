@@ -156,9 +156,10 @@ class Incident extends Model
     {
         $text = trim((string) $rawLocation);
 
-        $hasCodeOrPole = preg_match('/\b(pole|post|streetlight|marker|code|sl-|mkr-|brg-|jcb|lr\d|ir\d)\b/i', $text)
+        $hasCodeOrPole = preg_match('/\b(pole|post|streetlight|marker|code|sl-|mkr-|brg-|jcb|lr\d|ir\d|steel|concrete|wood|\d{1,3}ft)\b/i', $text)
             || preg_match('/#[0-9]+/i', $text)
-            || preg_match('/\b\d{2,4}-\d{3,6}\b/', $text);
+            || preg_match('/\b\d{2,4}-\d{3,6}\b/', $text)
+            || preg_match('/\/(steel|concrete|wood)/i', $text);
         $hasCoordinates = preg_match('/\b-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}\b/', $text);
         $isCodeOnly = ! empty($text) && strlen($text) <= 15 && preg_match('/^[A-Z0-9@#_-]+$/i', $text);
 

@@ -99,6 +99,7 @@ class PatientCareRecordController extends Controller
                 $pcrData['place_of_incident'],
                 $dispatch->incident?->barangay
             );
+            $pcrData['place_of_incident'] = mb_substr($pcrData['place_of_incident'], 0, 250);
         }
 
         // Cross-sync patient_signature and waiver_signature if either is populated
@@ -122,18 +123,51 @@ class PatientCareRecordController extends Controller
                 ->where('id', $validated['pcr_id'])
                 ->first();
             if ($pcr) {
-                $pcr->update($pcrData);
+                try {
+                    $pcr->update($pcrData);
+                } catch (\Illuminate\Database\QueryException $e) {
+                    if (isset($pcrData['place_of_incident'])) {
+                        $pcrData['place_of_incident'] = mb_substr($pcrData['place_of_incident'], 0, 100);
+                    }
+                    if (isset($pcrData['contact_number'])) {
+                        $pcrData['contact_number'] = mb_substr(preg_replace('/\D/', '', (string)$pcrData['contact_number']), -11);
+                    }
+                    $pcr->update($pcrData);
+                }
             }
         }
 
         if (!$pcr) {
-            $pcr = \App\Models\PatientCareRecord::updateOrCreate(
-                [
-                    'dispatch_id' => $dispatch->id,
-                    'patient_id' => $validated['patient_id'],
-                ],
-                $pcrData
-            );
+            try {
+                $pcr = \App\Models\PatientCareRecord::updateOrCreate(
+                    [
+                        'dispatch_id' => $dispatch->id,
+                        'patient_id' => $validated['patient_id'],
+                    ],
+                    $pcrData
+                );
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Legacy schema truncation safeguard if migration has not run yet
+                if (isset($pcrData['place_of_incident'])) {
+                    $pcrData['place_of_incident'] = mb_substr($pcrData['place_of_incident'], 0, 100);
+                }
+                if (isset($pcrData['clinical_chief_complaint'])) {
+                    $pcrData['clinical_chief_complaint'] = mb_substr($pcrData['clinical_chief_complaint'], 0, 100);
+                }
+                if (isset($pcrData['chief_complaint'])) {
+                    $pcrData['chief_complaint'] = mb_substr($pcrData['chief_complaint'], 0, 100);
+                }
+                if (isset($pcrData['contact_number'])) {
+                    $pcrData['contact_number'] = mb_substr(preg_replace('/\D/', '', (string)$pcrData['contact_number']), -11);
+                }
+                $pcr = \App\Models\PatientCareRecord::updateOrCreate(
+                    [
+                        'dispatch_id' => $dispatch->id,
+                        'patient_id' => $validated['patient_id'],
+                    ],
+                    $pcrData
+                );
+            }
         }
 
         // Allow responders to review and correct operational timestamps in PCR
@@ -209,7 +243,7 @@ class PatientCareRecordController extends Controller
                     }
                     if (empty($patient->barangay_id)) {
                         $matchedB = \App\Models\Barangay::all()->first(function ($b) use ($cleanLower) {
-                            return str_contains($cleanLower, strtolower($b->barangay_name)) || str_contains($cleanLower, strtolower($b->name ?? ''));
+                            return str_contains($cleanLower, strtolower((string)$b->barangay_name)) || str_contains($cleanLower, strtolower((string)($b->name ?? '')));
                         });
                         if ($matchedB) {
                             $patientUpdates['barangay_id'] = $matchedB->id;
