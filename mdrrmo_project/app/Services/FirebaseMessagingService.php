@@ -59,47 +59,59 @@ class FirebaseMessagingService
             return null;
         }
 
-        return Cache::remember('fcm_google_access_token', 3300, function () {
-            try {
-                $now = time();
-                $header = json_encode(['alg' => 'RS256', 'typ' => 'JWT']);
-                $claim = json_encode([
-                    'iss' => $this->clientEmail,
-                    'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
-                    'aud' => 'https://oauth2.googleapis.com/token',
-                    'exp' => $now + 3600,
-                    'iat' => $now,
-                ]);
+        try {
+            return Cache::remember('fcm_google_access_token', 3300, function () {
+                return $this->generateAccessToken();
+            });
+        } catch (\Throwable $e) {
+            return $this->generateAccessToken();
+        }
+    }
 
-                $base64Header = $this->base64UrlEncode($header);
-                $base64Claim = $this->base64UrlEncode($claim);
-                $dataToSign = $base64Header . '.' . $base64Claim;
+    /**
+     * Generate Google OAuth2 Access Token using Service Account JWT
+     */
+    public function generateAccessToken(): ?string
+    {
+        try {
+            $now = time();
+            $header = json_encode(['alg' => 'RS256', 'typ' => 'JWT']);
+            $claim = json_encode([
+                'iss' => $this->clientEmail,
+                'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+                'aud' => 'https://oauth2.googleapis.com/token',
+                'exp' => $now + 3600,
+                'iat' => $now,
+            ]);
 
-                $signature = '';
-                $success = openssl_sign($dataToSign, $signature, $this->privateKey, OPENSSL_ALGO_SHA256);
-                if (!$success) {
-                    Log::error('FCM: Failed to sign Google Service Account JWT.');
-                    return null;
-                }
+            $base64Header = $this->base64UrlEncode($header);
+            $base64Claim = $this->base64UrlEncode($claim);
+            $dataToSign = $base64Header . '.' . $base64Claim;
 
-                $jwt = $dataToSign . '.' . $this->base64UrlEncode($signature);
-
-                $response = Http::asForm()->timeout(10)->post('https://oauth2.googleapis.com/token', [
-                    'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-                    'assertion' => $jwt,
-                ]);
-
-                if ($response->successful()) {
-                    return $response->json('access_token');
-                }
-
-                Log::error('FCM: Google OAuth2 token error: ' . $response->body());
-                return null;
-            } catch (\Throwable $e) {
-                Log::error('FCM: Exception acquiring Google OAuth2 token: ' . $e->getMessage());
+            $signature = '';
+            $success = openssl_sign($dataToSign, $signature, $this->privateKey, OPENSSL_ALGO_SHA256);
+            if (!$success) {
+                Log::error('FCM: Failed to sign Google Service Account JWT.');
                 return null;
             }
-        });
+
+            $jwt = $dataToSign . '.' . $this->base64UrlEncode($signature);
+
+            $response = Http::asForm()->timeout(10)->post('https://oauth2.googleapis.com/token', [
+                'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                'assertion' => $jwt,
+            ]);
+
+            if ($response->successful()) {
+                return $response->json('access_token');
+            }
+
+            Log::error('FCM: Google OAuth2 token error: ' . $response->body());
+            return null;
+        } catch (\Throwable $e) {
+            Log::error('FCM: Exception acquiring Google OAuth2 token: ' . $e->getMessage());
+            return null;
+        }
     }
 
     /**
