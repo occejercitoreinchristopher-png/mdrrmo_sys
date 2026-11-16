@@ -24,6 +24,7 @@ class Dispatch extends Model
             'en_route_at' => 'datetime',
             'arrived_at' => 'datetime',
             'completed_at' => 'datetime',
+            'acknowledged_at' => 'datetime',
             'last_latitude' => 'float',
             'last_longitude' => 'float',
             'last_heading' => 'float',
@@ -92,5 +93,10 @@ class Dispatch extends Model
     public function images()
     {
         return $this->hasMany(IncidentImage::class, 'dispatch_id');
+    }
+
+    public function acknowledgedBy()
+    {
+        return $this->belongsTo(User::class, 'acknowledged_by');
     }
 }

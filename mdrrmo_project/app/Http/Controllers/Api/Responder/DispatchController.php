@@ -120,6 +120,100 @@ class DispatchController extends Controller
         ]);
     }
 
+    public function show(Request $request, Dispatch $dispatch)
+    {
+        $user = Auth::user();
+
+        if (! $this->isUserAssignedToDispatch($user, $dispatch)) {
+            return response()->json([
+                'message' => 'Unauthorized to view this dispatch.',
+            ], 403);
+        }
+
+        $dispatch->loadMissing([
+            'incident',
+            'incident.incidentType',
+            'incident.resident',
+            'incident.resident.residentProfile',
+            'incident.resident.residentProfile.barangay',
+            'ambulance',
+            'driver',
+            'emt',
+            'teamLeader',
+            'patientCareRecord',
+            'patientCareRecord.patient',
+            'patientCareRecord.images',
+            'patientCareRecords',
+            'patientCareRecords.patient',
+            'patientCareRecords.images',
+            'acknowledgedBy',
+        ]);
+
+        return response()->json(['data' => $dispatch]);
+    }
+
+    public function acknowledge(Request $request, Dispatch $dispatch)
+    {
+        $user = Auth::user();
+
+        if (! $this->isUserAssignedToDispatch($user, $dispatch)) {
+            return response()->json([
+                'message' => 'Unauthorized to acknowledge this dispatch.',
+            ], 403);
+        }
+
+        // Idempotent: If already acknowledged, return current acknowledgment state
+        if ($dispatch->acknowledgment_status === 'acknowledged') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Dispatch already acknowledged.',
+                'data' => [
+                    'dispatch_id' => $dispatch->id,
+                    'incident_id' => $dispatch->incident_id,
+                    'acknowledgment_status' => 'acknowledged',
+                    'acknowledged_at' => $dispatch->acknowledged_at ? $dispatch->acknowledged_at->toIso8601String() : now()->toIso8601String(),
+                    'acknowledged_by' => $dispatch->acknowledged_by,
+                ],
+                'already_acknowledged' => true,
+            ]);
+        }
+
+        $acknowledgedAt = now();
+        $dispatch->update([
+            'acknowledgment_status' => 'acknowledged',
+            'acknowledged_at' => $acknowledgedAt,
+            'acknowledged_by' => $user->id,
+        ]);
+
+        // Mark corresponding system notification as read/acknowledged
+        try {
+            \App\Models\SystemNotification::where('user_id', $user->id)
+                ->where('dispatch_id', $dispatch->id)
+                ->update([
+                    'status' => 'read',
+                    'read_at' => $acknowledgedAt,
+                ]);
+        } catch (\Throwable $e) {}
+
+        try {
+            broadcast(new DispatchStatusUpdated($dispatch));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Dispatch acknowledgment broadcast warning: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Dispatch acknowledged successfully.',
+            'data' => [
+                'dispatch_id' => $dispatch->id,
+                'incident_id' => $dispatch->incident_id,
+                'acknowledgment_status' => 'acknowledged',
+                'acknowledged_at' => $acknowledgedAt->toIso8601String(),
+                'acknowledged_by' => $user->id,
+            ],
+        ]);
+    }
+
     public function accept(Request $request, Dispatch $dispatch)
     {
         $user = Auth::user();
@@ -150,6 +244,9 @@ class DispatchController extends Controller
         $dispatch->update([
             'dispatch_status' => 'accepted',
             'accepted_at' => $dispatch->accepted_at ?? $acceptedAt,
+            'acknowledgment_status' => 'acknowledged',
+            'acknowledged_at' => $dispatch->acknowledged_at ?? $acceptedAt,
+            'acknowledged_by' => $dispatch->acknowledged_by ?? $user->id,
             'last_location_updated_at' => now(),
         ]);
         $dispatch->incident()->update(['incident_status' => 'responding']);
@@ -639,6 +736,28 @@ class DispatchController extends Controller
                 $dispatch = $dispatchId ? Dispatch::find($dispatchId) : null;
 
                 switch ($action) {
+                    case 'ACKNOWLEDGE_DISPATCH':
+                        if ($dispatch && $this->isUserAssignedToDispatch($user, $dispatch)) {
+                            if ($dispatch->acknowledgment_status !== 'acknowledged') {
+                                $ackTime = !empty($op['timestamp']) ? (is_numeric($op['timestamp']) ? Carbon::createFromTimestampMs((int)$op['timestamp']) : Carbon::parse($op['timestamp'])) : now();
+                                $dispatch->update([
+                                    'acknowledgment_status' => 'acknowledged',
+                                    'acknowledged_at' => $dispatch->acknowledged_at ?? $ackTime,
+                                    'acknowledged_by' => $dispatch->acknowledged_by ?? $user->id,
+                                ]);
+                                try {
+                                    \App\Models\SystemNotification::where('user_id', $user->id)
+                                        ->where('dispatch_id', $dispatch->id)
+                                        ->update(['status' => 'read', 'read_at' => $ackTime]);
+                                } catch (\Throwable $e) {}
+                                try { broadcast(new DispatchStatusUpdated($dispatch)); } catch (\Throwable $e) {}
+                            }
+                            $results[] = ['operation_id' => $opId, 'status' => 'success', 'action' => $action];
+                        } else {
+                            $results[] = ['operation_id' => $opId, 'status' => 'skipped', 'message' => 'Dispatch not found or unauthorized'];
+                        }
+                        break;
+
                     case 'ACCEPT_DISPATCH':
                         if ($dispatch && $this->isUserAssignedToDispatch($user, $dispatch)) {
                             if (! in_array($dispatch->dispatch_status, ['accepted', 'en_route', 'arrived_on_scene', 'completed'])) {

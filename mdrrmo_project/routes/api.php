@@ -64,7 +64,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/incidents/available', [ResponderDispatchController::class, 'availableIncidents']);
         Route::get('/dispatches', [ResponderDispatchController::class, 'index']);
+        Route::get('/dispatches/{dispatch}', [ResponderDispatchController::class, 'show']);
         Route::post('/dispatches/walk-in', [ResponderDispatchController::class, 'walkIn']);
+        Route::post('/dispatches/{dispatch}/acknowledge', [ResponderDispatchController::class, 'acknowledge']);
         Route::post('/dispatches/{dispatch}/accept', [ResponderDispatchController::class, 'accept']);
         Route::post('/dispatches/{dispatch}/status', [ResponderDispatchController::class, 'updateStatus']);
         Route::post('/dispatches/{dispatch}/unfounded', [ResponderDispatchController::class, 'reportUnfounded']);

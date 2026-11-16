@@ -316,6 +316,7 @@ class FirebaseMessagingService
                 'location' => $cleanLocation,
                 'dispatch_time' => $dispatchTime,
                 'status' => $status,
+                'acknowledgment_status' => $dispatch?->acknowledgment_status ?? 'pending',
                 'created_at' => now()->toIso8601String(),
             ], $extraData);
 
