@@ -91,7 +91,7 @@ export default function ViewLocationModal({
                                     </div>
                                     <div className="relative flex flex-col items-center">
                                         <MapPin className="w-9 h-9 fill-[#F61509] text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)]" strokeWidth={1.5} />
-                                        <div className="w-3.5 h-1 bg-black/40 rounded-[50%] blur-[1px] -mt-1" />
+                                        <div className="w-3.5 h-1 bg-black/40 rounded-[50%] blur-[1px] -mt-1"></div>
                                     </div>
                                 </div>
                             </Marker>
