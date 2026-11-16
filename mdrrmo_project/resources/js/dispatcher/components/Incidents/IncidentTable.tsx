@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { router } from '@inertiajs/react';
-import { Eye, AlertTriangle, Check, X, PhoneCall, Send, MapPin, Activity, RotateCcw, Map as MapIcon, Table, LayoutList, Layers } from 'lucide-react';
+import { Eye, AlertTriangle, X, PhoneCall, MapPin, Activity, RotateCcw, ChevronDown, Search, Plus, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
 import DataTable from '@/shared/components/DataTable';
 import StatusBadge from '@/shared/components/StatusBadge';
 import Button from '@/shared/components/Button';
@@ -9,16 +10,51 @@ import Card from '@/shared/components/Card';
 import Pagination from '@/shared/components/Pagination';
 import IncidentDetails from './IncidentDetails';
 import RejectModal from './RejectModal';
-import IncidentHistoryMap from './IncidentHistoryMap';
 import IncidentKanbanBoard from './IncidentKanbanBoard';
 import CreatePhoneIncidentModal from './CreatePhoneIncidentModal';
 import CreateDispatchModal from '@/dispatcher/components/Dispatches/CreateDispatchModal';
-import ArchiveFilterSidebar from './ArchiveFilterSidebar';
+import AddCategoryModal from './AddCategoryModal';
+import AddIncidentTypeModal from './AddIncidentTypeModal';
+import { 
+    MAIN_CATEGORIES, 
+    INCIDENT_TYPES_BY_CATEGORY, 
+    ALL_INCIDENT_TYPES,
+    getCategoryForIncident, 
+    getIncidentsForCategory,
+    getStoredCustomCategories,
+    saveStoredCustomCategory,
+    getStoredCustomIncidents,
+    saveStoredCustomIncident
+} from '@/dispatcher/data/incidentCategories';
 
 const DEFAULT_OPOL_BARANGAYS = [
     'Awang', 'Bagocboc', 'Barra', 'Bonbon', 'Cauyonan',
     'Igpit', 'Limonda', 'Luyongbonbon', 'Malanang',
     'Nangcaon', 'Patag', 'Poblacion', 'Taboc', 'Tingalan'
+];
+
+const MONTH_OPTIONS = [
+    { value: 'all', label: 'All Months' },
+    { value: '0', label: 'January' },
+    { value: '1', label: 'February' },
+    { value: '2', label: 'March' },
+    { value: '3', label: 'April' },
+    { value: '4', label: 'May' },
+    { value: '5', label: 'June' },
+    { value: '6', label: 'July' },
+    { value: '7', label: 'August' },
+    { value: '8', label: 'September' },
+    { value: '9', label: 'October' },
+    { value: '10', label: 'November' },
+    { value: '11', label: 'December' },
+];
+
+const TIME_OPTIONS = [
+    { value: 'all', label: 'All Times' },
+    { value: 'morning', label: 'Morning (06:00 - 11:59)' },
+    { value: 'afternoon', label: 'Afternoon (12:00 - 17:59)' },
+    { value: 'evening', label: 'Evening (18:00 - 23:59)' },
+    { value: 'night', label: 'Night (00:00 - 05:59)' },
 ];
 
 export default function IncidentTable({ 
@@ -52,14 +88,39 @@ export default function IncidentTable({
     const [assigningIncident, setAssigningIncident] = useState<any | null>(null);
     const [phoneCallModalOpen, setPhoneCallModalOpen] = useState(false);
 
-    // Archive / History filtering states
-    const [selectedBarangays, setSelectedBarangays] = useState<string[]>([]);
-    const [selectedComplaints, setSelectedComplaints] = useState<string[]>([]);
+    // Archive / History horizontal filtering states: Category, Incident, Month, Time, Zone
+    const [selectedCategory, setSelectedCategory] = useState<string>('all');
+    const [selectedIncident, setSelectedIncident] = useState<string>('all');
+    const [selectedMonth, setSelectedMonth] = useState<string>('all');
+    const [selectedTime, setSelectedTime] = useState<string>('all');
+    const [selectedZone, setSelectedZone] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
-    const [startDate, setStartDate] = useState<string>('');
-    const [endDate, setEndDate] = useState<string>('');
-    const [selectedIncident, setSelectedIncident] = useState<any | null>(null);
-    const [archiveViewMode, setArchiveViewMode] = useState<'split' | 'map' | 'table'>('split');
+
+    // Custom Category & Incident Modal states
+    const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
+    const [isAddIncidentModalOpen, setIsAddIncidentModalOpen] = useState(false);
+    const [customCategories, setCustomCategories] = useState<string[]>([]);
+    const [customIncidents, setCustomIncidents] = useState<Record<string, string[]>>({});
+    const [notificationMessage, setNotificationMessage] = useState<{
+        title: string;
+        message: string;
+        type: 'category' | 'incident';
+    } | null>(null);
+
+    useEffect(() => {
+        setCustomCategories(getStoredCustomCategories());
+        setCustomIncidents(getStoredCustomIncidents());
+    }, []);
+
+    // Auto-dismiss confirmation banner after 6 seconds
+    useEffect(() => {
+        if (notificationMessage) {
+            const timer = setTimeout(() => {
+                setNotificationMessage(null);
+            }, 6000);
+            return () => clearTimeout(timer);
+        }
+    }, [notificationMessage]);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -74,88 +135,202 @@ export default function IncidentTable({
         return opolBarangays && opolBarangays.length > 0 ? opolBarangays : DEFAULT_OPOL_BARANGAYS;
     }, [opolBarangays]);
 
-    // Full archived dataset for zero-latency client filtering & synchronized map/table display
+    // Full archived dataset for zero-latency client filtering
     const archiveDataset = useMemo(() => {
         return (allHistoryIncidents && allHistoryIncidents.length > 0) ? allHistoryIncidents : incidents;
     }, [allHistoryIncidents, incidents]);
 
-    // Available Incident Types
-    const availableIncidentTypes = useMemo(() => {
-        if (incidentTypes && incidentTypes.length > 0) {
-            return incidentTypes.map((t: any) => t.incident_type_name || t.name).filter(Boolean).sort();
+    // Available Categories (1. Category) combining official categories and any custom categories
+    const availableCategories = useMemo(() => {
+        return Array.from(new Set([...MAIN_CATEGORIES, ...customCategories]));
+    }, [customCategories]);
+
+    // Available Incidents / Specific Complaints (2. Incident) dynamically filtered by selected Category + custom incidents
+    const availableIncidents = useMemo(() => {
+        if (!selectedCategory || selectedCategory === 'all') {
+            const allCustom = Object.values(customIncidents).flat();
+            return Array.from(new Set([...ALL_INCIDENT_TYPES, ...allCustom])).sort();
         }
-        const set = new Set<string>();
+
+        // Base complaints if it's one of the 5 official categories
+        const base = INCIDENT_TYPES_BY_CATEGORY[selectedCategory as any] || [];
+
+        // Find custom incidents matching this category (case-insensitive lookup)
+        const targetNorm = selectedCategory.trim().toLowerCase();
+        let customForCat: string[] = [];
+        for (const [catKey, incList] of Object.entries(customIncidents)) {
+            if (catKey.trim().toLowerCase() === targetNorm && Array.isArray(incList)) {
+                customForCat = [...customForCat, ...incList];
+            }
+        }
+
+        return Array.from(new Set([...base, ...customForCat])).sort();
+    }, [selectedCategory, customIncidents]);
+
+    // Handle cascading category change
+    const handleCategoryChange = (cat: string) => {
+        setSelectedCategory(cat);
+        if (selectedIncident !== 'all' && cat !== 'all') {
+            const standardAllowed = INCIDENT_TYPES_BY_CATEGORY[cat as any] || [];
+            const targetNorm = cat.trim().toLowerCase();
+            let customAllowed: string[] = [];
+            for (const [k, list] of Object.entries(customIncidents)) {
+                if (k.trim().toLowerCase() === targetNorm && Array.isArray(list)) {
+                    customAllowed = [...customAllowed, ...list];
+                }
+            }
+            const allowed = [...standardAllowed, ...customAllowed];
+            if (!allowed.includes(selectedIncident)) {
+                setSelectedIncident('all');
+            }
+        }
+    };
+
+    // Handle incident change with auto category sync
+    const handleIncidentChange = (incName: string) => {
+        setSelectedIncident(incName);
+        if (incName !== 'all') {
+            let parentCat: string | null = getCategoryForIncident(incName);
+            if (!parentCat || parentCat === 'Other / Non-Emergency') {
+                for (const [c, list] of Object.entries(customIncidents)) {
+                    if (Array.isArray(list) && list.some(item => item.toLowerCase() === incName.toLowerCase())) {
+                        parentCat = c;
+                        break;
+                    }
+                }
+            }
+            if (parentCat && selectedCategory === 'all') {
+                setSelectedCategory(parentCat);
+            }
+        }
+    };
+
+    const handleAddCategory = (newCat: string) => {
+        const formatted = saveStoredCustomCategory(newCat);
+        setCustomCategories(getStoredCustomCategories());
+        // Do NOT change selectedCategory so current table records don't get filtered out
+        toast.success(`Category "${formatted}" created successfully!`, {
+            description: 'New category is now available in the filter dropdown.',
+        });
+        setNotificationMessage({
+            type: 'category',
+            title: 'Category Created Successfully',
+            message: `"${formatted}" has been added and is now available in the filter dropdown.`,
+        });
+    };
+
+    const handleAddIncidentType = (cat: string, newInc: string) => {
+        const result = saveStoredCustomIncident(cat, newInc);
+        const updatedMap = getStoredCustomIncidents();
+        setCustomIncidents(updatedMap);
+
+        // If the user currently has this category selected in the filter, select the new incident
+        if (selectedCategory.trim().toLowerCase() === cat.trim().toLowerCase()) {
+            setSelectedIncident(result.incident);
+        }
+
+        toast.success(`Incident Type "${result.incident}" created successfully!`, {
+            description: `Assigned under category "${result.category}".`,
+        });
+        setNotificationMessage({
+            type: 'incident',
+            title: 'Incident Type Created Successfully',
+            message: `"${result.incident}" has been added under "${result.category}".`,
+        });
+    };
+
+    // Available Zones / Barangays (5. Zone)
+    const availableZones = useMemo(() => {
+        const set = new Set<string>(availableBarangays);
         archiveDataset.forEach((inc) => {
-            const name = inc.incident_type?.incident_type_name || inc.incident_type?.name;
-            if (name && name.trim()) set.add(name.trim());
+            const b = typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay;
+            if (b && typeof b === 'string' && b.trim()) set.add(b.trim());
         });
         return Array.from(set).sort();
-    }, [incidentTypes, archiveDataset]);
+    }, [availableBarangays, archiveDataset]);
 
-    // Barangay counts for badges in sidebar
-    const barangayCounts = useMemo(() => {
-        const counts: Record<string, number> = {};
-        archiveDataset.forEach((inc) => {
-            if ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay)) {
-                counts[(typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay)] = (counts[(typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay)] || 0) + 1;
-            }
-        });
-        return counts;
-    }, [archiveDataset]);
+    // Check if any filters are active
+    const hasActiveFilters = 
+        selectedCategory !== 'all' || 
+        selectedIncident !== 'all' || 
+        selectedMonth !== 'all' || 
+        selectedTime !== 'all' || 
+        selectedZone !== 'all' || 
+        searchQuery.trim().length > 0;
 
-    // Incident Type counts for badges in sidebar
-    const complaintCounts = useMemo(() => {
-        const counts: Record<string, number> = {};
-        archiveDataset.forEach((inc) => {
-            const name = inc.incident_type?.incident_type_name || inc.incident_type?.name;
-            if (name) {
-                counts[name] = (counts[name] || 0) + 1;
-            }
-        });
-        return counts;
-    }, [archiveDataset]);
-
-    // Combined Filtering:
-    // (Selected Barangay 1 OR Barangay 2) AND (Selected Complaint 1 OR Complaint 2)
+    // Combined Filtering in horizontal order: Category, Incident, Month, Time, Zone + Keyword
     const filteredHistoryIncidents = useMemo(() => {
         if (statusFilter !== 'history') return incidents;
 
         return archiveDataset.filter((inc) => {
-            // 1. Barangay Filter (OR logic among selected barangays)
-            if (selectedBarangays.length > 0) {
+            // 1. Category Filter (Accurately resolves complaint & incident type to Main Category)
+            if (selectedCategory && selectedCategory !== 'all') {
+                const incComplaint = inc.chief_complaint || inc.pcr_chief_complaint || inc.description || '';
+                const incTypeName = inc.incident_type?.incident_type_name || inc.incident_type?.name || '';
+                const mappedFromComplaint = getCategoryForIncident(incComplaint);
+                const mappedFromType = getCategoryForIncident(incTypeName);
+
+                const customMatches = (customIncidents[selectedCategory] || []).some(ci => {
+                    const normCi = ci.toLowerCase().trim();
+                    return incComplaint.toLowerCase().includes(normCi) || incTypeName.toLowerCase().includes(normCi);
+                });
+
+                const matchesCategory = 
+                    mappedFromComplaint === selectedCategory || 
+                    mappedFromType === selectedCategory ||
+                    incTypeName.toLowerCase().trim() === selectedCategory.toLowerCase().trim() ||
+                    customMatches;
+
+                if (!matchesCategory) {
+                    return false;
+                }
+            }
+
+            // 2. Incident Filter
+            if (selectedIncident && selectedIncident !== 'all') {
+                const target = selectedIncident.toLowerCase().trim();
+                const complaint = (inc.chief_complaint || inc.pcr_chief_complaint || inc.description || '').toLowerCase();
+                const typeName = (inc.incident_type?.incident_type_name || inc.incident_type?.name || '').toLowerCase();
+                if (!complaint.includes(target) && !typeName.includes(target)) {
+                    return false;
+                }
+            }
+
+            // 3. Month Filter
+            if (selectedMonth && selectedMonth !== 'all') {
+                const dateVal = inc.reported_at || inc.created_at;
+                if (!dateVal) return false;
+                const d = new Date(dateVal);
+                if (isNaN(d.getTime()) || d.getMonth() !== parseInt(selectedMonth, 10)) {
+                    return false;
+                }
+            }
+
+            // 4. Time Filter
+            if (selectedTime && selectedTime !== 'all') {
+                const dateVal = inc.reported_at || inc.created_at;
+                if (!dateVal) return false;
+                const d = new Date(dateVal);
+                if (isNaN(d.getTime())) return false;
+                const hour = d.getHours();
+                if (selectedTime === 'morning' && !(hour >= 6 && hour < 12)) return false;
+                if (selectedTime === 'afternoon' && !(hour >= 12 && hour < 18)) return false;
+                if (selectedTime === 'evening' && !(hour >= 18 && hour < 24)) return false;
+                if (selectedTime === 'night' && !(hour >= 0 && hour < 6)) return false;
+            }
+
+            // 5. Zone Filter
+            if (selectedZone && selectedZone !== 'all') {
+                const normTarget = selectedZone.toLowerCase().replace(/[\s-]/g, '');
                 const incBarangay = ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) || '').toLowerCase().replace(/[\s-]/g, '');
-                const matches = selectedBarangays.some((b) => {
-                    const normB = b.toLowerCase().replace(/[\s-]/g, '');
-                    return incBarangay === normB;
-                });
-                if (!matches) return false;
+                const place = (inc.place_of_incident || inc.incident_address || (typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location) || '').toLowerCase().replace(/[\s-]/g, '');
+
+                if (!incBarangay.includes(normTarget) && !place.includes(normTarget)) {
+                    return false;
+                }
             }
 
-            // 2. Incident Type Filter (OR logic among selected types)
-            if (selectedComplaints.length > 0) {
-                const incType = inc.incident_type?.incident_type_name || inc.incident_type?.name;
-                const matches = selectedComplaints.some((c) => {
-                    const normC = c.toLowerCase().trim();
-                    return incType && incType.toLowerCase().trim() === normC;
-                });
-                if (!matches) return false;
-            }
-
-            // 3. Date Range Filter
-            if (startDate) {
-                const incDate = new Date(inc.reported_at || inc.created_at);
-                const sDate = new Date(startDate);
-                sDate.setHours(0, 0, 0, 0);
-                if (incDate < sDate) return false;
-            }
-            if (endDate) {
-                const incDate = new Date(inc.reported_at || inc.created_at);
-                const eDate = new Date(endDate);
-                eDate.setHours(23, 59, 59, 999);
-                if (incDate > eDate) return false;
-            }
-
-            // 4. Keyword Search Query
+            // 6. Keyword Search Query
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
                 const typeName = inc.incident_type?.incident_type_name || inc.incident_type?.name;
@@ -173,15 +348,15 @@ export default function IncidentTable({
 
             return true;
         });
-    }, [statusFilter, archiveDataset, incidents, selectedBarangays, selectedComplaints, searchQuery, startDate, endDate]);
+    }, [statusFilter, archiveDataset, incidents, selectedCategory, selectedIncident, selectedMonth, selectedTime, selectedZone, searchQuery]);
 
     const handleResetFilters = () => {
-        setSelectedBarangays([]);
-        setSelectedComplaints([]);
+        setSelectedCategory('all');
+        setSelectedIncident('all');
+        setSelectedMonth('all');
+        setSelectedTime('all');
+        setSelectedZone('all');
         setSearchQuery('');
-        setStartDate('');
-        setEndDate('');
-        setSelectedIncident(null);
     };
 
     // Columns for History / Archive Table
@@ -192,7 +367,7 @@ export default function IncidentTable({
             sortable: true,
             render: (v, row) => (
                 <span className={`font-mono text-xs font-bold px-2 py-1 rounded-md border ${
-                    selectedIncident?.id === row.id 
+                    (viewing as any)?.id === row.id 
                         ? 'bg-rose-500 text-white border-rose-500 shadow-sm' 
                         : 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10'
                 }`}>
@@ -274,26 +449,11 @@ export default function IncidentTable({
                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                     <Button 
                         size="xs" 
-                        variant="secondary"
-                        onClick={() => {
-                            setSelectedIncident(row);
-                            // If user is in table-only mode, switch to split so they see the marker on the map
-                            if (archiveViewMode === 'table') {
-                                setArchiveViewMode('split');
-                            }
-                        }}
-                        className="text-xs"
-                    >
-                        <MapPin className="w-3 h-3 text-rose-500 mr-1" />
-                        Locate
-                    </Button>
-                    <Button 
-                        size="xs" 
                         variant="ghost" 
                         onClick={() => setViewing(row)}
                         className="text-xs"
                     >
-                        <Eye className="w-3 h-3 mr-1" />
+                        <Eye className="w-3.5 h-3.5 mr-1" />
                         Details
                     </Button>
                 </div>
@@ -306,7 +466,7 @@ export default function IncidentTable({
             {/* Header */}
             <PageHeader
                 title={statusFilter === 'history' ? "Incident Records" : "Incoming Incidents"}
-                subtitle={statusFilter === 'history' ? "Synchronized incident records and geospatial intelligence filtered by Barangay and PCR Chief Complaints." : undefined}
+                subtitle={statusFilter === 'history' ? "Historical incident records filtered by Barangay, emergency type, date range, and search keyword." : undefined}
                 actions={
                     statusFilter !== 'history' ? (
                         <Button 
@@ -317,46 +477,7 @@ export default function IncidentTable({
                             <PhoneCall className="w-4 h-4 mr-1.5" />
                             + Create Phone/SIM Incident
                         </Button>
-                    ) : (
-                        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-white/10 shadow-sm">
-                            <button
-                                onClick={() => setArchiveViewMode('split')}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    archiveViewMode === 'split'
-                                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                }`}
-                                title="Dual View (Map on top + Table below)"
-                            >
-                                <Layers className="w-3.5 h-3.5 text-rose-500" />
-                                Split View
-                            </button>
-                            <button
-                                onClick={() => setArchiveViewMode('map')}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    archiveViewMode === 'map'
-                                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                }`}
-                                title="Map View Only"
-                            >
-                                <MapIcon className="w-3.5 h-3.5 text-rose-500" />
-                                Map Only
-                            </button>
-                            <button
-                                onClick={() => setArchiveViewMode('table')}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    archiveViewMode === 'table'
-                                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                }`}
-                                title="Table View Only"
-                            >
-                                <Table className="w-3.5 h-3.5 text-rose-500" />
-                                Table Only
-                            </button>
-                        </div>
-                    )
+                    ) : undefined
                 }
             />
 
@@ -371,173 +492,319 @@ export default function IncidentTable({
 
             {/* Incident Archive Synchronized Workspace (History Flow) */}
             {statusFilter === 'history' && (
-                <div className={`flex gap-5 items-start ${archiveViewMode === 'table' ? 'flex-col' : 'flex-col lg:flex-row'}`}>
-                    {/* Filter Sidebar */}
-                    <ArchiveFilterSidebar
-                        orientation={archiveViewMode === 'table' ? 'horizontal' : 'vertical'}
-                        barangays={availableBarangays}
-                        chiefComplaints={availableIncidentTypes}
-                        selectedBarangays={selectedBarangays}
-                        setSelectedBarangays={setSelectedBarangays}
-                        selectedComplaints={selectedComplaints}
-                        setSelectedComplaints={setSelectedComplaints}
-                        searchQuery={searchQuery}
-                        setSearchQuery={setSearchQuery}
-                        barangayCounts={barangayCounts}
-                        complaintCounts={complaintCounts}
-                        startDate={startDate}
-                        setStartDate={setStartDate}
-                        endDate={endDate}
-                        setEndDate={setEndDate}
-                        totalFilteredCount={filteredHistoryIncidents.length}
-                        totalAllCount={archiveDataset.length}
-                        onReset={handleResetFilters}
-                    />
-                    <div className="flex-1 min-w-0 w-full space-y-5">
+                <div className="w-full space-y-4">
+                    {/* Synchronized DataTable Card */}
+                    <Card padding={false} className="bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-sm overflow-hidden">
                         
-                        {/* Active Filter Chips Bar */}
-                        {(selectedBarangays.length > 0 || selectedComplaints.length > 0 || searchQuery.trim().length > 0 || startDate || endDate) && (
-                            <div className="flex flex-wrap items-center gap-2 p-3 bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-sm backdrop-blur-md">
-                                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mr-1">
-                                    Active Filters:
+                        {/* Card Header with Title, Count, Search Bar, Reset, and Add Buttons */}
+                        <div className="p-4 border-b border-slate-200/80 dark:border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                                <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                                    Archived Incident Records
+                                </h4>
+                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5">
+                                    {filteredHistoryIncidents.length} of {archiveDataset.length}
+                                </span>
+                            </div>
+
+                            <div className="flex items-center flex-wrap gap-2.5 w-full lg:w-auto">
+                                <div className="relative flex-1 sm:w-64 min-w-[200px]">
+                                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder="Search records..."
+                                        className="w-full text-xs pl-8 pr-7 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 transition-all"
+                                    />
+                                    {searchQuery && (
+                                        <button
+                                            onClick={() => setSearchQuery('')}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                                {hasActiveFilters && (
+                                    <button
+                                        onClick={handleResetFilters}
+                                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/20 transition-colors cursor-pointer shrink-0"
+                                        title="Reset all filters"
+                                    >
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                        <span>Reset</span>
+                                    </button>
+                                )}
+
+                                {/* + Incident and + Category Buttons */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAddIncidentModalOpen(true)}
+                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 shadow-sm shadow-indigo-600/25 border border-indigo-500/30 transition-all cursor-pointer"
+                                        title="Add Incident Type"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>Incident</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAddCategoryModalOpen(true)}
+                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 active:from-rose-700 active:to-orange-700 shadow-sm shadow-rose-600/25 border border-rose-500/30 transition-all cursor-pointer"
+                                        title="Add Incident Category"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>Category</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Confirmation Notification Banner */}
+                        {notificationMessage && (
+                            <div className="mx-4 mt-3.5 p-3 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 flex items-center justify-between gap-3 animate-fadeIn">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                    </div>
+                                    <div className="text-xs">
+                                        <span className="font-bold text-slate-900 dark:text-white mr-1.5">
+                                            {notificationMessage.title}:
+                                        </span>
+                                        <span>{notificationMessage.message}</span>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setNotificationMessage(null)}
+                                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
+                                    title="Dismiss"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        )}
+
+                        {/* HORIZONTAL FILTER ROW: 1. Category, 2. Incident, 3. Month, 4. Time, 5. Zone */}
+                        <div className="px-4 py-3 bg-slate-50/70 dark:bg-white/[0.02] border-b border-slate-200/80 dark:border-white/10">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                                
+                                {/* 1. Category */}
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                        Category
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value={selectedCategory}
+                                            onChange={(e) => handleCategoryChange(e.target.value)}
+                                            className="w-full text-xs py-2 pl-3 pr-8 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer appearance-none shadow-2xs truncate font-medium"
+                                        >
+                                            <option value="all">All Categories</option>
+                                            {availableCategories.map((cat) => (
+                                                <option key={cat} value={cat} className="capitalize text-xs">
+                                                    {cat}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    </div>
+                                </div>
+
+                                {/* 2. Incident */}
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                        Incident
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value={selectedIncident}
+                                            onChange={(e) => handleIncidentChange(e.target.value)}
+                                            className="w-full text-xs py-2 pl-3 pr-8 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer appearance-none shadow-2xs truncate font-medium"
+                                        >
+                                            <option value="all">All Incidents</option>
+                                            {availableIncidents.map((incName) => (
+                                                <option key={incName} value={incName} className="capitalize text-xs">
+                                                    {incName}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    </div>
+                                </div>
+
+                                {/* 3. Month */}
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                        Month
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value={selectedMonth}
+                                            onChange={(e) => setSelectedMonth(e.target.value)}
+                                            className="w-full text-xs py-2 pl-3 pr-8 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer appearance-none shadow-2xs truncate"
+                                        >
+                                            {MONTH_OPTIONS.map((m) => (
+                                                <option key={m.value} value={m.value}>
+                                                    {m.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    </div>
+                                </div>
+
+                                {/* 4. Time */}
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                        Time
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value={selectedTime}
+                                            onChange={(e) => setSelectedTime(e.target.value)}
+                                            className="w-full text-xs py-2 pl-3 pr-8 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer appearance-none shadow-2xs truncate"
+                                        >
+                                            {TIME_OPTIONS.map((t) => (
+                                                <option key={t.value} value={t.value}>
+                                                    {t.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    </div>
+                                </div>
+
+                                {/* 5. Barangay */}
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                        Barangay
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value={selectedZone}
+                                            onChange={(e) => setSelectedZone(e.target.value)}
+                                            className="w-full text-xs py-2 pl-3 pr-8 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer appearance-none shadow-2xs truncate font-medium"
+                                        >
+                                            <option value="all">All Barangays</option>
+                                            {availableZones.map((z) => (
+                                                <option key={z} value={z}>
+                                                    Brgy. {z}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        {/* Active Filter Chips Bar (if any filter is active) */}
+                        {hasActiveFilters && (
+                            <div className="px-4 py-2.5 bg-slate-100/50 dark:bg-slate-800/40 border-b border-slate-200/60 dark:border-white/5 flex flex-wrap items-center gap-2">
+                                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mr-1">
+                                    Active:
                                 </span>
 
-                                {/* Barangay Chips */}
-                                {selectedBarangays.map((b) => (
-                                    <button
-                                        key={`chip-b-${b}`}
-                                        onClick={() => setSelectedBarangays(selectedBarangays.filter((item) => item !== b))}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/20 hover:bg-rose-100 transition-colors cursor-pointer"
-                                    >
-                                        <MapPin className="w-3 h-3 text-rose-500" />
-                                        <span>Brgy. {b}</span>
-                                        <X className="w-3 h-3 ml-0.5" />
-                                    </button>
-                                ))}
-
-                                {/* Incident Type Chips */}
-                                {selectedComplaints.map((c) => (
-                                    <button
-                                        key={`chip-c-${c}`}
-                                        onClick={() => setSelectedComplaints(selectedComplaints.filter((item) => item !== c))}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/20 hover:bg-indigo-100 transition-colors cursor-pointer"
-                                    >
-                                        <Activity className="w-3 h-3 text-indigo-500" />
-                                        <span>{c}</span>
-                                        <X className="w-3 h-3 ml-0.5" />
-                                    </button>
-                                ))}
-
-                                {/* Date Chips */}
-                                {startDate && (
-                                    <button
-                                        onClick={() => setStartDate('')}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-100 transition-colors cursor-pointer"
-                                    >
-                                        <span>From: {startDate}</span>
-                                        <X className="w-3 h-3 ml-0.5" />
-                                    </button>
-                                )}
-                                {endDate && (
-                                    <button
-                                        onClick={() => setEndDate('')}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-100 transition-colors cursor-pointer"
-                                    >
-                                        <span>To: {endDate}</span>
-                                        <X className="w-3 h-3 ml-0.5" />
-                                    </button>
+                                {selectedCategory !== 'all' && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/20">
+                                        <span>Category: {selectedCategory}</span>
+                                        <button onClick={() => setSelectedCategory('all')} className="hover:opacity-75 cursor-pointer">
+                                            <X className="w-3 h-3 ml-0.5" />
+                                        </button>
+                                    </span>
                                 )}
 
-                                {/* Keyword Chip */}
+                                {selectedIncident !== 'all' && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/20">
+                                        <span>Incident: {selectedIncident}</span>
+                                        <button onClick={() => setSelectedIncident('all')} className="hover:opacity-75 cursor-pointer">
+                                            <X className="w-3 h-3 ml-0.5" />
+                                        </button>
+                                    </span>
+                                )}
+
+                                {selectedMonth !== 'all' && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20">
+                                        <span>Month: {MONTH_OPTIONS.find(m => m.value === selectedMonth)?.label}</span>
+                                        <button onClick={() => setSelectedMonth('all')} className="hover:opacity-75 cursor-pointer">
+                                            <X className="w-3 h-3 ml-0.5" />
+                                        </button>
+                                    </span>
+                                )}
+
+                                {selectedTime !== 'all' && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/20">
+                                        <span>Time: {TIME_OPTIONS.find(t => t.value === selectedTime)?.label}</span>
+                                        <button onClick={() => setSelectedTime('all')} className="hover:opacity-75 cursor-pointer">
+                                            <X className="w-3 h-3 ml-0.5" />
+                                        </button>
+                                    </span>
+                                )}
+
+                                {selectedZone !== 'all' && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-500/20">
+                                        <span>Brgy. {selectedZone}</span>
+                                        <button onClick={() => setSelectedZone('all')} className="hover:opacity-75 cursor-pointer">
+                                            <X className="w-3 h-3 ml-0.5" />
+                                        </button>
+                                    </span>
+                                )}
+
                                 {searchQuery.trim() && (
-                                    <button
-                                        onClick={() => setSearchQuery('')}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:bg-slate-200 transition-colors cursor-pointer"
-                                    >
-                                        <span>"{searchQuery}"</span>
-                                        <X className="w-3 h-3 ml-0.5" />
-                                    </button>
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-200/80 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/10">
+                                        <span>Search: "{searchQuery}"</span>
+                                        <button onClick={() => setSearchQuery('')} className="hover:opacity-75 cursor-pointer">
+                                            <X className="w-3 h-3 ml-0.5" />
+                                        </button>
+                                    </span>
                                 )}
 
                                 <button
                                     onClick={handleResetFilters}
-                                    className="ml-auto text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                                    className="ml-auto text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
                                 >
                                     Clear All
                                 </button>
                             </div>
                         )}
 
-                        {/* Interactive Synchronized Incident Map */}
-                        {archiveViewMode !== 'table' && (
-                            <IncidentHistoryMap
-                                incidents={filteredHistoryIncidents}
-                                selectedIncident={selectedIncident}
-                                onSelectIncident={(inc) => setSelectedIncident(inc)}
-                                onViewDetails={(inc) => setViewing(inc)}
-                                selectedBarangays={selectedBarangays}
-                                barangayGeojson={barangayGeojson}
-                                heightClass={archiveViewMode === 'map' ? 'h-[calc(100vh-14rem)] min-h-[560px]' : 'h-[440px]'}
-                            />
+                        {/* Table or Empty State */}
+                        {filteredHistoryIncidents.length === 0 ? (
+                            <div className="py-14 px-4 text-center">
+                                <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                                    No Incidents Found
+                                </h4>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
+                                    No historical incident records match the active Category, Incident, Month, Time, and Barangay filter combination.
+                                </p>
+                                <Button 
+                                    variant="secondary" 
+                                    size="sm" 
+                                    onClick={handleResetFilters} 
+                                    className="mt-4"
+                                >
+                                    <RotateCcw className="w-3.5 h-3.5 mr-1.5 text-rose-500" />
+                                    Reset All Filters
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="p-4">
+                                <DataTable
+                                    columns={archiveColumns}
+                                    data={filteredHistoryIncidents}
+                                    keyField="id"
+                                    emptyTitle="No incidents found"
+                                    emptyDescription="No incidents match the active criteria."
+                                    onRowClick={(row) => {
+                                        setViewing(row);
+                                    }}
+                                />
+                            </div>
                         )}
-
-                        {/* Synchronized DataTable */}
-                        {archiveViewMode !== 'map' && (
-                            <Card padding={false} className="bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-sm overflow-hidden">
-                                <div className="p-4 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                                            Archived Incident Records
-                                        </h4>
-                                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5">
-                                            {filteredHistoryIncidents.length} of {archiveDataset.length}
-                                        </span>
-                                    </div>
-                                    <p className="text-xs text-slate-400 italic hidden sm:block">
-                                        Click any row to pinpoint location on the map
-                                    </p>
-                                </div>
-
-                                {filteredHistoryIncidents.length === 0 ? (
-                                    <div className="py-14 px-4 text-center">
-                                        <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
-                                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                                            No Incidents Found
-                                        </h4>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-                                            No historical incident records match the selected Barangay and PCR Chief Complaint filter combination.
-                                        </p>
-                                        <Button 
-                                            variant="secondary" 
-                                            size="sm" 
-                                            onClick={handleResetFilters} 
-                                            className="mt-4"
-                                        >
-                                            <RotateCcw className="w-3.5 h-3.5 mr-1.5 text-rose-500" />
-                                            Reset All Filters
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <div className="p-4">
-                                        <DataTable
-                                            columns={archiveColumns}
-                                            data={filteredHistoryIncidents}
-                                            keyField="id"
-                                            emptyTitle="No incidents found"
-                                            emptyDescription="No incidents match the active criteria."
-                                            onRowClick={(row) => {
-                                                setSelectedIncident(row);
-                                                if (archiveViewMode === 'table') {
-                                                    setArchiveViewMode('split');
-                                                }
-                                            }}
-                                        />
-                                    </div>
-                                )}
-                            </Card>
-                        )}
-
-                    </div>
+                    </Card>
                 </div>
             )}
 
@@ -578,6 +845,23 @@ export default function IncidentTable({
                     chiefComplaints={chiefComplaints}
                 />
             )}
+
+            {/* Add Category Modal */}
+            <AddCategoryModal
+                open={isAddCategoryModalOpen}
+                onClose={() => setIsAddCategoryModalOpen(false)}
+                onAddCategory={handleAddCategory}
+                existingCategories={availableCategories}
+            />
+
+            {/* Add Incident Type Modal */}
+            <AddIncidentTypeModal
+                open={isAddIncidentModalOpen}
+                onClose={() => setIsAddIncidentModalOpen(false)}
+                onAddIncidentType={handleAddIncidentType}
+                categories={availableCategories}
+                defaultCategory={selectedCategory !== 'all' ? selectedCategory : undefined}
+            />
         </div>
     );
 }
