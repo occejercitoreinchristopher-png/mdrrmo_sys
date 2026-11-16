@@ -248,4 +248,19 @@ class User extends Authenticatable
     {
         return $this->hasOne(Patient::class, 'registered_user_id');
     }
+
+    public function systemNotifications()
+    {
+        return $this->hasMany(SystemNotification::class);
+    }
+
+    public function fcmTokens()
+    {
+        return $this->hasMany(FcmDeviceToken::class);
+    }
+
+    public function activeFcmTokens()
+    {
+        return $this->hasMany(FcmDeviceToken::class)->where('is_active', true);
+    }
 }

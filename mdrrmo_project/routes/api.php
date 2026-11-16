@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\Responder\HistoryController;
 use App\Http\Controllers\Api\Responder\PatientCareRecordController;
 use App\Http\Controllers\Api\Responder\PatientController;
 use App\Http\Controllers\Api\Responder\ProfileController;
+use App\Http\Controllers\Api\Responder\DeviceTokenController;
+use App\Http\Controllers\Api\Responder\NotificationController;
 use App\Models\Barangay;
 use App\Models\IncidentType;
 use Illuminate\Support\Facades\Broadcast;
@@ -74,5 +76,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/dispatches/{dispatch}/pcr/{pcr}', [PatientCareRecordController::class, 'destroy']);
 
         Route::post('/sync/batch', [ResponderDispatchController::class, 'syncBatch']);
+
+        // FCM Device Push Tokens
+        Route::post('/device-token', [DeviceTokenController::class, 'store']);
+        Route::delete('/device-token', [DeviceTokenController::class, 'destroy']);
+
+        // System Notifications
+        Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+        Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     });
 });

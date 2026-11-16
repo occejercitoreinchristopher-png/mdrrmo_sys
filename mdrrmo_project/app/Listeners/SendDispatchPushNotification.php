@@ -4,16 +4,20 @@ namespace App\Listeners;
 
 use App\Events\DispatchCreated;
 use App\Models\User;
+use App\Services\FirebaseMessagingService;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class SendDispatchPushNotification
 {
+    protected FirebaseMessagingService $fcmService;
+
     /**
      * Create the event listener.
      */
-    public function __construct()
+    public function __construct(FirebaseMessagingService $fcmService)
     {
-        //
+        $this->fcmService = $fcmService;
     }
 
     /**
@@ -33,57 +37,46 @@ class SendDispatchPushNotification
             return;
         }
 
-        // Get users with push tokens
-        $users = User::whereIn('id', $userIds)
+        // 1. Direct Native Firebase Cloud Messaging (FCM HTTP v1) + system_notifications recording
+        try {
+            $this->fcmService->sendDispatchNotification($dispatch, $userIds);
+        } catch (\Throwable $e) {
+            Log::error('FCM Dispatch Notification failed: ' . $e->getMessage());
+        }
+
+        // 2. Legacy Expo Push Proxy Fallback (if any user still has legacy expo_push_token)
+        $usersWithExpoToken = User::whereIn('id', $userIds)
             ->whereNotNull('expo_push_token')
             ->get();
 
-        if ($users->isEmpty()) {
-            return;
-        }
+        if ($usersWithExpoToken->isNotEmpty()) {
+            $messages = [];
+            foreach ($usersWithExpoToken as $user) {
+                $messages[] = [
+                    'to' => $user->expo_push_token,
+                    'sound' => 'alarm.mp3',
+                    'title' => '🚨 EMERGENCY DISPATCH ASSIGNED',
+                    'body' => 'New emergency mission assigned! Open OPOL RESQ to view details and respond.',
+                    'data' => [
+                        'dispatch_id' => $dispatch->id,
+                        'incident_id' => $dispatch->incident_id,
+                        'type' => 'dispatch_assigned',
+                    ],
+                    'priority' => 'high',
+                    'channelId' => 'emergency_dispatch',
+                    'ttl' => 300,
+                ];
+            }
 
-        $messages = [];
-        foreach ($users as $user) {
-        $messages[] = [
-                'to' => $user->expo_push_token,
-                'sound' => 'alarm.mp3',
-                'title' => '🚨 New Mission Assigned!',
-                'body' => 'You have been assigned to a new emergency mission. Open the app to view details.',
-                'data' => [
-                    'dispatch_id' => $dispatch->id,
-                    'type' => 'new_mission',
-                ],
-                'priority' => 'high',
-                'channelId' => 'mission_alarm_v2',
-                'ttl' => 300,
-            ];
-        }
-
-        // Also notify the resident that a responder has been assigned
-        $resident = $dispatch->incident?->resident;
-        if ($resident && ! empty($resident->expo_push_token)) {
-            $messages[] = [
-                'to' => $resident->expo_push_token,
-                'sound' => 'default',
-                'title' => '🚑 Responder Assigned',
-                'body' => 'A responder has been assigned to your emergency report.',
-                'data' => [
-                    'dispatch_id' => $dispatch->id,
-                    'incident_id' => $dispatch->incident_id,
-                    'type' => 'responder_assigned',
-                ],
-                'priority' => 'high',
-            ];
-        }
-
-        try {
-            Http::withHeaders([
-                'Accept' => 'application/json',
-                'Accept-Encoding' => 'gzip, deflate',
-                'Content-Type' => 'application/json',
-            ])->post('https://exp.host/--/api/v2/push/send', $messages);
-        } catch (\Exception $e) {
-            \Log::error('Failed to send Expo push notification: '.$e->getMessage());
+            try {
+                Http::timeout(5)->withHeaders([
+                    'Accept' => 'application/json',
+                    'Accept-Encoding' => 'gzip, deflate',
+                    'Content-Type' => 'application/json',
+                ])->post('https://exp.host/--/api/v2/push/send', $messages);
+            } catch (\Throwable $e) {
+                Log::warning('Expo Push Proxy Fallback error: ' . $e->getMessage());
+            }
         }
     }
 }
