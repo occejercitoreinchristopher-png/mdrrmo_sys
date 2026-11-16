@@ -99,7 +99,11 @@ class PatientCareRecordController extends Controller
                 $pcrData['place_of_incident'],
                 $dispatch->incident?->barangay
             );
-            $pcrData['place_of_incident'] = mb_substr($pcrData['place_of_incident'], 0, 250);
+            $pcrData['place_of_incident'] = mb_substr((string)$pcrData['place_of_incident'], 0, 250);
+        }
+
+        if (isset($pcrData['chief_complaint'])) {
+            $pcrData['chief_complaint'] = mb_substr((string)$pcrData['chief_complaint'], 0, 250);
         }
 
         // Cross-sync patient_signature and waiver_signature if either is populated
@@ -127,7 +131,13 @@ class PatientCareRecordController extends Controller
                     $pcr->update($pcrData);
                 } catch (\Illuminate\Database\QueryException $e) {
                     if (isset($pcrData['place_of_incident'])) {
-                        $pcrData['place_of_incident'] = mb_substr($pcrData['place_of_incident'], 0, 100);
+                        $pcrData['place_of_incident'] = mb_substr((string)$pcrData['place_of_incident'], 0, 100);
+                    }
+                    if (isset($pcrData['chief_complaint'])) {
+                        $pcrData['chief_complaint'] = mb_substr((string)$pcrData['chief_complaint'], 0, 100);
+                    }
+                    if (isset($pcrData['clinical_chief_complaint'])) {
+                        $pcrData['clinical_chief_complaint'] = mb_substr((string)$pcrData['clinical_chief_complaint'], 0, 100);
                     }
                     if (isset($pcrData['contact_number'])) {
                         $pcrData['contact_number'] = mb_substr(preg_replace('/\D/', '', (string)$pcrData['contact_number']), -11);
@@ -149,13 +159,13 @@ class PatientCareRecordController extends Controller
             } catch (\Illuminate\Database\QueryException $e) {
                 // Legacy schema truncation safeguard if migration has not run yet
                 if (isset($pcrData['place_of_incident'])) {
-                    $pcrData['place_of_incident'] = mb_substr($pcrData['place_of_incident'], 0, 100);
+                    $pcrData['place_of_incident'] = mb_substr((string)$pcrData['place_of_incident'], 0, 100);
                 }
                 if (isset($pcrData['clinical_chief_complaint'])) {
-                    $pcrData['clinical_chief_complaint'] = mb_substr($pcrData['clinical_chief_complaint'], 0, 100);
+                    $pcrData['clinical_chief_complaint'] = mb_substr((string)$pcrData['clinical_chief_complaint'], 0, 100);
                 }
                 if (isset($pcrData['chief_complaint'])) {
-                    $pcrData['chief_complaint'] = mb_substr($pcrData['chief_complaint'], 0, 100);
+                    $pcrData['chief_complaint'] = mb_substr((string)$pcrData['chief_complaint'], 0, 100);
                 }
                 if (isset($pcrData['contact_number'])) {
                     $pcrData['contact_number'] = mb_substr(preg_replace('/\D/', '', (string)$pcrData['contact_number']), -11);

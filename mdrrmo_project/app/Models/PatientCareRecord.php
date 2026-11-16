@@ -117,7 +117,7 @@ class PatientCareRecord extends Model
 
     public function setChiefComplaintAttribute($value): void
     {
-        $this->attributes['clinical_chief_complaint'] = $value;
+        $this->attributes['clinical_chief_complaint'] = $value !== null ? mb_substr((string) $value, 0, 250) : null;
     }
 
     protected $casts = [
