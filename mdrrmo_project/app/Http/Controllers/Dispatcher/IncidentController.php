@@ -691,11 +691,11 @@ class IncidentController extends Controller
                 ]);
             }
 
-            $code = trim(strtoupper($request->location_code));
+            $rawCode = trim($request->location_code);
             $loc = LocationCode::with('barangay')
-                ->where('location_code', $code)
-                ->orWhere('location_code', strtoupper($code))
-                ->orWhere('location_code', strtolower($code))
+                ->where('location_code', $rawCode)
+                ->orWhere('location_code', strtoupper($rawCode))
+                ->orWhere('location_code', strtolower($rawCode))
                 ->first();
 
             if ($loc) {
@@ -711,7 +711,7 @@ class IncidentController extends Controller
             } elseif ($request->filled('latitude') && $request->filled('longitude')) {
                 $latitude = (float) $request->latitude;
                 $longitude = (float) $request->longitude;
-                $placeOfIncident = $request->place_of_incident ?: "Location Code {$code}";
+                $placeOfIncident = $request->place_of_incident ?: "Location Code {$rawCode}";
                 $locationSource = 'location_code';
             } else {
                 throw ValidationException::withMessages([
@@ -744,44 +744,62 @@ class IncidentController extends Controller
             ? trim($request->caller_name)
             : ($resident ? trim($resident->first_name.' '.$resident->last_name) : null);
 
-        $incident = Incident::create([
+        $incidentDescription = ($request->chief_complaint || $request->reported_chief_complaint)
+            ? (($request->description || $request->incident_description)
+                ? "[".($request->chief_complaint ?? $request->reported_chief_complaint)."] ".($request->description ?? $request->incident_description)
+                : "[".($request->chief_complaint ?? $request->reported_chief_complaint)."]")
+            : ($request->incident_description ?? $request->description ?: "Reported via Phone/SIM Call from ".($callerName ? "{$callerName} ({$normalizedPhone})" : $normalizedPhone)." at {$placeOfIncident}");
+
+        $finalIncidentAddress = ($placeOfIncident && $incidentAddress && $placeOfIncident !== $incidentAddress)
+            ? "{$placeOfIncident}, {$incidentAddress}"
+            : ($incidentAddress ?: $placeOfIncident);
+
+        $incidentAttributes = [
             'resident_id' => $residentId,
             'caller_phone_number' => $normalizedPhone,
-            'caller_name' => $callerName,
+            'caller_name' => $callerName ? mb_substr($callerName, 0, 100) : null,
             'incident_type_id' => $request->incident_type_id,
             'location_code_id' => $locationCodeId ?? null,
-            'incident_address' => ($placeOfIncident && $incidentAddress && $placeOfIncident !== $incidentAddress)
-                ? "{$placeOfIncident}, {$incidentAddress}"
-                : ($incidentAddress ?: $placeOfIncident),
+            'incident_address' => $finalIncidentAddress ? mb_substr($finalIncidentAddress, 0, 255) : null,
             'incident_latitude' => $latitude,
             'incident_longitude' => $longitude,
             'reporter_latitude' => $latitude,
             'reporter_longitude' => $longitude,
             'location_source' => $locationSource,
-            'incident_description' => ($request->chief_complaint || $request->reported_chief_complaint)
-                ? (($request->description || $request->incident_description)
-                    ? "[".($request->chief_complaint ?? $request->reported_chief_complaint)."] ".($request->description ?? $request->incident_description)
-                    : "[".($request->chief_complaint ?? $request->reported_chief_complaint)."]")
-                : ($request->incident_description ?? $request->description ?: "Reported via Phone/SIM Call from ".($callerName ? "{$callerName} ({$normalizedPhone})" : $normalizedPhone)." at {$placeOfIncident}"),
+            'incident_description' => $incidentDescription,
             'incident_status' => 'verified',
             'priority' => 'Moderate',
             'reported_at' => now(),
             'verified_at' => now(),
             'verified_by' => $request->user()?->id,
             'report_source' => 'phone_sim',
-        ]);
+        ];
+
+        try {
+            $incident = Incident::create($incidentAttributes);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Graceful fallback if database column incident_description is still restricted to 150 chars in legacy schema
+            $incidentAttributes['incident_description'] = mb_substr($incidentDescription, 0, 150);
+            if (!empty($incidentAttributes['incident_address'])) {
+                $incidentAttributes['incident_address'] = mb_substr($incidentAttributes['incident_address'], 0, 150);
+            }
+            $incident = Incident::create($incidentAttributes);
+        }
 
         $incident->load(['incidentType', 'resident.residentProfile.barangay']);
         $incident->reporter_prank_history = Incident::getPrankHistoryForReporter($residentId, $normalizedPhone);
 
         // Dispatch Log -> Incident Linkage Workflow
         if ($request->filled('dispatch_log_id')) {
-            $originatingDispatchLog = \App\Models\DispatchLog::find($request->dispatch_log_id);
-            if ($originatingDispatchLog) {
-                $originatingDispatchLog->update([
-                    'incident_id' => $incident->id,
-                    'call_status' => 'answered',
-                ]);
+            try {
+                $originatingDispatchLog = \App\Models\DispatchLog::find($request->dispatch_log_id);
+                if ($originatingDispatchLog) {
+                    $originatingDispatchLog->update([
+                        'incident_id' => $incident->id,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Failed to link originating dispatch log: ' . $e->getMessage());
             }
         }
 

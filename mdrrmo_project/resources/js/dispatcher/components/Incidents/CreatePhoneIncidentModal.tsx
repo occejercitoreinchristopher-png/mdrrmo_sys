@@ -958,7 +958,7 @@ export default function CreatePhoneIncidentModal({
         };
 
         if (locationMethod === 'code') {
-            payload.location_code = locationResult?.code || locationResult?.location_code;
+            payload.location_code = locationResult?.code || locationResult?.location_code || locationCode.trim();
             if (locationResult?.latitude && locationResult?.longitude) {
                 payload.latitude = locationResult.latitude;
                 payload.longitude = locationResult.longitude;

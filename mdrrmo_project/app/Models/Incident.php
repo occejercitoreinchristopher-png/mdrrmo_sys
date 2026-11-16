@@ -204,45 +204,53 @@ class Incident extends Model
 
     public function getLocationAttribute(): ?string
     {
-        $bName = $this->barangay;
-        if (!empty($this->incident_address)) {
-            return self::formatCleanPlaceOfIncident($this->incident_address, $bName);
+        try {
+            $bName = $this->barangay;
+            if (!empty($this->incident_address)) {
+                return self::formatCleanPlaceOfIncident($this->incident_address, $bName);
+            }
+            if ($bName) {
+                return "Barangay {$bName}, Opol, Misamis Oriental";
+            }
+            return 'Opol, Misamis Oriental';
+        } catch (\Throwable $e) {
+            return $this->attributes['incident_address'] ?? 'Opol, Misamis Oriental';
         }
-        if ($bName) {
-            return "Barangay {$bName}, Opol, Misamis Oriental";
-        }
-        return 'Opol, Misamis Oriental';
     }
 
     public function getBarangayAttribute(): ?string
     {
-        // 1. Resolve directly from actual incident coordinates (Point-in-Polygon)
-        $fromCoords = self::resolveBarangayFromCoordinates($this->incident_latitude, $this->incident_longitude);
-        if ($fromCoords) {
-            return $fromCoords;
-        }
+        try {
+            // 1. Resolve directly from actual incident coordinates (Point-in-Polygon)
+            $fromCoords = self::resolveBarangayFromCoordinates($this->incident_latitude, $this->incident_longitude);
+            if ($fromCoords) {
+                return $fromCoords;
+            }
 
-        // 2. Resolve from registered official location code marker
-        if ($this->locationCode?->barangay?->barangay_name) {
-            return $this->locationCode->barangay->barangay_name;
-        }
+            // 2. Resolve from registered official location code marker
+            if ($this->locationCode?->barangay?->barangay_name) {
+                return $this->locationCode->barangay->barangay_name;
+            }
 
-        // 3. Resolve from textual address of incident scene
-        $fullText = $this->incident_address ?? '';
-        if (!empty($fullText)) {
-            foreach (self::OPOL_BARANGAYS as $bName) {
-                if (stripos($fullText, $bName) !== false) {
-                    return $bName;
+            // 3. Resolve from textual address of incident scene
+            $fullText = $this->incident_address ?? '';
+            if (!empty($fullText)) {
+                foreach (self::OPOL_BARANGAYS as $bName) {
+                    if (stripos($fullText, $bName) !== false) {
+                        return $bName;
+                    }
+                }
+                if (stripos($fullText, 'luyong bonbon') !== false || stripos($fullText, 'luyong-bonbon') !== false) {
+                    return 'Luyongbonbon';
                 }
             }
-            if (stripos($fullText, 'luyong bonbon') !== false || stripos($fullText, 'luyong-bonbon') !== false) {
-                return 'Luyongbonbon';
-            }
-        }
 
-        // 4. Fallback to reporter's registered home barangay only if scene location is unspecified
-        if ($this->resident?->residentProfile?->barangay?->barangay_name) {
-            return $this->resident->residentProfile->barangay->barangay_name;
+            // 4. Fallback to reporter's registered home barangay only if scene location is unspecified
+            if ($this->resident?->residentProfile?->barangay?->barangay_name) {
+                return $this->resident->residentProfile->barangay->barangay_name;
+            }
+        } catch (\Throwable $e) {
+            // Safe fallback
         }
 
         return null;
