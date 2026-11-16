@@ -85,12 +85,13 @@ export default function ViewLocationModal({
                             attributionControl={false}
                         >
                             <Marker longitude={lng} latitude={lat} anchor="bottom">
-                                <div className="flex flex-col items-center">
-                                    <div className="bg-slate-900/90 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-lg border border-primary/40 mb-1 backdrop-blur-sm whitespace-nowrap">
+                                <div className="flex flex-col items-center pointer-events-none">
+                                    <div className="bg-slate-900/95 text-white text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-md shadow-lg border border-slate-700/80 mb-1 backdrop-blur-sm whitespace-nowrap tracking-wide">
                                         {locationCode.location_code}
                                     </div>
-                                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white shadow-xl ring-4 ring-primary/30">
-                                        <MapPin className="w-4 h-4 fill-white text-primary" />
+                                    <div className="relative flex flex-col items-center">
+                                        <MapPin className="w-9 h-9 fill-[#F61509] text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)]" strokeWidth={1.5} />
+                                        <div className="w-3.5 h-1 bg-black/40 rounded-[50%] blur-[1px] -mt-1" />
                                     </div>
                                 </div>
                             </Marker>
