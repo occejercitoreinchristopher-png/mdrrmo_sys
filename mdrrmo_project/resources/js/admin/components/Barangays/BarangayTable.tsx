@@ -261,7 +261,7 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
             header: 'Code',
             sortable: true,
             render: (code: string) => (
-                <span className="font-mono text-xs font-bold bg-slate-900 dark:bg-slate-950 text-primary border border-primary/30 px-2.5 py-1 rounded-md tracking-wider">
+                <span className="font-mono text-xs font-bold bg-slate-900 text-white dark:bg-slate-950 dark:text-white border border-slate-700 dark:border-white/15 px-2.5 py-1 rounded-md tracking-wider inline-block shadow-xs">
                     {code}
                 </span>
             ),
