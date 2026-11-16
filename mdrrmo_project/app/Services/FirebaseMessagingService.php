@@ -6,6 +6,7 @@ use App\Models\FcmDeviceToken;
 use App\Models\SystemNotification;
 use App\Models\User;
 use App\Models\Dispatch;
+use App\Models\Incident;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -115,6 +116,74 @@ class FirebaseMessagingService
     }
 
     /**
+     * Build event-specific notification title and message based on the actual backend event data
+     */
+    public function buildNotificationContent(string $eventType, ?Dispatch $dispatch = null, ?Incident $incident = null): array
+    {
+        $inc = $incident ?? $dispatch?->incident;
+        $rawTypeName = $inc?->incidentType?->name ?? 'Emergency Incident';
+        $rawBarangay = $inc?->barangay ?? $inc?->resident?->residentProfile?->barangay?->barangay_name ?? 'Opol';
+        
+        // Format clean barangay name without duplicate "Barangay" prefixes
+        $cleanBarangay = trim(preg_replace('/^barangay\s+/i', '', trim($rawBarangay)));
+        if (empty($cleanBarangay)) {
+            $cleanBarangay = 'Opol';
+        }
+
+        switch ($eventType) {
+            case 'dispatch_assigned':
+                return [
+                    'title' => 'Emergency Dispatch Assigned',
+                    'message' => "You have been assigned to respond to a {$rawTypeName} in Barangay {$cleanBarangay}, Opol.",
+                    'type' => 'dispatch_assigned',
+                ];
+
+            case 'dispatch_received':
+                return [
+                    'title' => 'New Emergency Dispatch',
+                    'message' => 'A new emergency dispatch is waiting for your response. Please review the incident details.',
+                    'type' => 'dispatch_received',
+                ];
+
+            case 'dispatch_reassigned':
+                return [
+                    'title' => 'Dispatch Assignment Updated',
+                    'message' => 'Your dispatch assignment has been updated. Please review the latest incident information.',
+                    'type' => 'dispatch_reassigned',
+                ];
+
+            case 'dispatch_cancelled':
+            case 'incident_cancelled':
+                return [
+                    'title' => 'Incident Cancelled',
+                    'message' => "The {$rawTypeName} incident assigned to you in Barangay {$cleanBarangay} has been cancelled.",
+                    'type' => 'dispatch_cancelled',
+                ];
+
+            case 'incident_updated':
+                return [
+                    'title' => 'Incident Information Updated',
+                    'message' => 'New information is available for your assigned incident. Please review the updated details.',
+                    'type' => 'incident_updated',
+                ];
+
+            case 'dispatch_accepted':
+                return [
+                    'title' => 'Dispatch Accepted',
+                    'message' => 'Your emergency dispatch has been successfully accepted.',
+                    'type' => 'dispatch_accepted',
+                ];
+
+            default:
+                return [
+                    'title' => 'Emergency Dispatch Assigned',
+                    'message' => "You have been assigned to respond to a {$rawTypeName} in Barangay {$cleanBarangay}, Opol.",
+                    'type' => 'dispatch_assigned',
+                ];
+        }
+    }
+
+    /**
      * Send push notification to a specific FCM device token
      */
     public function sendToToken(string $token, string $title, string $body, array $data = []): array
@@ -127,7 +196,7 @@ class FirebaseMessagingService
             ];
         }
 
-        // Clean string values for FCM data payload (FCM HTTP v1 requires string values)
+        // Clean string values for FCM data payload (FCM HTTP v1 requires string key/values)
         $cleanData = [];
         foreach ($data as $key => $val) {
             if (is_array($val) || is_object($val)) {
@@ -137,7 +206,6 @@ class FirebaseMessagingService
             }
         }
 
-        // Add standard channel ID
         $cleanData['channelId'] = 'emergency_dispatch';
 
         $payload = [
@@ -191,66 +259,86 @@ class FirebaseMessagingService
     }
 
     /**
-     * Send emergency dispatch push notifications to assigned crew members and log to system_notifications
+     * Send accurate event-specific notifications to targeted responders and synchronize system_notifications database records
      */
-    public function sendDispatchNotification(Dispatch $dispatch, array $targetUserIds = []): array
-    {
-        $incident = $dispatch->incident;
-        $typeName = $incident?->incidentType?->name ?? 'Emergency Incident';
-        $locationClean = $incident?->clean_place_of_incident ?? $incident?->place_of_incident ?? 'Opol, Misamis Oriental';
-        $barangay = $incident?->barangay ?? $incident?->resident?->residentProfile?->barangay?->barangay_name ?? 'Opol';
+    public function sendNotificationToUsers(
+        array $userIds,
+        string $eventType,
+        ?Dispatch $dispatch = null,
+        ?Incident $incident = null,
+        array $extraData = []
+    ): array {
+        $content = $this->buildNotificationContent($eventType, $dispatch, $incident);
+        $title = $content['title'];
+        $message = $content['message'];
+        $type = $content['type'];
 
-        $title = '🚨 EMERGENCY DISPATCH ASSIGNED';
-        $body = "New Dispatch: {$typeName} at {$locationClean}. Tap to respond.";
-
-        $dataPayload = [
-            'type' => 'dispatch_assigned',
-            'dispatch_id' => (string) $dispatch->id,
-            'incident_id' => (string) $dispatch->incident_id,
-            'incident_type' => (string) $typeName,
-            'location' => (string) $locationClean,
-            'barangay' => (string) $barangay,
-            'team' => (string) ($dispatch->team ?? ''),
-            'timestamp' => now()->toIso8601String(),
-        ];
-
-        // Determine all assigned user IDs if not explicitly passed
-        if (empty($targetUserIds)) {
-            $crewIds = $dispatch->crew()->pluck('users.id')->toArray();
-            $targetUserIds = array_values(array_unique(array_filter(array_merge(
-                $crewIds,
-                [$dispatch->driver_id, $dispatch->emt_id]
-            ))));
+        $inc = $incident ?? $dispatch?->incident;
+        $rawTypeName = $inc?->incidentType?->name ?? 'Emergency Incident';
+        $rawBarangay = $inc?->barangay ?? $inc?->resident?->residentProfile?->barangay?->barangay_name ?? 'Opol';
+        $cleanBarangay = trim(preg_replace('/^barangay\s+/i', '', trim($rawBarangay)));
+        if (empty($cleanBarangay)) {
+            $cleanBarangay = 'Opol';
         }
 
+        $cleanLocation = $inc?->clean_place_of_incident 
+            ?? $inc?->place_of_incident 
+            ?? $inc?->incident_address 
+            ?? "Barangay {$cleanBarangay}, Opol";
+
+        $dispatchId = $dispatch?->id ? (string) $dispatch->id : '';
+        $incidentId = $inc?->id ? (string) $inc->id : ($dispatch?->incident_id ? (string) $dispatch->incident_id : '');
+        $status = $dispatch?->dispatch_status ?? ($inc?->incident_status ?? 'assigned');
+        $dispatchTime = $dispatch?->assigned_at ? $dispatch->assigned_at->toIso8601String() : now()->toIso8601String();
+
+        $targetUserIds = array_values(array_unique(array_filter($userIds)));
         $results = [];
 
         foreach ($targetUserIds as $userId) {
-            // 1. Ensure system_notifications record exists (without duplicating)
+            // Prevent duplicate records for same user, event type, and dispatch/incident within 5 seconds
             $existingNotif = SystemNotification::where('user_id', $userId)
-                ->where('dispatch_id', $dispatch->id)
-                ->where('type', 'dispatch_assigned')
+                ->where('type', $type)
+                ->when($dispatchId, fn($q) => $q->where('dispatch_id', $dispatchId))
+                ->when(!$dispatchId && $incidentId, fn($q) => $q->where('incident_id', $incidentId))
+                ->where('created_at', '>=', now()->subSeconds(5))
                 ->first();
+
+            $baseMetadata = array_merge([
+                'notification_id' => '',
+                'event_type' => $type,
+                'title' => $title,
+                'message' => $message,
+                'incident_id' => $incidentId,
+                'dispatch_id' => $dispatchId,
+                'recipient_user_id' => (string) $userId,
+                'incident_type' => $rawTypeName,
+                'barangay' => $cleanBarangay,
+                'location' => $cleanLocation,
+                'dispatch_time' => $dispatchTime,
+                'status' => $status,
+                'created_at' => now()->toIso8601String(),
+            ], $extraData);
 
             if (!$existingNotif) {
                 $existingNotif = SystemNotification::create([
                     'user_id' => $userId,
-                    'incident_id' => $dispatch->incident_id,
-                    'dispatch_id' => $dispatch->id,
+                    'incident_id' => $incidentId ?: null,
+                    'dispatch_id' => $dispatchId ?: null,
                     'title' => $title,
-                    'message' => $body,
-                    'type' => 'dispatch_assigned',
+                    'message' => $message,
+                    'type' => $type,
                     'status' => 'unread',
-                    'data' => $dataPayload,
+                    'data' => $baseMetadata,
                 ]);
+
+                // Update notification_id in data column
+                $baseMetadata['notification_id'] = (string) $existingNotif->id;
+                $existingNotif->update(['data' => $baseMetadata]);
+            } else {
+                $baseMetadata['notification_id'] = (string) $existingNotif->id;
             }
 
-            // Include notification ID in the payload for client synchronization
-            $payloadWithNotifId = array_merge($dataPayload, [
-                'notification_id' => (string) $existingNotif->id,
-            ]);
-
-            // 2. Retrieve active FCM tokens for this user
+            // Retrieve active FCM registration tokens for this responder
             $tokens = FcmDeviceToken::where('user_id', $userId)
                 ->where('is_active', true)
                 ->pluck('token')
@@ -263,8 +351,8 @@ class FirebaseMessagingService
             ];
 
             foreach ($tokens as $token) {
-                $res = $this->sendToToken($token, $title, $body, $payloadWithNotifId);
-                if ($res['success']) {
+                $res = $this->sendToToken($token, $title, $message, $baseMetadata);
+                if (!empty($res['success'])) {
                     $userDelivery['sent']++;
                 }
             }
@@ -273,6 +361,78 @@ class FirebaseMessagingService
         }
 
         return $results;
+    }
+
+    /**
+     * Send emergency dispatch push notifications when a responder is assigned or reassigned
+     */
+    public function sendDispatchNotification(Dispatch $dispatch, array $targetUserIds = [], ?string $overrideEventType = null): array
+    {
+        if (empty($targetUserIds)) {
+            $crewIds = $dispatch->crew()->pluck('users.id')->toArray();
+            $targetUserIds = array_values(array_unique(array_filter(array_merge(
+                $crewIds,
+                [$dispatch->driver_id, $dispatch->emt_id]
+            ))));
+        }
+
+        // Determine if this is an initial assignment or a reassignment
+        $eventType = $overrideEventType;
+        if (!$eventType) {
+            $isReassignment = Dispatch::where('incident_id', $dispatch->incident_id)
+                ->where('id', '!=', $dispatch->id)
+                ->exists();
+            $eventType = $isReassignment ? 'dispatch_reassigned' : 'dispatch_assigned';
+        }
+
+        return $this->sendNotificationToUsers($targetUserIds, $eventType, $dispatch);
+    }
+
+    /**
+     * Send cancellation push notification to only the responders who were assigned to the cancelled dispatch
+     */
+    public function sendCancellationNotification(Dispatch $dispatch, array $targetUserIds = []): array
+    {
+        if (empty($targetUserIds)) {
+            $crewIds = $dispatch->crew()->pluck('users.id')->toArray();
+            $targetUserIds = array_values(array_unique(array_filter(array_merge(
+                $crewIds,
+                [$dispatch->driver_id, $dispatch->emt_id]
+            ))));
+        }
+
+        return $this->sendNotificationToUsers($targetUserIds, 'dispatch_cancelled', $dispatch);
+    }
+
+    /**
+     * Send dispatch accepted notification confirmation to the responder who accepted
+     */
+    public function sendAcceptedNotification(Dispatch $dispatch, User $user): array
+    {
+        return $this->sendNotificationToUsers([$user->id], 'dispatch_accepted', $dispatch);
+    }
+
+    /**
+     * Send incident updated notification to responders assigned to active dispatches for this incident
+     */
+    public function sendIncidentUpdatedNotification(Incident $incident): array
+    {
+        $activeDispatches = $incident->dispatches()
+            ->whereNotIn('dispatch_status', ['completed', 'cancelled'])
+            ->get();
+
+        $allUserIds = [];
+        foreach ($activeDispatches as $dispatch) {
+            $crewIds = $dispatch->crew()->pluck('users.id')->toArray();
+            $allUserIds = array_merge($allUserIds, $crewIds, [$dispatch->driver_id, $dispatch->emt_id]);
+        }
+
+        $allUserIds = array_values(array_unique(array_filter($allUserIds)));
+        if (empty($allUserIds)) {
+            return [];
+        }
+
+        return $this->sendNotificationToUsers($allUserIds, 'incident_updated', null, $incident);
     }
 
     private function base64UrlEncode(string $data): string

@@ -194,6 +194,12 @@ class IncidentController extends Controller
         $incident->update($updateData);
         $incident->loadMissing(['incidentType', 'resident']);
 
+        try {
+            app(\App\Services\FirebaseMessagingService::class)->sendIncidentUpdatedNotification($incident);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to send FCM Incident Updated notification: ' . $e->getMessage());
+        }
+
         return back()->with('success', 'Incident emergency category updated successfully.');
     }
 
@@ -237,6 +243,15 @@ class IncidentController extends Controller
                     broadcast(new DispatchStatusUpdated($dispatch));
                 } catch (\Throwable $e) {
                     \Illuminate\Support\Facades\Log::warning('Failed to broadcast DispatchStatusUpdated: '.$e->getMessage());
+                }
+
+                if (!empty($assignedUserIds)) {
+                    try {
+                        app(\App\Services\FirebaseMessagingService::class)
+                            ->sendCancellationNotification($dispatch, $assignedUserIds);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('Failed to send FCM cancellation notification in reject: ' . $e->getMessage());
+                    }
                 }
             }
 

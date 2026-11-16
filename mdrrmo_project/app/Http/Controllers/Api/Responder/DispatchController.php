@@ -156,8 +156,16 @@ class DispatchController extends Controller
         
         try {
             broadcast(new DispatchAccepted($dispatch));
+            broadcast(new DispatchStatusUpdated($dispatch));
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('DispatchAccepted broadcast notice: '.$e->getMessage());
+        }
+
+        try {
+            app(\App\Services\FirebaseMessagingService::class)
+                ->sendAcceptedNotification($dispatch, $user);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to record dispatch accepted notification: ' . $e->getMessage());
         }
 
         $dispatch->loadMissing([

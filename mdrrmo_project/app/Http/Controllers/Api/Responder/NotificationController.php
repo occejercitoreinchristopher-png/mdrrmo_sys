@@ -14,6 +14,7 @@ class NotificationController extends Controller
     public function index(Request $request)
     {
         $notifications = SystemNotification::where('user_id', $request->user()->id)
+            ->with(['incident.incidentType', 'dispatch'])
             ->latest()
             ->paginate(30);
 

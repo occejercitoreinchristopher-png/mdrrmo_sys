@@ -328,6 +328,21 @@ class DispatchController extends Controller
 
             $dispatch->load(['incident', 'ambulance']);
             broadcast(new DispatchStatusUpdated($dispatch));
+
+            // Notify assigned responders of cancellation
+            $targetUserIds = array_values(array_unique(array_filter(array_merge(
+                $crewUserIds,
+                [$dispatch->driver_id, $dispatch->emt_id]
+            ))));
+
+            if (!empty($targetUserIds)) {
+                try {
+                    app(\App\Services\FirebaseMessagingService::class)
+                        ->sendCancellationNotification($dispatch, $targetUserIds);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Failed to send FCM cancellation notification: ' . $e->getMessage());
+                }
+            }
         });
 
         $baseMsg = $revertIncident

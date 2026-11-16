@@ -62,8 +62,60 @@ class DispatchStatusUpdated implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
+        $dispatch = $this->dispatch->loadMissing(['incident', 'incident.incidentType', 'ambulance']);
+        $status = $dispatch->dispatch_status;
+        $inc = $dispatch->incident;
+        $rawTypeName = $inc?->incidentType?->name ?? 'Emergency Incident';
+        $rawBarangay = $inc?->barangay ?? $inc?->resident?->residentProfile?->barangay?->barangay_name ?? 'Opol';
+        $cleanBarangay = trim(preg_replace('/^barangay\s+/i', '', trim($rawBarangay)));
+        if (empty($cleanBarangay)) {
+            $cleanBarangay = 'Opol';
+        }
+
+        $cleanLocation = $inc?->clean_place_of_incident 
+            ?? $inc?->place_of_incident 
+            ?? $inc?->incident_address 
+            ?? "Barangay {$cleanBarangay}, Opol";
+
+        $eventType = 'dispatch_status_updated';
+        $title = 'Dispatch Status Updated';
+        $message = "Dispatch status is now {$status}.";
+
+        if ($status === 'cancelled') {
+            $eventType = 'dispatch_cancelled';
+            $title = 'Incident Cancelled';
+            $message = "The {$rawTypeName} incident assigned to you in Barangay {$cleanBarangay} has been cancelled.";
+        } elseif ($status === 'accepted') {
+            $eventType = 'dispatch_accepted';
+            $title = 'Dispatch Accepted';
+            $message = 'Your emergency dispatch has been successfully accepted.';
+        } elseif ($status === 'en_route') {
+            $eventType = 'dispatch_en_route';
+            $title = 'En Route to Incident';
+            $message = "Response unit is en route to {$rawTypeName} in Barangay {$cleanBarangay}.";
+        } elseif ($status === 'arrived_on_scene') {
+            $eventType = 'dispatch_arrived';
+            $title = 'Arrived on Scene';
+            $message = "Response unit has arrived on scene at {$cleanLocation}.";
+        } elseif ($status === 'completed') {
+            $eventType = 'dispatch_completed';
+            $title = 'Emergency Mission Completed';
+            $message = "Emergency dispatch for {$rawTypeName} in Barangay {$cleanBarangay} has been completed.";
+        }
+
         return [
-            'dispatch' => $this->dispatch->loadMissing(['incident', 'ambulance']),
+            'dispatch' => $dispatch,
+            'dispatch_id' => $dispatch->id,
+            'incident_id' => $dispatch->incident_id,
+            'event_type' => $eventType,
+            'type' => $eventType,
+            'status' => $status,
+            'title' => $title,
+            'message' => $message,
+            'incident_type' => $rawTypeName,
+            'barangay' => $cleanBarangay,
+            'location' => $cleanLocation,
+            'timestamp' => now()->toIso8601String(),
         ];
     }
 }

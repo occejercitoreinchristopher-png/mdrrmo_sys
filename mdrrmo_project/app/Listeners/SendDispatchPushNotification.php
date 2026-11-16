@@ -3,6 +3,7 @@
 namespace App\Listeners;
 
 use App\Events\DispatchCreated;
+use App\Models\Dispatch;
 use App\Models\User;
 use App\Services\FirebaseMessagingService;
 use Illuminate\Support\Facades\Http;
@@ -28,18 +29,26 @@ class SendDispatchPushNotification
         $dispatch = $event->dispatch;
 
         // Collect assigned user IDs from dispatch_crews, driver, and emt
-        $userIds = array_unique(array_filter(array_merge(
+        $userIds = array_values(array_unique(array_filter(array_merge(
             $dispatch->crew()->pluck('users.id')->toArray(),
             [$dispatch->driver_id, $dispatch->emt_id]
-        )));
+        ))));
 
         if (empty($userIds)) {
             return;
         }
 
+        // Check if this incident had a previous dispatch (reassignment)
+        $isReassignment = Dispatch::where('incident_id', $dispatch->incident_id)
+            ->where('id', '!=', $dispatch->id)
+            ->exists();
+
+        $eventType = $isReassignment ? 'dispatch_reassigned' : 'dispatch_assigned';
+        $content = $this->fcmService->buildNotificationContent($eventType, $dispatch);
+
         // 1. Direct Native Firebase Cloud Messaging (FCM HTTP v1) + system_notifications recording
         try {
-            $this->fcmService->sendDispatchNotification($dispatch, $userIds);
+            $this->fcmService->sendDispatchNotification($dispatch, $userIds, $eventType);
         } catch (\Throwable $e) {
             Log::error('FCM Dispatch Notification failed: ' . $e->getMessage());
         }
@@ -50,17 +59,30 @@ class SendDispatchPushNotification
             ->get();
 
         if ($usersWithExpoToken->isNotEmpty()) {
+            $incident = $dispatch->incident;
+            $typeName = $incident?->incidentType?->name ?? 'Emergency Incident';
+            $rawBarangay = $incident?->barangay ?? $incident?->resident?->residentProfile?->barangay?->barangay_name ?? 'Opol';
+            $cleanBarangay = trim(preg_replace('/^barangay\s+/i', '', trim($rawBarangay)));
+            $cleanLocation = $incident?->clean_place_of_incident ?? $incident?->place_of_incident ?? "Barangay {$cleanBarangay}, Opol";
+
             $messages = [];
             foreach ($usersWithExpoToken as $user) {
                 $messages[] = [
                     'to' => $user->expo_push_token,
                     'sound' => 'alarm.mp3',
-                    'title' => '🚨 EMERGENCY DISPATCH ASSIGNED',
-                    'body' => 'New emergency mission assigned! Open OPOL RESQ to view details and respond.',
+                    'title' => $content['title'],
+                    'body' => $content['message'],
                     'data' => [
-                        'dispatch_id' => $dispatch->id,
-                        'incident_id' => $dispatch->incident_id,
-                        'type' => 'dispatch_assigned',
+                        'event_type' => $eventType,
+                        'type' => $eventType,
+                        'title' => $content['title'],
+                        'message' => $content['message'],
+                        'dispatch_id' => (string) $dispatch->id,
+                        'incident_id' => (string) $dispatch->incident_id,
+                        'incident_type' => $typeName,
+                        'barangay' => $cleanBarangay,
+                        'location' => $cleanLocation,
+                        'status' => (string) $dispatch->dispatch_status,
                     ],
                     'priority' => 'high',
                     'channelId' => 'emergency_dispatch',
