@@ -114,6 +114,9 @@ class ImportElectricPostsCommand extends Command
             $this->warn("Cleared {$deleted} previous 'Post / Streetlight' and 'Bridge' records.");
         }
 
+        // Clean any legacy dummy location codes (POST-*, BRG-*, SL-*, MKR-*, etc.)
+        $this->call('mdrrmo:clean-dummy-location-codes');
+
         // 4. Preload already-used location codes in DB to avoid any collisions
         $usedCodes = LocationCode::pluck('location_code')->flip()->toArray();
 

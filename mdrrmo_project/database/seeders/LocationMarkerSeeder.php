@@ -3,91 +3,16 @@
 namespace Database\Seeders;
 
 use App\Models\IncidentType;
-use App\Models\LocationMarker;
 use Illuminate\Database\Seeder;
 
 class LocationMarkerSeeder extends Seeder
 {
     public function run(): void
     {
-        $markers = [
-            [
-                'code' => 'SL-001',
-                'marker_name' => 'Streetlight 001',
-                'barangay_name' => 'Poblacion',
-                'marker_latitude' => 8.5312000,
-                'marker_longitude' => 124.5695000,
-                'marker_description' => 'Near Barangay Hall & Town Plaza',
-                'is_active' => true,
-            ],
-            [
-                'code' => 'SL-002',
-                'marker_name' => 'Streetlight 002',
-                'barangay_name' => 'Poblacion',
-                'marker_latitude' => 8.5325000,
-                'marker_longitude' => 124.5710000,
-                'marker_description' => 'Near Public Market & Bus Terminal',
-                'is_active' => true,
-            ],
-            [
-                'code' => 'POST-101',
-                'marker_name' => 'Post 101',
-                'barangay_name' => 'Baybay',
-                'marker_latitude' => 8.5380000,
-                'marker_longitude' => 124.5650000,
-                'marker_description' => 'Near Coastal Port & Fish Landing',
-                'is_active' => true,
-            ],
-            [
-                'code' => 'POST-102',
-                'marker_name' => 'Post 102',
-                'barangay_name' => 'Lumbo',
-                'marker_latitude' => 8.5250000,
-                'marker_longitude' => 124.5730000,
-                'marker_description' => 'In front of Lumbo Elementary School',
-                'is_active' => true,
-            ],
-            [
-                'code' => 'MKR-001',
-                'marker_name' => 'Emergency Marker 001',
-                'barangay_name' => 'Calatcat',
-                'marker_latitude' => 8.5410000,
-                'marker_longitude' => 124.5580000,
-                'marker_description' => 'National Highway Junction & Gas Station',
-                'is_active' => true,
-            ],
-            [
-                'code' => 'MKR-002',
-                'marker_name' => 'Emergency Marker 002',
-                'barangay_name' => 'Sungay',
-                'marker_latitude' => 8.5150000,
-                'marker_longitude' => 124.5800000,
-                'marker_description' => 'Near Health Center & Barangay Chapel',
-                'is_active' => true,
-            ],
-        ];
+        // Dummy markers (SL-001, POST-101, MKR-001, etc.) have been removed.
+        // Location markers are populated directly from official Opol Electric Post & Bridge data via ElectricPostSeeder.
 
-        $barangays = \App\Models\Barangay::all()->keyBy('barangay_name');
-
-        foreach ($markers as $marker) {
-            $bName = $marker['barangay_name'];
-            $barangayId = $barangays->get($bName)?->id ?? $barangays->first()?->id;
-
-            LocationMarker::updateOrCreate(
-                ['location_code' => $marker['code']],
-                [
-                    'barangay_id' => $barangayId,
-                    'location_code' => $marker['code'],
-                    'location_name' => $marker['marker_name'],
-                    'location_type' => 'Landmark',
-                    'location_description' => $marker['marker_description'],
-                    'location_latitude' => $marker['marker_latitude'],
-                    'location_longitude' => $marker['marker_longitude'],
-                ]
-            );
-        }
-
-        // Also seed standard incident types matching mobile app IDs
+        // Seed standard incident types matching mobile app IDs
         $types = [
             1 => ['incident_type_name' => 'Medical Emergency', 'type_description' => 'Critical or acute medical conditions'],
             2 => ['incident_type_name' => 'Fire Emergency', 'type_description' => 'Structural, domestic, or brush fire'],
