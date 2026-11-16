@@ -106,12 +106,25 @@ class PatientController extends Controller
 
             // Address: check patient -> resident profile / user address
             $barangayName = $patient->barangay?->barangay_name ?? $patient->barangay?->name ?? $residentProfile?->barangay?->barangay_name;
-            $addressParts = array_filter([
-                $patient->home_address ?? $user?->address,
-                $barangayName ? "Barangay {$barangayName}" : null,
-                'Opol',
-            ]);
-            $address = ! empty($addressParts) ? implode(', ', $addressParts) : ($barangayName ? "Barangay {$barangayName}, Opol" : null);
+            $rawHome = $patient->home_address ?: ($patient->street ?: ($user?->address ?: null));
+
+            $address = null;
+            if (!empty($rawHome)) {
+                $cleanHome = trim($rawHome);
+                if (strtolower($cleanHome) !== 'opol' && strtolower($cleanHome) !== 'opol, misamis oriental') {
+                    if ($barangayName && stripos($cleanHome, $barangayName) === false) {
+                        $cleanHome .= ", Barangay {$barangayName}";
+                    }
+                    if (stripos($cleanHome, 'opol') === false) {
+                        $cleanHome .= ", Opol";
+                    }
+                    $address = $cleanHome;
+                } elseif ($barangayName) {
+                    $address = "Barangay {$barangayName}, Opol";
+                }
+            } elseif ($barangayName) {
+                $address = "Barangay {$barangayName}, Opol";
+            }
 
             // Contact number: check registered user -> latest PCR
             $contact = $user?->phone_number ?? $latestPcr?->contact_number ?? $latestPcr?->caller_no ?? null;
@@ -276,11 +289,23 @@ class PatientController extends Controller
                 if (empty($patient->gender) && in_array($validated['gender'] ?? '', ['male', 'female'])) {
                     $updates['gender'] = $validated['gender'];
                 }
-                if (! empty($homeAddress) && $addressCol) {
+                if (! empty($homeAddress)) {
                     $newAddress = trim($homeAddress);
-                    $oldAddress = trim($patient->{$addressCol} ?? $patient->home_address ?? '');
-                    if (empty($oldAddress) || $newAddress !== $oldAddress) {
-                        $updates[$addressCol] = $newAddress;
+                    if (strtolower($newAddress) !== 'opol' && strtolower($newAddress) !== 'opol, misamis oriental') {
+                        if ($addressCol) {
+                            $oldAddress = trim($patient->{$addressCol} ?? $patient->home_address ?? '');
+                            if (empty($oldAddress) || $newAddress !== $oldAddress) {
+                                $updates[$addressCol] = $newAddress;
+                            }
+                        }
+                        if (empty($patient->barangay_id)) {
+                            $matchedB = \App\Models\Barangay::all()->first(function ($b) use ($newAddress) {
+                                return stripos($newAddress, $b->barangay_name) !== false || stripos($newAddress, $b->name ?? '') !== false;
+                            });
+                            if ($matchedB) {
+                                $updates['barangay_id'] = $matchedB->id;
+                            }
+                        }
                     }
                 }
                 if (! empty($updates)) {
@@ -304,8 +329,20 @@ class PatientController extends Controller
                     'barangay_id' => $matchingUser?->residentProfile?->barangay_id,
                     'is_unidentified' => false,
                 ];
-                if ($addressCol) {
-                    $createData[$addressCol] = $homeAddress ?? $matchingUser?->address;
+                if (! empty($homeAddress) && strtolower(trim($homeAddress)) !== 'opol' && strtolower(trim($homeAddress)) !== 'opol, misamis oriental') {
+                    if ($addressCol) {
+                        $createData[$addressCol] = trim($homeAddress);
+                    }
+                    if (empty($createData['barangay_id'])) {
+                        $matchedB = \App\Models\Barangay::all()->first(function ($b) use ($homeAddress) {
+                            return stripos($homeAddress, $b->barangay_name) !== false || stripos($homeAddress, $b->name ?? '') !== false;
+                        });
+                        if ($matchedB) {
+                            $createData['barangay_id'] = $matchedB->id;
+                        }
+                    }
+                } elseif ($matchingUser?->address && $addressCol) {
+                    $createData[$addressCol] = $matchingUser->address;
                 }
                 $patient = Patient::create($createData);
                 $status = 201;

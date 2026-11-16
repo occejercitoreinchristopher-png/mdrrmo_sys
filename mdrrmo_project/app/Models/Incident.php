@@ -152,12 +152,66 @@ class Incident extends Model
         $this->attributes['location_code_id'] = $value;
     }
 
+    public static function formatCleanPlaceOfIncident(?string $rawLocation, ?string $fallbackBarangay = null): string
+    {
+        $text = trim((string) $rawLocation);
+
+        $hasCodeOrPole = preg_match('/\b(pole|post|streetlight|marker|code|sl-|mkr-|brg-|jcb|lr\d|ir\d)\b/i', $text)
+            || preg_match('/#[0-9]+/i', $text)
+            || preg_match('/\b\d{2,4}-\d{3,6}\b/', $text);
+        $hasCoordinates = preg_match('/\b-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}\b/', $text);
+        $isCodeOnly = ! empty($text) && strlen($text) <= 15 && preg_match('/^[A-Z0-9@#_-]+$/i', $text);
+
+        $detectedBarangay = trim((string) $fallbackBarangay);
+        foreach (self::OPOL_BARANGAYS as $b) {
+            if (stripos($text, $b) !== false || (!empty($detectedBarangay) && stripos($detectedBarangay, $b) !== false)) {
+                $detectedBarangay = $b;
+                break;
+            }
+        }
+        if (stripos($text, 'luyongbon') !== false) {
+            $detectedBarangay = 'Luyongbonbon';
+        }
+
+        if ($hasCodeOrPole || $hasCoordinates || $isCodeOnly) {
+            if (! empty($detectedBarangay)) {
+                return "Barangay {$detectedBarangay}, Opol, Misamis Oriental";
+            }
+            return 'Opol, Misamis Oriental';
+        }
+
+        if (! empty($text)) {
+            $clean = preg_replace('/Northern Mindanao/i', 'Misamis Oriental', $text);
+            $clean = preg_replace('/,\s*Philippines/i', '', $clean);
+            $clean = trim($clean);
+            if (! empty($detectedBarangay) && stripos($clean, $detectedBarangay) === false) {
+                $clean = "Barangay {$detectedBarangay}, {$clean}";
+            }
+            if (stripos($clean, 'opol') === false) {
+                $clean .= ', Opol, Misamis Oriental';
+            } elseif (stripos($clean, 'misamis oriental') === false) {
+                $clean .= ', Misamis Oriental';
+            }
+            return $clean;
+        }
+
+        if (! empty($detectedBarangay)) {
+            return "Barangay {$detectedBarangay}, Opol, Misamis Oriental";
+        }
+
+        return 'Opol, Misamis Oriental';
+    }
+
     public function getLocationAttribute(): ?string
     {
-        return $this->incident_address
-            ?: ($this->location_code ? "Marker {$this->location_code}" : null)
-            ?: $this->resident?->residentProfile?->barangay?->barangay_name
-            ?: 'Opol, Misamis Oriental';
+        $bName = $this->barangay;
+        if (!empty($this->incident_address)) {
+            return self::formatCleanPlaceOfIncident($this->incident_address, $bName);
+        }
+        if ($bName) {
+            return "Barangay {$bName}, Opol, Misamis Oriental";
+        }
+        return 'Opol, Misamis Oriental';
     }
 
     public function getBarangayAttribute(): ?string

@@ -93,6 +93,14 @@ class PatientCareRecordController extends Controller
             'on_scene_time',
         ])->all();
 
+        // Sanitize place of incident so location codes and coordinates are converted cleanly to "Barangay [Name], Opol, Misamis Oriental"
+        if (!empty($pcrData['place_of_incident'])) {
+            $pcrData['place_of_incident'] = \App\Models\Incident::formatCleanPlaceOfIncident(
+                $pcrData['place_of_incident'],
+                $dispatch->incident?->barangay
+            );
+        }
+
         // Cross-sync patient_signature and waiver_signature if either is populated
         if (!empty($validated['waiver_signature']) && empty($pcrData['patient_signature'])) {
             $pcrData['patient_signature'] = $validated['waiver_signature'];
@@ -190,11 +198,22 @@ class PatientCareRecordController extends Controller
             }
             if (! empty($validated['incident_address'])) {
                 $newAddress = mb_substr(trim($validated['incident_address']), 0, 255);
-                $addressCol = \App\Models\Patient::addressColumn();
-                if ($addressCol) {
-                    $currentAddress = trim($patient->{$addressCol} ?? '');
-                    if (empty($currentAddress) || $newAddress !== $currentAddress) {
-                        $patientUpdates[$addressCol] = $newAddress;
+                $cleanLower = strtolower($newAddress);
+                if ($cleanLower !== 'opol' && $cleanLower !== 'opol, misamis oriental' && !str_contains($cleanLower, 'pending identification') && !str_contains($cleanLower, 'direct scene response')) {
+                    $addressCol = \App\Models\Patient::addressColumn();
+                    if ($addressCol) {
+                        $currentAddress = trim($patient->{$addressCol} ?? '');
+                        if (empty($currentAddress) || $newAddress !== $currentAddress) {
+                            $patientUpdates[$addressCol] = $newAddress;
+                        }
+                    }
+                    if (empty($patient->barangay_id)) {
+                        $matchedB = \App\Models\Barangay::all()->first(function ($b) use ($cleanLower) {
+                            return str_contains($cleanLower, strtolower($b->barangay_name)) || str_contains($cleanLower, strtolower($b->name ?? ''));
+                        });
+                        if ($matchedB) {
+                            $patientUpdates['barangay_id'] = $matchedB->id;
+                        }
                     }
                 }
             }
