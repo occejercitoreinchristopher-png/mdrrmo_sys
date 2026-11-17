@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { router } from '@inertiajs/react';
-import { Eye, AlertTriangle, X, PhoneCall, MapPin, Activity, RotateCcw, ChevronDown, Search, Plus, CheckCircle2, HeartPulse, Printer } from 'lucide-react';
+import { Eye, AlertTriangle, X, PhoneCall, MapPin, Activity, RotateCcw, ChevronDown, Search, Plus, CheckCircle2, HeartPulse, Printer, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import DataTable from '@/shared/components/DataTable';
 import StatusBadge from '@/shared/components/StatusBadge';
@@ -16,6 +16,7 @@ import CreateDispatchModal from '@/dispatcher/components/Dispatches/CreateDispat
 import AddCategoryModal from './AddCategoryModal';
 import AddIncidentTypeModal from './AddIncidentTypeModal';
 import MonthlyReportPrintModal from '@/admin/components/Reports/MonthlyReportPrintModal';
+import { useIncidentRecordsQuery } from './useIncidentRecordsQuery';
 import { 
     MAIN_CATEGORIES, 
     INCIDENT_TYPES_BY_CATEGORY, 
@@ -95,7 +96,6 @@ export default function IncidentTable({
     const [selectedMonth, setSelectedMonth] = useState<string>('all');
     const [selectedTime, setSelectedTime] = useState<string>('all');
     const [selectedZone, setSelectedZone] = useState<string>('all');
-    const [searchQuery, setSearchQuery] = useState('');
 
     // Custom Category & Incident Modal states
     const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
@@ -137,10 +137,42 @@ export default function IncidentTable({
         return opolBarangays && opolBarangays.length > 0 ? opolBarangays : DEFAULT_OPOL_BARANGAYS;
     }, [opolBarangays]);
 
-    // Full archived dataset for zero-latency client filtering
+    // Full archived dataset fallback for initial zero-flash render and barangay zone extraction
     const archiveDataset = useMemo(() => {
         return (allHistoryIncidents && allHistoryIncidents.length > 0) ? allHistoryIncidents : incidents;
     }, [allHistoryIncidents, incidents]);
+
+    // TanStack Query + Search Debounce + Page Pagination for Incident Records
+    const {
+        records: paginatedHistoryRecords,
+        searchQuery,
+        setSearchQuery,
+        isDebouncing,
+        clearSearch,
+        page: recordsPage,
+        setPage: setRecordsPage,
+        perPage: recordsPerPage,
+        setPerPage: setRecordsPerPage,
+        lastPage: recordsLastPage,
+        total: recordsTotal,
+        overallTotal: recordsOverallTotal,
+        from: recordsFrom,
+        to: recordsTo,
+        isLoading: isRecordsLoading,
+        isFetching: isRecordsFetching,
+    } = useIncidentRecordsQuery({
+        enabled: statusFilter === 'history',
+        category: selectedCategory,
+        incident: selectedIncident,
+        month: selectedMonth,
+        time: selectedTime,
+        barangay: selectedZone,
+        customIncidents,
+        initialIncidents: archiveDataset,
+        initialTotal: pagination?.total ?? archiveDataset.length,
+        debounceMs: 350,
+        initialPerPage: 10,
+    });
 
     // Available Categories (1. Category) combining official categories and any custom categories
     const availableCategories = useMemo(() => {
@@ -370,105 +402,14 @@ export default function IncidentTable({
         return 'Medical Emergency';
     };
 
-    // Combined Filtering in horizontal order: Category, Incident, Month, Time, Zone + Keyword
-    const filteredHistoryIncidents = useMemo(() => {
-        if (statusFilter !== 'history') return incidents;
-
-        return archiveDataset.filter((inc) => {
-            const incComplaint = getIncidentChiefComplaint(inc);
-            const incTypeName = inc.incident_type?.incident_type_name || inc.incident_type?.name || '';
-            const authoritativeCat = resolveAuthoritativeCategory(incComplaint, incTypeName);
-
-            // 1. Category Filter (Accurately aligns to authoritative Category derived from PCR or Initial Type)
-            if (selectedCategory && selectedCategory !== 'all') {
-                const customMatches = (customIncidents[selectedCategory] || []).some(ci => {
-                    const normCi = ci.toLowerCase().trim();
-                    return (incComplaint && incComplaint.toLowerCase().includes(normCi)) || 
-                           (incTypeName && incTypeName.toLowerCase().includes(normCi));
-                });
-
-                const matchesCategory = 
-                    authoritativeCat.toLowerCase().trim() === selectedCategory.toLowerCase().trim() ||
-                    incTypeName.toLowerCase().trim() === selectedCategory.toLowerCase().trim() ||
-                    customMatches;
-
-                if (!matchesCategory) {
-                    return false;
-                }
-            }
-
-            // 2. Incident Filter
-            if (selectedIncident && selectedIncident !== 'all') {
-                const target = selectedIncident.toLowerCase().trim();
-                const complaint = incComplaint.toLowerCase();
-                const typeName = incTypeName.toLowerCase();
-                if (!complaint.includes(target) && !typeName.includes(target)) {
-                    return false;
-                }
-            }
-
-            // 3. Month Filter
-            if (selectedMonth && selectedMonth !== 'all') {
-                const dateVal = inc.reported_at || inc.created_at;
-                if (!dateVal) return false;
-                const d = new Date(dateVal);
-                if (isNaN(d.getTime()) || d.getMonth() !== parseInt(selectedMonth, 10)) {
-                    return false;
-                }
-            }
-
-            // 4. Time Filter
-            if (selectedTime && selectedTime !== 'all') {
-                const dateVal = inc.reported_at || inc.created_at;
-                if (!dateVal) return false;
-                const d = new Date(dateVal);
-                if (isNaN(d.getTime())) return false;
-                const hour = d.getHours();
-                if (selectedTime === 'morning' && !(hour >= 6 && hour < 12)) return false;
-                if (selectedTime === 'afternoon' && !(hour >= 12 && hour < 18)) return false;
-                if (selectedTime === 'evening' && !(hour >= 18 && hour < 24)) return false;
-                if (selectedTime === 'night' && !(hour >= 0 && hour < 6)) return false;
-            }
-
-            // 5. Zone Filter
-            if (selectedZone && selectedZone !== 'all') {
-                const normTarget = selectedZone.toLowerCase().replace(/[\s-]/g, '');
-                const incBarangay = ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) || '').toLowerCase().replace(/[\s-]/g, '');
-                const place = (inc.place_of_incident || inc.incident_address || (typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location) || '').toLowerCase().replace(/[\s-]/g, '');
-
-                if (!incBarangay.includes(normTarget) && !place.includes(normTarget)) {
-                    return false;
-                }
-            }
-
-            // 6. Keyword Search Query
-            if (searchQuery.trim()) {
-                const q = searchQuery.toLowerCase().trim();
-                const matchQ =
-                    String(inc.id).includes(q) ||
-                    (inc.place_of_incident && inc.place_of_incident.toLowerCase().includes(q)) ||
-                    (inc.incident_address && inc.incident_address.toLowerCase().includes(q)) ||
-                    ((typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location) && (typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location).toLowerCase().includes(q)) ||
-                    ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) && (typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay).toLowerCase().includes(q)) ||
-                    (inc.description && inc.description.toLowerCase().includes(q)) ||
-                    (incTypeName && incTypeName.toLowerCase().includes(q)) ||
-                    (incComplaint && incComplaint.toLowerCase().includes(q)) ||
-                    (authoritativeCat && authoritativeCat.toLowerCase().includes(q)) ||
-                    (inc.caller_phone_number && inc.caller_phone_number.toLowerCase().includes(q));
-                if (!matchQ) return false;
-            }
-
-            return true;
-        });
-    }, [statusFilter, archiveDataset, incidents, selectedCategory, selectedIncident, selectedMonth, selectedTime, selectedZone, searchQuery, customIncidents]);
-
     const handleResetFilters = () => {
         setSelectedCategory('all');
         setSelectedIncident('all');
         setSelectedMonth('all');
         setSelectedTime('all');
         setSelectedZone('all');
-        setSearchQuery('');
+        clearSearch();
+        setRecordsPage(1);
     };
 
     // Columns for History / Archive Table
@@ -638,8 +579,11 @@ export default function IncidentTable({
                                 <h4 className="font-bold text-sm text-slate-900 dark:text-white">
                                     Archived Incident Records
                                 </h4>
-                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5">
-                                    {filteredHistoryIncidents.length} of {archiveDataset.length}
+                                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5">
+                                    <span>{recordsTotal} of {recordsOverallTotal}</span>
+                                    {isRecordsFetching && (
+                                        <Loader2 className="w-3 h-3 animate-spin text-rose-500" />
+                                    )}
                                 </span>
                             </div>
 
@@ -651,16 +595,26 @@ export default function IncidentTable({
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                         placeholder="Search records..."
-                                        className="w-full text-xs pl-8 pr-7 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 transition-all"
+                                        className="w-full text-xs pl-8 pr-14 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 transition-all"
                                     />
-                                    {searchQuery && (
-                                        <button
-                                            onClick={() => setSearchQuery('')}
-                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
+                                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                                        {(isDebouncing || isRecordsFetching) && (
+                                            <Loader2
+                                                className="w-3.5 h-3.5 animate-spin text-rose-500"
+                                                aria-label="Searching..."
+                                            />
+                                        )}
+                                        {searchQuery && (
+                                            <button
+                                                type="button"
+                                                onClick={clearSearch}
+                                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                                                title="Clear search"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                                 {hasActiveFilters && (
                                     <button
@@ -900,7 +854,7 @@ export default function IncidentTable({
                                 {searchQuery.trim() && (
                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-200/80 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/10">
                                         <span>Search: "{searchQuery}"</span>
-                                        <button onClick={() => setSearchQuery('')} className="hover:opacity-75 cursor-pointer">
+                                        <button onClick={clearSearch} className="hover:opacity-75 cursor-pointer">
                                             <X className="w-3 h-3 ml-0.5" />
                                         </button>
                                     </span>
@@ -915,15 +869,22 @@ export default function IncidentTable({
                             </div>
                         )}
 
-                        {/* Table or Empty State */}
-                        {filteredHistoryIncidents.length === 0 ? (
+                        {/* Table, Loading State, or Empty State */}
+                        {isRecordsLoading && paginatedHistoryRecords.length === 0 ? (
+                            <div className="py-16 px-4 text-center">
+                                <Loader2 className="w-8 h-8 text-rose-500 animate-spin mx-auto mb-3" />
+                                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                    Loading incident records...
+                                </p>
+                            </div>
+                        ) : paginatedHistoryRecords.length === 0 ? (
                             <div className="py-14 px-4 text-center">
                                 <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
                                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">
                                     No Incidents Found
                                 </h4>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-                                    No historical incident records match the active Category, Chief Complaint, Month, Time, and Barangay filter combination.
+                                    No historical incident records match the active Category, Chief Complaint, Month, Time, Barangay, or Search criteria.
                                 </p>
                                 <Button 
                                     variant="secondary" 
@@ -936,17 +897,78 @@ export default function IncidentTable({
                                 </Button>
                             </div>
                         ) : (
-                            <div className="p-4">
-                                <DataTable
-                                    columns={archiveColumns}
-                                    data={filteredHistoryIncidents}
-                                    keyField="id"
-                                    emptyTitle="No incidents found"
-                                    emptyDescription="No incidents match the active criteria."
-                                    onRowClick={(row) => {
-                                        setViewing(row);
-                                    }}
-                                />
+                            <div className="p-4 space-y-4">
+                                <div className={isRecordsFetching ? 'opacity-60 transition-opacity duration-150' : 'transition-opacity duration-150'}>
+                                    <DataTable
+                                        columns={archiveColumns}
+                                        data={paginatedHistoryRecords}
+                                        keyField="id"
+                                        emptyTitle="No incidents found"
+                                        emptyDescription="No incidents match the active criteria."
+                                        onRowClick={(row) => {
+                                            setViewing(row);
+                                        }}
+                                    />
+                                </div>
+
+                                {/* Pagination Footer Bar */}
+                                <div className="pt-3 border-t border-slate-200/80 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                                        <span>
+                                            Showing{' '}
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                {recordsFrom}–{recordsTo}
+                                            </span>{' '}
+                                            of{' '}
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                {recordsTotal}
+                                            </span>{' '}
+                                            records
+                                        </span>
+
+                                        <div className="flex items-center gap-1.5">
+                                            <label
+                                                htmlFor="incident-records-per-page"
+                                                className="text-slate-500 dark:text-slate-400"
+                                            >
+                                                Rows:
+                                            </label>
+                                            <select
+                                                id="incident-records-per-page"
+                                                value={recordsPerPage}
+                                                onChange={(e) => setRecordsPerPage(Number(e.target.value))}
+                                                className="text-xs px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-200 font-medium focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer"
+                                            >
+                                                <option value={10}>10</option>
+                                                <option value={15}>15</option>
+                                                <option value={25}>25</option>
+                                                <option value={50}>50</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3">
+                                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                            Page{' '}
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                {recordsPage}
+                                            </span>{' '}
+                                            of{' '}
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                {recordsLastPage}
+                                            </span>
+                                        </span>
+                                        <div className="[&>div]:mt-0">
+                                            <Pagination
+                                                currentPage={recordsPage}
+                                                lastPage={recordsLastPage}
+                                                total={recordsTotal}
+                                                perPage={recordsPerPage}
+                                                onPageChange={setRecordsPage}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </Card>

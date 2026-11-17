@@ -111,6 +111,348 @@ class IncidentController extends Controller
         ]);
     }
 
+    /**
+     * Paginated, filtered, and searchable JSON endpoint for Incident Records (TanStack Query).
+     */
+    public function historyRecords(Request $request)
+    {
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = min(100, max(5, (int) $request->query('per_page', 10)));
+        $search = trim((string) $request->query('search', ''));
+        $selectedCategory = trim((string) $request->query('category', 'all'));
+        $selectedIncident = trim((string) $request->query('incident', 'all'));
+        $selectedMonth = (string) $request->query('month', 'all');
+        $selectedTime = (string) $request->query('time', 'all');
+        $selectedZone = trim((string) $request->query('barangay', 'all'));
+
+        // Merge DB custom complaints with any client-passed custom_incidents
+        $customMap = [];
+        try {
+            $dbComplaints = \App\Models\EmergencyComplaint::all();
+            foreach ($dbComplaints as $dbC) {
+                $cCat = trim((string) $dbC->category);
+                $cName = trim((string) $dbC->complaint_name);
+                if ($cCat !== '' && $cName !== '') {
+                    $customMap[$cCat][] = $cName;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        if ($request->filled('custom_incidents')) {
+            $rawCustom = $request->query('custom_incidents');
+            $decoded = is_string($rawCustom) ? json_decode($rawCustom, true) : (array) $rawCustom;
+            if (is_array($decoded)) {
+                foreach ($decoded as $catKey => $incList) {
+                    if (is_array($incList)) {
+                        foreach ($incList as $item) {
+                            if (is_string($item) && trim($item) !== '') {
+                                $customMap[$catKey][] = trim($item);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        $overallTotal = Incident::where('incident_status', 'resolved')
+            ->where('is_prank', false)
+            ->count();
+
+        $query = Incident::with([
+            'resident.residentProfile.barangay',
+            'incidentType',
+            'images',
+            'dispatches.patientCareRecord',
+            'dispatches.patientCareRecords',
+            'dispatches.ambulance',
+            'dispatches.driver',
+            'dispatches.crew',
+        ])
+        ->where('incident_status', 'resolved')
+        ->where('is_prank', false)
+        ->latest();
+
+        // SQL-level Month filter (JS sends 0..11)
+        if ($selectedMonth !== 'all' && is_numeric($selectedMonth)) {
+            $sqlMonth = (int) $selectedMonth + 1;
+            if ($sqlMonth >= 1 && $sqlMonth <= 12) {
+                $query->where(function ($mq) use ($sqlMonth) {
+                    $mq->whereMonth('reported_at', $sqlMonth)
+                       ->orWhere(function ($smq) use ($sqlMonth) {
+                           $smq->whereNull('reported_at')->whereMonth('created_at', $sqlMonth);
+                       });
+                });
+            }
+        }
+
+        // SQL-level Time-of-day filter
+        if (in_array($selectedTime, ['morning', 'afternoon', 'evening', 'night'], true)) {
+            $hourRange = match ($selectedTime) {
+                'morning' => [6, 11],
+                'afternoon' => [12, 17],
+                'evening' => [18, 23],
+                'night' => [0, 5],
+            };
+            $query->whereRaw('HOUR(COALESCE(reported_at, created_at)) BETWEEN ? AND ?', $hourRange);
+        }
+
+        $records = $query->get();
+
+        // Filter by Category, Chief Complaint, Barangay, and Debounced Search Keyword
+        $filtered = $records->filter(function (Incident $inc) use (
+            $selectedCategory,
+            $selectedIncident,
+            $selectedZone,
+            $search,
+            $customMap
+        ) {
+            $incComplaint = $this->extractIncidentComplaint($inc);
+            $incTypeName = trim((string) ($inc->incidentType?->incident_type_name ?? ''));
+            $authoritativeCat = $this->resolveCategoryForIncident($incComplaint, $incTypeName, $customMap);
+
+            // 1. Category Filter
+            if ($selectedCategory !== '' && strtolower($selectedCategory) !== 'all') {
+                $selCatLower = strtolower($selectedCategory);
+                $customMatches = false;
+                foreach ($customMap as $cKey => $cList) {
+                    if (strtolower(trim($cKey)) === $selCatLower) {
+                        foreach ($cList as $ci) {
+                            $normCi = strtolower(trim($ci));
+                            if (
+                                ($incComplaint !== '' && str_contains(strtolower($incComplaint), $normCi)) ||
+                                ($incTypeName !== '' && str_contains(strtolower($incTypeName), $normCi))
+                            ) {
+                                $customMatches = true;
+                                break 2;
+                            }
+                        }
+                    }
+                }
+
+                $matchesCategory =
+                    strtolower(trim($authoritativeCat)) === $selCatLower ||
+                    strtolower(trim($incTypeName)) === $selCatLower ||
+                    $customMatches;
+
+                if (! $matchesCategory) {
+                    return false;
+                }
+            }
+
+            // 2. Chief Complaint / Incident Filter
+            if ($selectedIncident !== '' && strtolower($selectedIncident) !== 'all') {
+                $target = strtolower($selectedIncident);
+                if (
+                    ! str_contains(strtolower($incComplaint), $target) &&
+                    ! str_contains(strtolower($incTypeName), $target)
+                ) {
+                    return false;
+                }
+            }
+
+            // 3. Barangay / Zone Filter
+            if ($selectedZone !== '' && strtolower($selectedZone) !== 'all') {
+                $normTarget = preg_replace('/[\s-]+/', '', strtolower($selectedZone));
+                $rawBarangay = $inc->barangay;
+                $barangayStr = is_array($rawBarangay)
+                    ? ($rawBarangay['barangay_name'] ?? $rawBarangay['name'] ?? '')
+                    : (is_object($rawBarangay) ? ($rawBarangay->barangay_name ?? $rawBarangay->name ?? '') : (string) $rawBarangay);
+                $incBarangay = preg_replace('/[\s-]+/', '', strtolower($barangayStr));
+
+                $placeRaw = $inc->place_of_incident ?? $inc->incident_address ?? (is_string($inc->location) ? $inc->location : '');
+                $placeNorm = preg_replace('/[\s-]+/', '', strtolower((string) $placeRaw));
+
+                if (! str_contains($incBarangay, $normTarget) && ! str_contains($placeNorm, $normTarget)) {
+                    return false;
+                }
+            }
+
+            // 4. Keyword Search Query
+            if ($search !== '') {
+                $q = strtolower($search);
+                $rawBarangay = $inc->barangay;
+                $barangayStr = is_array($rawBarangay)
+                    ? ($rawBarangay['barangay_name'] ?? $rawBarangay['name'] ?? '')
+                    : (is_object($rawBarangay) ? ($rawBarangay->barangay_name ?? $rawBarangay->name ?? '') : (string) $rawBarangay);
+                $locStr = is_string($inc->location) ? $inc->location : '';
+                $residentName = trim(($inc->resident?->first_name ?? '') . ' ' . ($inc->resident?->last_name ?? ''));
+
+                $haystack = strtolower(implode(' ', [
+                    (string) $inc->id,
+                    '#' . $inc->id,
+                    (string) ($inc->place_of_incident ?? ''),
+                    (string) ($inc->incident_address ?? ''),
+                    $locStr,
+                    $barangayStr,
+                    (string) ($inc->incident_description ?? ''),
+                    $incTypeName,
+                    $incComplaint,
+                    $authoritativeCat,
+                    (string) ($inc->caller_phone_number ?? ''),
+                    $residentName,
+                ]));
+
+                if (! str_contains($haystack, $q)) {
+                    return false;
+                }
+            }
+
+            return true;
+        })->values();
+
+        $total = $filtered->count();
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $currentPage = min($page, $lastPage);
+        $items = $filtered->forPage($currentPage, $perPage)->values();
+
+        // Attach reporter_prank_count only for current page items
+        $residentIds = $items->pluck('resident_id')->filter()->unique()->values();
+        $phoneNumbers = $items->pluck('caller_phone_number')->filter()->unique()->values();
+
+        $residentPranks = $residentIds->isNotEmpty()
+            ? Incident::where('is_prank', true)
+                ->whereIn('resident_id', $residentIds)
+                ->select('resident_id', DB::raw('count(*) as prank_count'))
+                ->groupBy('resident_id')
+                ->pluck('prank_count', 'resident_id')
+            : collect();
+
+        $phonePranks = $phoneNumbers->isNotEmpty()
+            ? Incident::where('is_prank', true)
+                ->whereIn('caller_phone_number', $phoneNumbers)
+                ->select('caller_phone_number', DB::raw('count(*) as prank_count'))
+                ->groupBy('caller_phone_number')
+                ->pluck('prank_count', 'caller_phone_number')
+            : collect();
+
+        $items->transform(function ($inc) use ($residentPranks, $phonePranks) {
+            $count = 0;
+            if ($inc->resident_id && isset($residentPranks[$inc->resident_id])) {
+                $count = max($count, (int) $residentPranks[$inc->resident_id]);
+            }
+            if ($inc->caller_phone_number && isset($phonePranks[$inc->caller_phone_number])) {
+                $count = max($count, (int) $phonePranks[$inc->caller_phone_number]);
+            }
+            $inc->reporter_prank_count = $count;
+            return $inc;
+        });
+
+        $from = $total > 0 ? (($currentPage - 1) * $perPage) + 1 : 0;
+        $to = $total > 0 ? min($currentPage * $perPage, $total) : 0;
+
+        return response()->json([
+            'data' => $items->all(),
+            'current_page' => $currentPage,
+            'last_page' => $lastPage,
+            'per_page' => $perPage,
+            'total' => $total,
+            'overall_total' => $overallTotal,
+            'from' => $from,
+            'to' => $to,
+        ]);
+    }
+
+    private function extractIncidentComplaint(Incident $inc): string
+    {
+        if (! empty($inc->pcr_chief_complaint)) {
+            return trim((string) $inc->pcr_chief_complaint);
+        }
+
+        if ($inc->relationLoaded('dispatches')) {
+            foreach ($inc->dispatches as $d) {
+                if ($d->relationLoaded('patientCareRecords')) {
+                    foreach ($d->patientCareRecords as $pcr) {
+                        if (! empty($pcr->clinical_chief_complaint)) {
+                            return trim((string) $pcr->clinical_chief_complaint);
+                        }
+                    }
+                }
+                if ($d->relationLoaded('patientCareRecord') && ! empty($d->patientCareRecord?->clinical_chief_complaint)) {
+                    return trim((string) $d->patientCareRecord->clinical_chief_complaint);
+                }
+            }
+        }
+
+        $desc = (string) ($inc->incident_description ?? '');
+        if ($desc !== '' && preg_match('/^\[(.*?)\]/', $desc, $matches) && ! empty($matches[1])) {
+            return trim($matches[1]);
+        }
+
+        if (! empty($inc->reported_chief_complaint)) {
+            return trim((string) $inc->reported_chief_complaint);
+        }
+
+        return trim((string) ($inc->incidentType?->incident_type_name ?? ''));
+    }
+
+    private function resolveCategoryForIncident(string $complaint, string $rawTypeName, array $customMap): string
+    {
+        $lookup = function (string $val) use ($customMap): ?string {
+            $norm = strtolower(trim($val));
+            if ($norm === '') {
+                return null;
+            }
+
+            foreach ($customMap as $cat => $items) {
+                if (strtolower(trim($cat)) === $norm) {
+                    return $cat;
+                }
+                foreach ($items as $item) {
+                    if (strtolower(trim($item)) === $norm) {
+                        return $cat;
+                    }
+                }
+            }
+
+            foreach (EmergencyComplaints::CATEGORIES as $cat => $items) {
+                if (strtolower(trim($cat)) === $norm) {
+                    return $cat;
+                }
+                foreach ($items as $item) {
+                    if (strtolower(trim($item)) === $norm) {
+                        return $cat;
+                    }
+                }
+            }
+
+            if (preg_match('/search|rescue|drown|water|sweep|trap/', $norm)) {
+                return 'Search & Rescue';
+            }
+            if (preg_match('/flood|weather|typhoon|surge|storm|landslide/', $norm)) {
+                return 'Severe Weather / Flood';
+            }
+            if (preg_match('/fire|conflagration|smoke|burn/', $norm)) {
+                return 'Fire Emergency';
+            }
+            if (preg_match('/crime|violence|assault|threat|hostage|terror|stab|robbery|theft/', $norm)) {
+                return 'Crime & Security';
+            }
+            if (preg_match('/vehicular|accident|medical|trauma|cpr|patient|injury/', $norm)) {
+                return 'Medical Emergency';
+            }
+
+            return null;
+        };
+
+        if ($complaint !== '') {
+            $found = $lookup($complaint);
+            if ($found !== null) {
+                return $found;
+            }
+        }
+
+        if ($rawTypeName !== '') {
+            $found = $lookup($rawTypeName);
+            if ($found !== null) {
+                return $found;
+            }
+            return $rawTypeName;
+        }
+
+        return 'Medical Emergency';
+    }
+
     public function map(Request $request)
     {
         $incidents = Incident::with([

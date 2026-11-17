@@ -130,6 +130,7 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
 
     // Incidents
     Route::get('/incidents/map', [IncidentController::class, 'map'])->name('incidents.map');
+    Route::get('/incidents/records', [IncidentController::class, 'historyRecords'])->name('incidents.records');
     Route::get('/incidents', [IncidentController::class, 'index'])->name('incidents');
     Route::post('/incidents/phone-call', [IncidentController::class, 'storePhoneCall'])->name('incidents.phone-call');
     Route::get('/location-markers/lookup', [IncidentController::class, 'lookupLocationMarker'])->name('location-markers.lookup');
