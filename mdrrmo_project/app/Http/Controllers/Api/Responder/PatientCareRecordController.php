@@ -210,21 +210,14 @@ class PatientCareRecordController extends Controller
             $dispatch->refresh();
         }
 
-        // Auto-align incident_type_id if clinical PCR findings reveal a specific emergency type (e.g. Vehicular Accident)
+        // Priority Override: Responder PCR Chief Complaint determines the authoritative emergency Category
         if ($dispatch->incident) {
-            $complaint = strtolower($pcr->clinical_chief_complaint ?? $validated['chief_complaint'] ?? '');
-            $nature = strtolower($pcr->nature_of_call ?? $validated['nature_of_call'] ?? '');
-            $pcrText = "{$complaint} {$nature}";
-
-            if (preg_match('/\b(vehicular|motorcycle|collision|crash|hit and run|car crash|traffic accident|road crash)\b/i', $pcrText)) {
-                $vehicularType = \App\Models\IncidentType::where('incident_type_name', 'like', '%vehicular%')->first();
-                if ($vehicularType && (int)$dispatch->incident->incident_type_id !== (int)$vehicularType->id) {
-                    $dispatch->incident->update(['incident_type_id' => $vehicularType->id]);
-                }
-            } elseif (preg_match('/\b(fire|burn|explosion)\b/i', $pcrText)) {
-                $fireType = \App\Models\IncidentType::where('incident_type_name', 'like', '%fire%')->first();
-                if ($fireType && (int)$dispatch->incident->incident_type_id !== (int)$fireType->id) {
-                    $dispatch->incident->update(['incident_type_id' => $fireType->id]);
+            $complaint = trim($pcr->clinical_chief_complaint ?? $validated['chief_complaint'] ?? $pcr->chief_complaint ?? '');
+            if (!empty($complaint)) {
+                $categoryName = \App\Constants\EmergencyComplaints::getCategoryForComplaint($complaint);
+                $targetType = \App\Models\IncidentType::where('incident_type_name', $categoryName)->first();
+                if ($targetType && (int)$dispatch->incident->incident_type_id !== (int)$targetType->id) {
+                    $dispatch->incident->update(['incident_type_id' => $targetType->id]);
                 }
             }
         }
@@ -388,12 +381,23 @@ class PatientCareRecordController extends Controller
                 'last_location_updated_at' => now(),
             ]);
 
-            // Mark the overall incident as resolved
+            // Mark the overall incident as resolved and ensure authoritative category alignment with responder's PCR
             if ($dispatch->incident) {
-                $dispatch->incident->update([
+                $incidentUpdates = [
                     'incident_status' => 'resolved',
                     'resolved_at' => $dispatch->incident->resolved_at ?? now(),
-                ]);
+                ];
+
+                $complaint = trim($pcr->clinical_chief_complaint ?? $pcr->chief_complaint ?? '');
+                if (!empty($complaint)) {
+                    $categoryName = \App\Constants\EmergencyComplaints::getCategoryForComplaint($complaint);
+                    $targetType = \App\Models\IncidentType::where('incident_type_name', $categoryName)->first();
+                    if ($targetType) {
+                        $incidentUpdates['incident_type_id'] = $targetType->id;
+                    }
+                }
+
+                $dispatch->incident->update($incidentUpdates);
             }
 
             if ($dispatch->ambulance_id) {

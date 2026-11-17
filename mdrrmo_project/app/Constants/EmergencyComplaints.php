@@ -63,8 +63,10 @@ class EmergencyComplaints
         ],
         'Severe Weather / Flood' => [
             'Severe Weather',
-            'Search and Rescue/Retrieval',
-            'Water Rescue/Drowning Incident',
+            'Flash Flood Emergency',
+            'Storm Surge',
+            'Typhoon Disaster',
+            'Landslide Incident',
             'Evacuation Center Management',
         ],
         'Crime & Security' => [
@@ -72,14 +74,18 @@ class EmergencyComplaints
             'Hostage Situation',
             'Terrorism',
             'Assault',
-            'Missing Persons',
+            'Civil Disturbance',
+            'Armed Robbery',
+            'Theft',
         ],
-        'Other / Non-Emergency' => [
-            'Public Service',
-            'Training',
-            'Stand-By Unit',
-            'Calls (Emergency, Assistance and Inquiry)',
-            'Waiver',
+        'Search & Rescue' => [
+            'Search and Rescue/Retrieval',
+            'Water Rescue/Drowning Incident',
+            'Mountain Search and Rescue',
+            'Collapsed Structure Rescue',
+            'Trapped Victims Extraction',
+            'River Current Sweep Retrieval',
+            'Missing Persons',
         ],
     ];
 
@@ -174,11 +180,12 @@ class EmergencyComplaints
     public static function getCategoryForComplaint(?string $complaint): string
     {
         if (empty($complaint)) {
-            return 'Other / Non-Emergency';
+            return 'Medical Emergency';
         }
 
         $normalized = strtolower(trim($complaint));
 
+        // 1. Direct match with constant list
         foreach (self::CATEGORIES as $category => $complaints) {
             foreach ($complaints as $item) {
                 if (strtolower($item) === $normalized) {
@@ -187,20 +194,33 @@ class EmergencyComplaints
             }
         }
 
-        // Fuzzy fallback based on keywords
-        if (str_contains($normalized, 'fire') || str_contains($normalized, 'burn')) {
-            return 'Fire Emergency';
+        // 2. Direct match with database emergency_complaints table (for dynamic/custom complaints)
+        try {
+            $dbComplaint = \App\Models\EmergencyComplaint::whereRaw('LOWER(complaint_name) = ?', [$normalized])->first();
+            if ($dbComplaint && !empty($dbComplaint->category)) {
+                return $dbComplaint->category;
+            }
+        } catch (\Throwable $e) {
+            // Safe fallback
         }
-        if (str_contains($normalized, 'flood') || str_contains($normalized, 'weather') || str_contains($normalized, 'rescue') || str_contains($normalized, 'drown')) {
+
+        // 3. Clinical heuristics based on keywords
+        if (str_contains($normalized, 'rescue') || str_contains($normalized, 'drown') || str_contains($normalized, 'sweep') || str_contains($normalized, 'search') || str_contains($normalized, 'trapped') || str_contains($normalized, 'mountain')) {
+            return 'Search & Rescue';
+        }
+        if (str_contains($normalized, 'flood') || str_contains($normalized, 'weather') || str_contains($normalized, 'typhoon') || str_contains($normalized, 'surge') || str_contains($normalized, 'storm') || str_contains($normalized, 'landslide')) {
             return 'Severe Weather / Flood';
         }
-        if (str_contains($normalized, 'assault') || str_contains($normalized, 'threat') || str_contains($normalized, 'crime') || str_contains($normalized, 'hostage')) {
+        if (str_contains($normalized, 'fire') || str_contains($normalized, 'burn') || str_contains($normalized, 'smoke') || str_contains($normalized, 'conflagration')) {
+            return 'Fire Emergency';
+        }
+        if (str_contains($normalized, 'assault') || str_contains($normalized, 'threat') || str_contains($normalized, 'crime') || str_contains($normalized, 'hostage') || str_contains($normalized, 'terror') || str_contains($normalized, 'stab') || str_contains($normalized, 'robbery') || str_contains($normalized, 'theft')) {
             return 'Crime & Security';
         }
-        if (str_contains($normalized, 'medic') || str_contains($normalized, 'accident') || str_contains($normalized, 'trauma') || str_contains($normalized, 'pain')) {
+        if (str_contains($normalized, 'medic') || str_contains($normalized, 'accident') || str_contains($normalized, 'trauma') || str_contains($normalized, 'pain') || str_contains($normalized, 'patient') || str_contains($normalized, 'cardiac') || str_contains($normalized, 'stroke') || str_contains($normalized, 'wound')) {
             return 'Medical Emergency';
         }
 
-        return 'Other / Non-Emergency';
+        return 'Medical Emergency';
     }
 }

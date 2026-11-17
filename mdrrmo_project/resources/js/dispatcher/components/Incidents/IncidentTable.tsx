@@ -295,107 +295,6 @@ export default function IncidentTable({
         selectedZone !== 'all' || 
         searchQuery.trim().length > 0;
 
-    // Combined Filtering in horizontal order: Category, Incident, Month, Time, Zone + Keyword
-    const filteredHistoryIncidents = useMemo(() => {
-        if (statusFilter !== 'history') return incidents;
-
-        return archiveDataset.filter((inc) => {
-            // 1. Category Filter (Accurately resolves complaint & incident type to Main Category)
-            if (selectedCategory && selectedCategory !== 'all') {
-                const incComplaint = inc.chief_complaint || inc.pcr_chief_complaint || inc.description || '';
-                const incTypeName = inc.incident_type?.incident_type_name || inc.incident_type?.name || '';
-                const mappedFromComplaint = getCategoryForIncident(incComplaint);
-                const mappedFromType = getCategoryForIncident(incTypeName);
-
-                const customMatches = (customIncidents[selectedCategory] || []).some(ci => {
-                    const normCi = ci.toLowerCase().trim();
-                    return incComplaint.toLowerCase().includes(normCi) || incTypeName.toLowerCase().includes(normCi);
-                });
-
-                const matchesCategory = 
-                    mappedFromComplaint === selectedCategory || 
-                    mappedFromType === selectedCategory ||
-                    incTypeName.toLowerCase().trim() === selectedCategory.toLowerCase().trim() ||
-                    customMatches;
-
-                if (!matchesCategory) {
-                    return false;
-                }
-            }
-
-            // 2. Incident Filter
-            if (selectedIncident && selectedIncident !== 'all') {
-                const target = selectedIncident.toLowerCase().trim();
-                const complaint = (inc.chief_complaint || inc.pcr_chief_complaint || inc.description || '').toLowerCase();
-                const typeName = (inc.incident_type?.incident_type_name || inc.incident_type?.name || '').toLowerCase();
-                if (!complaint.includes(target) && !typeName.includes(target)) {
-                    return false;
-                }
-            }
-
-            // 3. Month Filter
-            if (selectedMonth && selectedMonth !== 'all') {
-                const dateVal = inc.reported_at || inc.created_at;
-                if (!dateVal) return false;
-                const d = new Date(dateVal);
-                if (isNaN(d.getTime()) || d.getMonth() !== parseInt(selectedMonth, 10)) {
-                    return false;
-                }
-            }
-
-            // 4. Time Filter
-            if (selectedTime && selectedTime !== 'all') {
-                const dateVal = inc.reported_at || inc.created_at;
-                if (!dateVal) return false;
-                const d = new Date(dateVal);
-                if (isNaN(d.getTime())) return false;
-                const hour = d.getHours();
-                if (selectedTime === 'morning' && !(hour >= 6 && hour < 12)) return false;
-                if (selectedTime === 'afternoon' && !(hour >= 12 && hour < 18)) return false;
-                if (selectedTime === 'evening' && !(hour >= 18 && hour < 24)) return false;
-                if (selectedTime === 'night' && !(hour >= 0 && hour < 6)) return false;
-            }
-
-            // 5. Zone Filter
-            if (selectedZone && selectedZone !== 'all') {
-                const normTarget = selectedZone.toLowerCase().replace(/[\s-]/g, '');
-                const incBarangay = ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) || '').toLowerCase().replace(/[\s-]/g, '');
-                const place = (inc.place_of_incident || inc.incident_address || (typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location) || '').toLowerCase().replace(/[\s-]/g, '');
-
-                if (!incBarangay.includes(normTarget) && !place.includes(normTarget)) {
-                    return false;
-                }
-            }
-
-            // 6. Keyword Search Query
-            if (searchQuery.trim()) {
-                const q = searchQuery.toLowerCase().trim();
-                const typeName = inc.incident_type?.incident_type_name || inc.incident_type?.name;
-                const matchQ =
-                    String(inc.id).includes(q) ||
-                    (inc.place_of_incident && inc.place_of_incident.toLowerCase().includes(q)) ||
-                    (inc.incident_address && inc.incident_address.toLowerCase().includes(q)) ||
-                    ((typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location) && (typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location).toLowerCase().includes(q)) ||
-                    ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) && (typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay).toLowerCase().includes(q)) ||
-                    (inc.description && inc.description.toLowerCase().includes(q)) ||
-                    (typeName && typeName.toLowerCase().includes(q)) ||
-                    (inc.caller_phone_number && inc.caller_phone_number.toLowerCase().includes(q));
-                if (!matchQ) return false;
-            }
-
-            return true;
-        });
-    }, [statusFilter, archiveDataset, incidents, selectedCategory, selectedIncident, selectedMonth, selectedTime, selectedZone, searchQuery]);
-
-    const handleResetFilters = () => {
-        setSelectedCategory('all');
-        setSelectedIncident('all');
-        setSelectedMonth('all');
-        setSelectedTime('all');
-        setSelectedZone('all');
-        setSearchQuery('');
-    };
-
     // Helper to resolve PCR Chief Complaint
     const getIncidentChiefComplaint = (row: any): string => {
         if (!row) return '';
@@ -439,6 +338,135 @@ export default function IncidentTable({
             }
         }
         return '';
+    };
+
+    // Helper to resolve Authoritative Emergency Category:
+    // Priority: Responder's on-scene PCR Chief Complaint is the clinical authority.
+    // If no PCR has been recorded yet (e.g. ongoing response), falls back to initial reported emergency type.
+    const resolveAuthoritativeCategory = (complaint: string, rawTypeName: string): string => {
+        if (complaint && complaint.trim()) {
+            const norm = complaint.trim().toLowerCase();
+            for (const [c, list] of Object.entries(customIncidents)) {
+                if (Array.isArray(list) && list.some(item => item.toLowerCase().trim() === norm)) {
+                    return c;
+                }
+            }
+            const derived = getCategoryForIncident(complaint);
+            if (derived) return derived;
+        }
+
+        if (rawTypeName && rawTypeName.trim()) {
+            const normType = rawTypeName.trim().toLowerCase();
+            for (const [c, list] of Object.entries(customIncidents)) {
+                if (Array.isArray(list) && list.some(item => item.toLowerCase().trim() === normType)) {
+                    return c;
+                }
+            }
+            return getCategoryForIncident(rawTypeName) || rawTypeName;
+        }
+
+        return 'Medical Emergency';
+    };
+
+    // Combined Filtering in horizontal order: Category, Incident, Month, Time, Zone + Keyword
+    const filteredHistoryIncidents = useMemo(() => {
+        if (statusFilter !== 'history') return incidents;
+
+        return archiveDataset.filter((inc) => {
+            const incComplaint = getIncidentChiefComplaint(inc);
+            const incTypeName = inc.incident_type?.incident_type_name || inc.incident_type?.name || '';
+            const authoritativeCat = resolveAuthoritativeCategory(incComplaint, incTypeName);
+
+            // 1. Category Filter (Accurately aligns to authoritative Category derived from PCR or Initial Type)
+            if (selectedCategory && selectedCategory !== 'all') {
+                const customMatches = (customIncidents[selectedCategory] || []).some(ci => {
+                    const normCi = ci.toLowerCase().trim();
+                    return (incComplaint && incComplaint.toLowerCase().includes(normCi)) || 
+                           (incTypeName && incTypeName.toLowerCase().includes(normCi));
+                });
+
+                const matchesCategory = 
+                    authoritativeCat.toLowerCase().trim() === selectedCategory.toLowerCase().trim() ||
+                    incTypeName.toLowerCase().trim() === selectedCategory.toLowerCase().trim() ||
+                    customMatches;
+
+                if (!matchesCategory) {
+                    return false;
+                }
+            }
+
+            // 2. Incident Filter
+            if (selectedIncident && selectedIncident !== 'all') {
+                const target = selectedIncident.toLowerCase().trim();
+                const complaint = incComplaint.toLowerCase();
+                const typeName = incTypeName.toLowerCase();
+                if (!complaint.includes(target) && !typeName.includes(target)) {
+                    return false;
+                }
+            }
+
+            // 3. Month Filter
+            if (selectedMonth && selectedMonth !== 'all') {
+                const dateVal = inc.reported_at || inc.created_at;
+                if (!dateVal) return false;
+                const d = new Date(dateVal);
+                if (isNaN(d.getTime()) || d.getMonth() !== parseInt(selectedMonth, 10)) {
+                    return false;
+                }
+            }
+
+            // 4. Time Filter
+            if (selectedTime && selectedTime !== 'all') {
+                const dateVal = inc.reported_at || inc.created_at;
+                if (!dateVal) return false;
+                const d = new Date(dateVal);
+                if (isNaN(d.getTime())) return false;
+                const hour = d.getHours();
+                if (selectedTime === 'morning' && !(hour >= 6 && hour < 12)) return false;
+                if (selectedTime === 'afternoon' && !(hour >= 12 && hour < 18)) return false;
+                if (selectedTime === 'evening' && !(hour >= 18 && hour < 24)) return false;
+                if (selectedTime === 'night' && !(hour >= 0 && hour < 6)) return false;
+            }
+
+            // 5. Zone Filter
+            if (selectedZone && selectedZone !== 'all') {
+                const normTarget = selectedZone.toLowerCase().replace(/[\s-]/g, '');
+                const incBarangay = ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) || '').toLowerCase().replace(/[\s-]/g, '');
+                const place = (inc.place_of_incident || inc.incident_address || (typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location) || '').toLowerCase().replace(/[\s-]/g, '');
+
+                if (!incBarangay.includes(normTarget) && !place.includes(normTarget)) {
+                    return false;
+                }
+            }
+
+            // 6. Keyword Search Query
+            if (searchQuery.trim()) {
+                const q = searchQuery.toLowerCase().trim();
+                const matchQ =
+                    String(inc.id).includes(q) ||
+                    (inc.place_of_incident && inc.place_of_incident.toLowerCase().includes(q)) ||
+                    (inc.incident_address && inc.incident_address.toLowerCase().includes(q)) ||
+                    ((typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location) && (typeof inc.location === 'object' ? inc.location?.location_name || inc.location?.name : inc.location).toLowerCase().includes(q)) ||
+                    ((typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay) && (typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay).toLowerCase().includes(q)) ||
+                    (inc.description && inc.description.toLowerCase().includes(q)) ||
+                    (incTypeName && incTypeName.toLowerCase().includes(q)) ||
+                    (incComplaint && incComplaint.toLowerCase().includes(q)) ||
+                    (authoritativeCat && authoritativeCat.toLowerCase().includes(q)) ||
+                    (inc.caller_phone_number && inc.caller_phone_number.toLowerCase().includes(q));
+                if (!matchQ) return false;
+            }
+
+            return true;
+        });
+    }, [statusFilter, archiveDataset, incidents, selectedCategory, selectedIncident, selectedMonth, selectedTime, selectedZone, searchQuery, customIncidents]);
+
+    const handleResetFilters = () => {
+        setSelectedCategory('all');
+        setSelectedIncident('all');
+        setSelectedMonth('all');
+        setSelectedTime('all');
+        setSelectedZone('all');
+        setSearchQuery('');
     };
 
     // Columns for History / Archive Table
@@ -498,9 +526,9 @@ export default function IncidentTable({
             header: 'Category',
             render: (v, row) => {
                 const complaint = getIncidentChiefComplaint(row);
-                const rawTypeName = row.incident_type?.name || row.incident_type?.incident_type_name;
-                const derivedCat = getCategoryForIncident(complaint || rawTypeName);
-                const name = rawTypeName || derivedCat;
+                const rawTypeName = row.incident_type?.name || row.incident_type?.incident_type_name || '';
+                // Clinical priority: responder's on-scene PCR chief complaint overrides initial citizen panic selections
+                const name = resolveAuthoritativeCategory(complaint, rawTypeName);
                 if (!name) {
                     return <span className="text-slate-400 text-xs italic">Unclassified</span>;
                 }
