@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useContext } from 'react';
+import { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { router } from '@inertiajs/react';
 import { AlertCircle, MapPin, Truck, User as UserIcon, Clock, Search, ShieldAlert, Activity, Stethoscope, FileText, ChevronDown, Maximize2, X, CheckCircle, XCircle, Compass, Navigation, AlertTriangle, ExternalLink } from 'lucide-react';
 import { AlarmContext } from '../../contexts/AlarmContext';
@@ -199,19 +199,24 @@ export default function ActiveDispatchWorkspace({
         return { status: 'offline', label: `Offline (${minutes}m ago)`, color: 'text-rose-400 bg-rose-500/10 border-rose-500/30', isLive: false, isOffline: true, elapsedSeconds };
     };
 
+    const handledIncidentIdRef = useRef<string | number | null>(null);
+
     useEffect(() => {
-        if (selectedIncidentId) {
+        if (selectedIncidentId && handledIncidentIdRef.current !== selectedIncidentId) {
             const dispatch = dispatches.find(d => d.incident_id == selectedIncidentId);
             if (dispatch) {
                 setSelectedDispatch(dispatch);
-                setIsExpanded(true); // Auto-expand if opened via URL
+                setIsExpanded(true); // Auto-expand only once upon initial URL navigation
+                handledIncidentIdRef.current = selectedIncidentId;
+                window.history.replaceState({}, '', '/dispatcher/dispatches');
             } else {
                 const vi = verifiedIncidents.find(i => i.id == selectedIncidentId);
                 if (vi) {
                     setAssigningIncident(vi);
+                    handledIncidentIdRef.current = selectedIncidentId;
+                    window.history.replaceState({}, '', '/dispatcher/dispatches');
                 }
             }
-            window.history.replaceState({}, '', '/dispatcher/dispatches');
         }
     }, [selectedIncidentId, dispatches, verifiedIncidents]);
 
@@ -740,7 +745,10 @@ export default function ActiveDispatchWorkspace({
                                             );
                                         })()}
                                         <button 
-                                            onClick={() => setSelectedDispatch(null)}
+                                            onClick={() => {
+                                                setSelectedDispatch(null);
+                                                setIsExpanded(false);
+                                            }}
                                             className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                                             title="Close overlay"
                                         >
