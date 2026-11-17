@@ -49,7 +49,7 @@ export default function AddIncidentTypeModal({
         }
 
         if (!trimmedName) {
-            setError('Please enter an incident name.');
+            setError('Please enter a chief complaint.');
             return;
         }
 
@@ -62,8 +62,8 @@ export default function AddIncidentTypeModal({
         <Modal
             open={open}
             onClose={onClose}
-            title="Add Incident Type"
-            description="Define a new specific incident or chief complaint under a category."
+            title="Add Chief Complaint"
+            description="Define a new chief complaint under an incident category."
             size="sm"
         >
             <form onSubmit={handleSubmit} className="space-y-4 pt-1">
@@ -93,10 +93,10 @@ export default function AddIncidentTypeModal({
                     </div>
                 </div>
 
-                {/* 2. Incident Name Input */}
+                {/* 2. Chief Complaint Input */}
                 <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
-                        Incident Name <span className="text-rose-500">*</span>
+                        Chief Complaint <span className="text-rose-500">*</span>
                     </label>
                     <input
                         type="text"
@@ -105,7 +105,7 @@ export default function AddIncidentTypeModal({
                             setIncidentName(e.target.value);
                             if (error) setError(null);
                         }}
-                        placeholder="e.g. Mountain Search and Rescue, Traffic Incident"
+                        placeholder="e.g. Chest Pain, Difficulty of Breathing, Trauma"
                         className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all shadow-xs capitalize"
                         required
                     />
@@ -130,7 +130,7 @@ export default function AddIncidentTypeModal({
                         type="submit"
                         className="px-5 py-2 text-xs font-semibold rounded-xl text-white bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
                     >
-                        Add Incident Type
+                        Add Chief Complaint
                     </button>
                 </div>
             </form>

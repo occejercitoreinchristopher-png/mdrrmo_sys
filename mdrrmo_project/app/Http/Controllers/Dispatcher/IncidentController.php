@@ -31,6 +31,7 @@ class IncidentController extends Controller
             'incidentType', 
             'images', 
             'dispatches.patientCareRecord',
+            'dispatches.patientCareRecords',
             'dispatches.ambulance',
             'dispatches.driver',
             'dispatches.crew'

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { router } from '@inertiajs/react';
-import { Eye, AlertTriangle, X, PhoneCall, MapPin, Activity, RotateCcw, ChevronDown, Search, Plus, CheckCircle2 } from 'lucide-react';
+import { Eye, AlertTriangle, X, PhoneCall, MapPin, Activity, RotateCcw, ChevronDown, Search, Plus, CheckCircle2, HeartPulse } from 'lucide-react';
 import { toast } from 'sonner';
 import DataTable from '@/shared/components/DataTable';
 import StatusBadge from '@/shared/components/StatusBadge';
@@ -229,12 +229,12 @@ export default function IncidentTable({
             setSelectedIncident(result.incident);
         }
 
-        toast.success(`Incident Type "${result.incident}" created successfully!`, {
+        toast.success(`Chief Complaint "${result.incident}" created successfully!`, {
             description: `Assigned under category "${result.category}".`,
         });
         setNotificationMessage({
             type: 'incident',
-            title: 'Incident Type Created Successfully',
+            title: 'Chief Complaint Created Successfully',
             message: `"${result.incident}" has been added under "${result.category}".`,
         });
     };
@@ -359,6 +359,51 @@ export default function IncidentTable({
         setSearchQuery('');
     };
 
+    // Helper to resolve PCR Chief Complaint
+    const getIncidentChiefComplaint = (row: any): string => {
+        if (!row) return '';
+        // 1. Direct PCR chief complaint accessor from model
+        if (row.pcr_chief_complaint && typeof row.pcr_chief_complaint === 'string' && row.pcr_chief_complaint.trim()) {
+            return row.pcr_chief_complaint.trim();
+        }
+        // 2. Dispatches patient_care_record / patient_care_records
+        if (Array.isArray(row.dispatches)) {
+            for (const d of row.dispatches) {
+                const pcr = d?.patient_care_record || d?.patientCareRecord;
+                if (pcr?.chief_complaint && typeof pcr.chief_complaint === 'string' && pcr.chief_complaint.trim()) {
+                    return pcr.chief_complaint.trim();
+                }
+                if (pcr?.clinical_chief_complaint && typeof pcr.clinical_chief_complaint === 'string' && pcr.clinical_chief_complaint.trim()) {
+                    return pcr.clinical_chief_complaint.trim();
+                }
+                const pcrs = d?.patient_care_records || d?.patientCareRecords;
+                if (Array.isArray(pcrs)) {
+                    for (const p of pcrs) {
+                        if (p?.chief_complaint && typeof p.chief_complaint === 'string' && p.chief_complaint.trim()) {
+                            return p.chief_complaint.trim();
+                        }
+                        if (p?.clinical_chief_complaint && typeof p.clinical_chief_complaint === 'string' && p.clinical_chief_complaint.trim()) {
+                            return p.clinical_chief_complaint.trim();
+                        }
+                    }
+                }
+            }
+        }
+        // 3. Fallback to model chief_complaint accessor
+        if (row.chief_complaint && typeof row.chief_complaint === 'string' && row.chief_complaint.trim()) {
+            return row.chief_complaint.trim();
+        }
+        // 4. Bracketed description e.g. "[Chest Pain] Patient collapsed"
+        const desc = row.incident_description || row.description || '';
+        if (typeof desc === 'string') {
+            const match = desc.match(/^\[(.*?)\]/);
+            if (match && match[1]) {
+                return match[1].trim();
+            }
+        }
+        return '';
+    };
+
     // Columns for History / Archive Table
     const archiveColumns = [
         {
@@ -415,14 +460,36 @@ export default function IncidentTable({
             key: 'incident_type',
             header: 'Category',
             render: (v, row) => {
-                const name = row.incident_type?.name;
+                const complaint = getIncidentChiefComplaint(row);
+                const rawTypeName = row.incident_type?.name || row.incident_type?.incident_type_name;
+                const derivedCat = getCategoryForIncident(complaint || rawTypeName);
+                const name = rawTypeName || derivedCat;
                 if (!name) {
                     return <span className="text-slate-400 text-xs italic">Unclassified</span>;
                 }
                 return (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-500/20">
-                        <Activity className="w-3 h-3 text-indigo-500" />
-                        {name}
+                        <Activity className="w-3 h-3 text-indigo-500 shrink-0" />
+                        <span>{name}</span>
+                    </span>
+                );
+            },
+        },
+        {
+            key: 'chief_complaint',
+            header: 'Chief Complaint',
+            render: (_, row) => {
+                const complaint = getIncidentChiefComplaint(row);
+                if (!complaint) {
+                    return <span className="text-slate-400 text-xs italic">None Recorded</span>;
+                }
+                return (
+                    <span 
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-500/20 max-w-[220px] truncate shadow-2xs"
+                        title={complaint}
+                    >
+                        <HeartPulse className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                        <span className="truncate">{complaint}</span>
                     </span>
                 );
             },
@@ -537,16 +604,16 @@ export default function IncidentTable({
                                     </button>
                                 )}
 
-                                {/* + Incident and + Category Buttons */}
+                                {/* + Chief Complaint and + Category Buttons */}
                                 <div className="flex items-center gap-2 shrink-0">
                                     <button
                                         type="button"
                                         onClick={() => setIsAddIncidentModalOpen(true)}
                                         className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 shadow-sm shadow-indigo-600/25 border border-indigo-500/30 transition-all cursor-pointer"
-                                        title="Add Incident Type"
+                                        title="Add Chief Complaint"
                                     >
                                         <Plus className="w-3.5 h-3.5" />
-                                        <span>Incident</span>
+                                        <span>Chief Complaint</span>
                                     </button>
                                     <button
                                         type="button"
@@ -611,10 +678,10 @@ export default function IncidentTable({
                                     </div>
                                 </div>
 
-                                {/* 2. Incident */}
+                                {/* 2. Chief Complaint */}
                                 <div>
                                     <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                                        Incident
+                                        Chief Complaint
                                     </label>
                                     <div className="relative">
                                         <select
@@ -622,7 +689,7 @@ export default function IncidentTable({
                                             onChange={(e) => handleIncidentChange(e.target.value)}
                                             className="w-full text-xs py-2 pl-3 pr-8 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer appearance-none shadow-2xs truncate font-medium"
                                         >
-                                            <option value="all">All Incidents</option>
+                                            <option value="all">All Chief Complaints</option>
                                             {availableIncidents.map((incName) => (
                                                 <option key={incName} value={incName} className="capitalize text-xs">
                                                     {incName}
@@ -718,7 +785,7 @@ export default function IncidentTable({
 
                                 {selectedIncident !== 'all' && (
                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/20">
-                                        <span>Incident: {selectedIncident}</span>
+                                        <span>Chief Complaint: {selectedIncident}</span>
                                         <button onClick={() => setSelectedIncident('all')} className="hover:opacity-75 cursor-pointer">
                                             <X className="w-3 h-3 ml-0.5" />
                                         </button>
@@ -778,7 +845,7 @@ export default function IncidentTable({
                                     No Incidents Found
                                 </h4>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-                                    No historical incident records match the active Category, Incident, Month, Time, and Barangay filter combination.
+                                    No historical incident records match the active Category, Chief Complaint, Month, Time, and Barangay filter combination.
                                 </p>
                                 <Button 
                                     variant="secondary" 
@@ -854,7 +921,7 @@ export default function IncidentTable({
                 existingCategories={availableCategories}
             />
 
-            {/* Add Incident Type Modal */}
+            {/* Add Chief Complaint Modal */}
             <AddIncidentTypeModal
                 open={isAddIncidentModalOpen}
                 onClose={() => setIsAddIncidentModalOpen(false)}
