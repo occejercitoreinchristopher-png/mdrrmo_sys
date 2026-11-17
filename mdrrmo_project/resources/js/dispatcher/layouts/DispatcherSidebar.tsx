@@ -15,8 +15,6 @@ import {
     MapPinned,
     PanelLeft,
     PanelLeftClose,
-    Printer,
-    BarChart3,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
@@ -216,17 +214,10 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
                         { label: 'Active Incidents', icon: Siren, href: '/dispatcher/incidents?status=active' },
                         { label: 'Incident Heatmap', icon: MapPinned, href: '/dispatcher/accident-heatmap' },
                         { label: 'Incident Records', icon: ClipboardList, href: '/dispatcher/incidents?status=history' },
-                        { label: 'Monthly Report (Print)', icon: Printer, href: '/reports' },
                     ]
                 },
                 { label: 'Dispatch Center', icon: Truck, href: '/dispatcher/dispatches' },
                 { label: 'Responders', icon: Shield, href: '/dispatcher/responders' },
-            ],
-        },
-        {
-            group: 'Analytics & Reports',
-            items: [
-                { label: 'Reports & Analytics', icon: BarChart3, href: '/reports' },
             ],
         },
         {

@@ -113,6 +113,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::patch('/location-codes/{locationCode}', [LocationCodeController::class, 'update'])->name('location-codes.update');
     Route::delete('/location-codes/{locationCode}', [LocationCodeController::class, 'destroy'])->name('location-codes.destroy');
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
+    Route::get('/reports/monthly-summary', [\App\Http\Controllers\Admin\ReportController::class, 'monthlySummary'])->name('reports.monthly-summary');
     Route::get('/accident-heatmap', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'index'])->name('accident-heatmap');
 
     // Dispatch Logs (Admin)
@@ -169,6 +170,7 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
 
     // Reports & Analytics
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
+    Route::get('/reports/monthly-summary', [\App\Http\Controllers\Admin\ReportController::class, 'monthlySummary'])->name('reports.monthly-summary');
 
     // Dispatch Logs
     Route::get('/dispatch-logs/api/fetch', [\App\Http\Controllers\Admin\DispatchLogController::class, 'fetchLogs'])->name('dispatch-logs.fetch');

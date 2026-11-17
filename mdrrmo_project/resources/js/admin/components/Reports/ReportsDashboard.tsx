@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePage } from '@inertiajs/react';
 import PageHeader from '@/shared/components/PageHeader';
 import { Download, Printer, FileText } from 'lucide-react';
@@ -20,7 +20,22 @@ export default function ReportsDashboard({
     initialMonthlyReport = null 
 }: any) {
     const { auth } = usePage().props as any;
-    const [isMonthlyReportModalOpen, setIsMonthlyReportModalOpen] = useState(false);
+    const [isMonthlyReportModalOpen, setIsMonthlyReportModalOpen] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('print') === 'monthly' || params.get('tab') === 'monthly' || params.get('modal') === 'print';
+        }
+        return false;
+    });
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('print') === 'monthly' || params.get('tab') === 'monthly' || params.get('modal') === 'print') {
+                setIsMonthlyReportModalOpen(true);
+            }
+        }
+    }, []);
     
     const handleExportCSV = () => {
         const headers = [
@@ -73,6 +88,16 @@ export default function ReportsDashboard({
                 <PageHeader
                     title="Reports & Analytics"
                     subtitle="Operational performance, incident patterns, dispatch activity, and patient-care statistics"
+                    actions={
+                        <button
+                            onClick={() => setIsMonthlyReportModalOpen(true)}
+                            className="inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-red-600/20 transition-all cursor-pointer active:scale-95"
+                            title="Open official MDRRMO Monthly Responses & Patient Complaints report with print preview"
+                        >
+                            <Printer className="w-4 h-4" />
+                            <span>Print Report</span>
+                        </button>
+                    }
                 />
             </div>
 

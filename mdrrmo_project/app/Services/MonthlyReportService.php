@@ -162,12 +162,14 @@ class MonthlyReportService
             ->pluck('y')
             ->toArray();
 
-        $allYears = array_unique(array_filter(array_merge(
+        $rawYears = array_merge(
             $yearsFromIncidents,
             $yearsFromCreated,
             $yearsFromPcr,
             [$currentYear, $currentYear - 1]
-        )));
+        );
+        $intYears = array_filter(array_map('intval', $rawYears));
+        $allYears = array_unique($intYears);
 
         rsort($allYears);
         return array_values($allYears);
@@ -178,11 +180,361 @@ class MonthlyReportService
      */
     public function getFullYearReport(int $year): array
     {
-        $report1 = $this->generateReport1($year);
-        $report2 = $this->generateReport2($year);
+        return $this->getFilteredReport([
+            'period' => 'yearly',
+            'year' => $year,
+        ]);
+    }
+
+    /**
+     * Build the complete dynamic map of categories and their chief complaints,
+     * merging official base categories with custom categories and complaints
+     * from database (EmergencyComplaint, IncidentType) and client-supplied params.
+     */
+    public function getAllCategoriesWithComplaints(array $clientCategories = [], array $clientIncidents = []): array
+    {
+        // 1. Start with official base categories
+        $categories = self::REPORT1_CATEGORIES;
+
+        // Helper to find existing category key (case-insensitive)
+        $findCategoryKey = function (string $name) use (&$categories): ?string {
+            $norm = strtoupper(trim($name));
+            foreach (array_keys($categories) as $existingKey) {
+                if (strtoupper(trim($existingKey)) === $norm) {
+                    return $existingKey;
+                }
+            }
+            return null;
+        };
+
+        // Helper to add a complaint to a category
+        $addComplaintToCategory = function (string $catKey, string $complaint) use (&$categories) {
+            $cTrim = trim($complaint);
+            if (empty($cTrim)) return;
+            $cNorm = strtolower($cTrim);
+            foreach ($categories[$catKey] as $existingC) {
+                if (strtolower(trim($existingC)) === $cNorm) {
+                    return; // already exists
+                }
+            }
+            $categories[$catKey][] = $cTrim;
+        };
+
+        // 2. Query Database: EmergencyComplaint table
+        try {
+            $dbComplaints = \App\Models\EmergencyComplaint::all();
+            foreach ($dbComplaints as $dbC) {
+                $rawCat = trim($dbC->category ?? '');
+                $rawComp = trim($dbC->complaint_name ?? '');
+                if (empty($rawComp)) continue;
+
+                $targetCatKey = !empty($rawCat) ? $findCategoryKey($rawCat) : null;
+                if (!$targetCatKey) {
+                    $targetCatKey = strtoupper($rawCat ?: 'OTHER EMERGENCY');
+                    $categories[$targetCatKey] = [];
+                }
+                $addComplaintToCategory($targetCatKey, $rawComp);
+            }
+        } catch (\Throwable $e) {}
+
+        // 3. Query Database: IncidentType table (Categories/Types created by user)
+        try {
+            $dbTypes = \App\Models\IncidentType::all();
+            foreach ($dbTypes as $type) {
+                $tName = trim($type->incident_type_name ?? '');
+                if (empty($tName)) continue;
+
+                $existingCatKey = $findCategoryKey($tName);
+                if (!$existingCatKey) {
+                    $newCatKey = strtoupper($tName);
+                    if (!isset($categories[$newCatKey])) {
+                        $categories[$newCatKey] = [$tName];
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        // 4. Merge Client-passed custom categories (from localStorage/UI)
+        if (!empty($clientCategories)) {
+            foreach ($clientCategories as $cCat) {
+                $cCatTrim = trim($cCat);
+                if (empty($cCatTrim)) continue;
+                $existing = $findCategoryKey($cCatTrim);
+                if (!$existing) {
+                    $newKey = strtoupper($cCatTrim);
+                    if (!isset($categories[$newKey])) {
+                        $categories[$newKey] = [$cCatTrim];
+                    }
+                }
+            }
+        }
+
+        // 5. Merge Client-passed custom incidents map: ['Category Name' => ['Complaint 1', 'Complaint 2']]
+        if (!empty($clientIncidents)) {
+            foreach ($clientIncidents as $catName => $incList) {
+                if (!is_array($incList)) continue;
+                $targetKey = $findCategoryKey($catName);
+                if (!$targetKey) {
+                    $targetKey = strtoupper(trim($catName));
+                    $categories[$targetKey] = [];
+                }
+                foreach ($incList as $incItem) {
+                    $addComplaintToCategory($targetKey, $incItem);
+                }
+            }
+        }
+
+        return $categories;
+    }
+
+    /**
+     * Generate response and patient complaint report filtered by timeframe (Yearly, Monthly, Weekly, Daily).
+     */
+    public function getFilteredReport(array $params = []): array
+    {
+        $allCategories = $this->getAllCategoriesWithComplaints(
+            $params['custom_categories'] ?? [],
+            $params['custom_incidents'] ?? []
+        );
+        $catCount = count($allCategories);
+
+        $period = $params['period'] ?? 'yearly';
+        if (!in_array($period, ['yearly', 'monthly', 'weekly', 'daily'])) {
+            $period = 'yearly';
+        }
+
+        $year = (int) ($params['year'] ?? now()->format('Y'));
+        $month = (int) ($params['month'] ?? now()->format('n'));
+        if ($month < 1 || $month > 12) {
+            $month = (int) now()->format('n');
+        }
+
+        $dateStr = !empty($params['date']) ? $params['date'] : now()->format('Y-m-d');
+        try {
+            $targetDate = Carbon::parse($dateStr);
+        } catch (\Throwable $e) {
+            $targetDate = now();
+        }
+
+        switch ($period) {
+            case 'monthly':
+                $monthDate = Carbon::createFromDate($year, $month, 1);
+                $monthName = $monthDate->format('F');
+                $monthUpper = strtoupper($monthName);
+                $daysInMonth = $monthDate->daysInMonth;
+
+                $columns = [
+                    ['key' => 'w1', 'label' => 'Wk 1 (1–7)'],
+                    ['key' => 'w2', 'label' => 'Wk 2 (8–14)'],
+                    ['key' => 'w3', 'label' => 'Wk 3 (15–21)'],
+                    ['key' => 'w4', 'label' => 'Wk 4 (22–28)'],
+                ];
+                if ($daysInMonth > 28) {
+                    $columns[] = ['key' => 'w5', 'label' => "Wk 5 (29–{$daysInMonth})"];
+                }
+
+                $titlePeriod = "FOR THE MONTH OF {$monthUpper} {$year}";
+                $subtitlePeriod = "Counts by All {$catCount} Incident Categories & Chief of Complaint ({$monthName} {$year})";
+                $totalLabel = "Monthly Total";
+                $formCodeSuffix = "{$year}-M" . str_pad((string)$month, 2, '0', STR_PAD_LEFT);
+
+                $incidentFilter = function ($q) use ($year, $month) {
+                    $q->where(function ($sq) use ($year, $month) {
+                        $sq->whereYear('reported_at', $year)->whereMonth('reported_at', $month)
+                           ->orWhere(function ($ssq) use ($year, $month) {
+                               $ssq->whereNull('reported_at')->whereYear('created_at', $year)->whereMonth('created_at', $month);
+                           });
+                    });
+                };
+
+                $pcrFilter = function ($q) use ($year, $month) {
+                    $q->where(function ($sq) use ($year, $month) {
+                        $sq->whereYear('record_date', $year)->whereMonth('record_date', $month)
+                           ->orWhere(function ($ssq) use ($year, $month) {
+                               $ssq->whereNull('record_date')->whereYear('created_at', $year)->whereMonth('created_at', $month);
+                           });
+                    });
+                };
+
+                $bucketResolver = function ($dt) {
+                    $d = (int) Carbon::parse($dt)->format('j');
+                    if ($d <= 7) return 'w1';
+                    if ($d <= 14) return 'w2';
+                    if ($d <= 21) return 'w3';
+                    if ($d <= 28) return 'w4';
+                    return 'w5';
+                };
+                break;
+
+            case 'weekly':
+                $startOfWeek = $targetDate->copy()->startOfWeek(Carbon::MONDAY);
+                $endOfWeek = $targetDate->copy()->endOfWeek(Carbon::SUNDAY);
+
+                $columns = [
+                    ['key' => 'mon', 'label' => 'Mon (' . $startOfWeek->copy()->format('M d') . ')'],
+                    ['key' => 'tue', 'label' => 'Tue (' . $startOfWeek->copy()->addDays(1)->format('M d') . ')'],
+                    ['key' => 'wed', 'label' => 'Wed (' . $startOfWeek->copy()->addDays(2)->format('M d') . ')'],
+                    ['key' => 'thu', 'label' => 'Thu (' . $startOfWeek->copy()->addDays(3)->format('M d') . ')'],
+                    ['key' => 'fri', 'label' => 'Fri (' . $startOfWeek->copy()->addDays(4)->format('M d') . ')'],
+                    ['key' => 'sat', 'label' => 'Sat (' . $startOfWeek->copy()->addDays(5)->format('M d') . ')'],
+                    ['key' => 'sun', 'label' => 'Sun (' . $startOfWeek->copy()->addDays(6)->format('M d') . ')'],
+                ];
+
+                $titlePeriod = "FOR THE WEEK OF " . strtoupper($startOfWeek->format('F d')) . " – " . strtoupper($endOfWeek->format('F d, Y'));
+                $subtitlePeriod = "Weekly Summary: " . $startOfWeek->format('M d') . " – " . $endOfWeek->format('M d, Y');
+                $totalLabel = "Weekly Total";
+                $formCodeSuffix = "{$startOfWeek->year}-W" . str_pad((string)$startOfWeek->weekOfYear, 2, '0', STR_PAD_LEFT);
+
+                $sDateStr = $startOfWeek->copy()->startOfDay()->toDateTimeString();
+                $eDateStr = $endOfWeek->copy()->endOfDay()->toDateTimeString();
+
+                $incidentFilter = function ($q) use ($sDateStr, $eDateStr) {
+                    $q->where(function ($sq) use ($sDateStr, $eDateStr) {
+                        $sq->whereBetween('reported_at', [$sDateStr, $eDateStr])
+                           ->orWhere(function ($ssq) use ($sDateStr, $eDateStr) {
+                               $ssq->whereNull('reported_at')->whereBetween('created_at', [$sDateStr, $eDateStr]);
+                           });
+                    });
+                };
+
+                $pcrFilter = function ($q) use ($sDateStr, $eDateStr) {
+                    $q->where(function ($sq) use ($sDateStr, $eDateStr) {
+                        $sq->whereBetween('record_date', [$sDateStr, $eDateStr])
+                           ->orWhere(function ($ssq) use ($sDateStr, $eDateStr) {
+                               $ssq->whereNull('record_date')->whereBetween('created_at', [$sDateStr, $eDateStr]);
+                           });
+                    });
+                };
+
+                $bucketResolver = function ($dt) {
+                    return strtolower(Carbon::parse($dt)->format('D'));
+                };
+                break;
+
+            case 'daily':
+                $dailyStr = $targetDate->format('Y-m-d');
+                $formattedDate = $targetDate->format('F d, Y');
+                $formattedDateUpper = strtoupper($formattedDate);
+
+                $columns = [
+                    ['key' => 't1', 'label' => '12AM–4AM'],
+                    ['key' => 't2', 'label' => '4AM–8AM'],
+                    ['key' => 't3', 'label' => '8AM–12PM'],
+                    ['key' => 't4', 'label' => '12PM–4PM'],
+                    ['key' => 't5', 'label' => '4PM–8PM'],
+                    ['key' => 't6', 'label' => '8PM–12AM'],
+                ];
+
+                $titlePeriod = "FOR THE DATE: {$formattedDateUpper}";
+                $subtitlePeriod = "24-Hour Shift Counts ({$formattedDate})";
+                $totalLabel = "Daily Total";
+                $formCodeSuffix = $dailyStr;
+
+                $sDayStr = $targetDate->copy()->startOfDay()->toDateTimeString();
+                $eDayStr = $targetDate->copy()->endOfDay()->toDateTimeString();
+
+                $incidentFilter = function ($q) use ($sDayStr, $eDayStr) {
+                    $q->where(function ($sq) use ($sDayStr, $eDayStr) {
+                        $sq->whereBetween('reported_at', [$sDayStr, $eDayStr])
+                           ->orWhere(function ($ssq) use ($sDayStr, $eDayStr) {
+                               $ssq->whereNull('reported_at')->whereBetween('created_at', [$sDayStr, $eDayStr]);
+                           });
+                    });
+                };
+
+                $pcrFilter = function ($q) use ($sDayStr, $eDayStr) {
+                    $q->where(function ($sq) use ($sDayStr, $eDayStr) {
+                        $sq->whereBetween('record_date', [$sDayStr, $eDayStr])
+                           ->orWhere(function ($ssq) use ($sDayStr, $eDayStr) {
+                               $ssq->whereNull('record_date')->whereBetween('created_at', [$sDayStr, $eDayStr]);
+                           });
+                    });
+                };
+
+                $bucketResolver = function ($dt) {
+                    $h = (int) Carbon::parse($dt)->format('G');
+                    if ($h < 4) return 't1';
+                    if ($h < 8) return 't2';
+                    if ($h < 12) return 't3';
+                    if ($h < 16) return 't4';
+                    if ($h < 20) return 't5';
+                    return 't6';
+                };
+                break;
+
+            case 'yearly':
+            default:
+                $columns = [
+                    ['key' => '1', 'label' => 'Jan'],
+                    ['key' => '2', 'label' => 'Feb'],
+                    ['key' => '3', 'label' => 'Mar'],
+                    ['key' => '4', 'label' => 'Apr'],
+                    ['key' => '5', 'label' => 'May'],
+                    ['key' => '6', 'label' => 'Jun'],
+                    ['key' => '7', 'label' => 'Jul'],
+                    ['key' => '8', 'label' => 'Aug'],
+                    ['key' => '9', 'label' => 'Sep'],
+                    ['key' => '10', 'label' => 'Oct'],
+                    ['key' => '11', 'label' => 'Nov'],
+                    ['key' => '12', 'label' => 'Dec'],
+                ];
+
+                $titlePeriod = "FOR THE YEAR {$year}";
+                $subtitlePeriod = "Counts by All {$catCount} Incident Categories & Chief of Complaint ({$year})";
+                $totalLabel = "Annual Total";
+                $formCodeSuffix = (string) $year;
+
+                $incidentFilter = function ($q) use ($year) {
+                    $q->where(function ($sq) use ($year) {
+                        $sq->whereYear('reported_at', $year)
+                           ->orWhere(function ($ssq) use ($year) {
+                               $ssq->whereNull('reported_at')->whereYear('created_at', $year);
+                           });
+                    });
+                };
+
+                $pcrFilter = function ($q) use ($year) {
+                    $q->where(function ($sq) use ($year) {
+                        $sq->whereYear('record_date', $year)
+                           ->orWhere(function ($ssq) use ($year) {
+                               $ssq->whereNull('record_date')->whereYear('created_at', $year);
+                           });
+                    });
+                };
+
+                $bucketResolver = function ($dt) {
+                    return (string) (int) Carbon::parse($dt)->format('n');
+                };
+                break;
+        }
+
+        $config = [
+            'columns' => $columns,
+            'total_label' => $totalLabel,
+            'incident_filter' => $incidentFilter,
+            'pcr_filter' => $pcrFilter,
+            'bucket_resolver' => $bucketResolver,
+            'period' => $period,
+            'year' => $year,
+            'all_categories' => $allCategories,
+            'custom_incidents' => $params['custom_incidents'] ?? [],
+        ];
+
+        $report1 = $this->generateGenericReport1($config);
+        $report2 = $this->generateGenericReport2($config);
 
         return [
+            'period' => $period,
             'year' => $year,
+            'month' => $month,
+            'date' => $targetDate->format('Y-m-d'),
+            'columns' => $columns,
+            'title_period' => $titlePeriod,
+            'subtitle_period' => $subtitlePeriod,
+            'total_label' => $totalLabel,
+            'form_code_suffix' => $formCodeSuffix,
+            'category_count' => $catCount,
+            'categories_list' => array_keys($allCategories),
             'available_years' => $this->getAvailableYears(),
             'report1' => $report1,
             'report2' => $report2,
@@ -195,38 +547,58 @@ class MonthlyReportService
      */
     public function generateReport1(int $year): array
     {
-        // Initialize 12 months for each category and chief of complaint
+        return $this->getFilteredReport(['period' => 'yearly', 'year' => $year])['report1'];
+    }
+
+    /**
+     * Report 2: Monthly Patient Complaint Summary
+     */
+    public function generateReport2(int $year): array
+    {
+        return $this->getFilteredReport(['period' => 'yearly', 'year' => $year])['report2'];
+    }
+
+    /**
+     * Generalized Report 1 Generator supporting all periods
+     */
+    public function generateGenericReport1(array $config): array
+    {
+        $columns = $config['columns'];
+        $bucketResolver = $config['bucket_resolver'];
+        $incidentFilter = $config['incident_filter'];
+        $allCategories = $config['all_categories'] ?? $this->getAllCategoriesWithComplaints();
+
+        $colKeys = array_column($columns, 'key');
+        $blankCols = array_fill_keys($colKeys, 0);
+
         $categoriesData = [];
-        foreach (self::REPORT1_CATEGORIES as $categoryName => $complaints) {
+        foreach ($allCategories as $categoryName => $complaints) {
             $categoriesData[$categoryName] = [
                 'complaints' => [],
-                'subtotals' => array_fill(1, 12, 0),
+                'subtotals' => $blankCols,
                 'annual_subtotal' => 0,
             ];
             foreach ($complaints as $cName) {
                 $categoriesData[$categoryName]['complaints'][$cName] = [
-                    'months' => array_fill(1, 12, 0),
+                    'months' => $blankCols,
+                    'columns' => $blankCols,
                     'annual_total' => 0,
+                    'total' => 0,
                 ];
             }
         }
 
         $unclassifiedComplaints = [];
 
-        // Query qualifying incidents for the year
-        // Excludes pranks, rejected, and cancelled reports
         $incidents = Incident::with([
             'incidentType',
             'dispatches.patientCareRecord',
             'dispatches.patientCareRecords',
         ])
-        ->where(function ($q) use ($year) {
-            $q->whereYear('reported_at', $year)
-              ->orWhere(function ($sq) use ($year) {
-                  $sq->whereNull('reported_at')->whereYear('created_at', $year);
-              });
+        ->where($incidentFilter)
+        ->where(function ($pq) {
+            $pq->where('is_prank', false)->orWhereNull('is_prank');
         })
-        ->where('is_prank', false)
         ->whereNotIn('incident_status', ['rejected', 'cancelled'])
         ->get();
 
@@ -234,55 +606,76 @@ class MonthlyReportService
             $date = $incident->reported_at ?? $incident->created_at;
             if (!$date) continue;
 
-            $month = (int) Carbon::parse($date)->format('n');
-            if ($month < 1 || $month > 12) continue;
+            $bKey = $bucketResolver($date);
+            if (!$bKey || !isset($blankCols[$bKey])) continue;
 
             $complaint = $this->resolveIncidentComplaint($incident);
-            $classification = $this->matchReport1CategoryAndComplaint($complaint, $incident);
+            $classification = $this->matchReport1CategoryAndComplaint($complaint, $incident, $allCategories);
 
             if ($classification) {
                 $cat = $classification['category'];
                 $comp = $classification['complaint'];
 
-                $categoriesData[$cat]['complaints'][$comp]['months'][$month]++;
+                if (!isset($categoriesData[$cat])) {
+                    $categoriesData[$cat] = [
+                        'complaints' => [],
+                        'subtotals' => $blankCols,
+                        'annual_subtotal' => 0,
+                    ];
+                }
+
+                if (!isset($categoriesData[$cat]['complaints'][$comp])) {
+                    $categoriesData[$cat]['complaints'][$comp] = [
+                        'months' => $blankCols,
+                        'columns' => $blankCols,
+                        'annual_total' => 0,
+                        'total' => 0,
+                    ];
+                }
+
+                $categoriesData[$cat]['complaints'][$comp]['columns'][$bKey]++;
+                $categoriesData[$cat]['complaints'][$comp]['months'][$bKey]++;
                 $categoriesData[$cat]['complaints'][$comp]['annual_total']++;
-                $categoriesData[$cat]['subtotals'][$month]++;
+                $categoriesData[$cat]['complaints'][$comp]['total']++;
+
+                $categoriesData[$cat]['subtotals'][$bKey]++;
                 $categoriesData[$cat]['annual_subtotal']++;
             } else {
-                // Place in Unclassified
                 $unclassifiedLabel = !empty($complaint) ? $complaint : 'Unclassified Incident';
                 if (!isset($unclassifiedComplaints[$unclassifiedLabel])) {
                     $unclassifiedComplaints[$unclassifiedLabel] = [
-                        'months' => array_fill(1, 12, 0),
+                        'months' => $blankCols,
+                        'columns' => $blankCols,
                         'annual_total' => 0,
+                        'total' => 0,
                     ];
                 }
-                $unclassifiedComplaints[$unclassifiedLabel]['months'][$month]++;
+                $unclassifiedComplaints[$unclassifiedLabel]['columns'][$bKey]++;
+                $unclassifiedComplaints[$unclassifiedLabel]['months'][$bKey]++;
                 $unclassifiedComplaints[$unclassifiedLabel]['annual_total']++;
+                $unclassifiedComplaints[$unclassifiedLabel]['total']++;
             }
         }
 
-        // Calculate Monthly Grand Subtotals and Overall Grand Total
-        $monthlySubtotals = array_fill(1, 12, 0);
-        $annualGrandTotal = 0;
+        $columnSubtotals = $blankCols;
+        $overallGrandTotal = 0;
 
         foreach ($categoriesData as $catName => $data) {
-            for ($m = 1; $m <= 12; $m++) {
-                $monthlySubtotals[$m] += $data['subtotals'][$m];
+            foreach ($colKeys as $k) {
+                $columnSubtotals[$k] += $data['subtotals'][$k];
             }
-            $annualGrandTotal += $data['annual_subtotal'];
+            $overallGrandTotal += $data['annual_subtotal'];
         }
 
-        // Include unclassified in grand totals if any
-        $unclassifiedSubtotals = array_fill(1, 12, 0);
+        $unclassifiedSubtotals = $blankCols;
         $unclassifiedAnnual = 0;
         foreach ($unclassifiedComplaints as $uData) {
-            for ($m = 1; $m <= 12; $m++) {
-                $unclassifiedSubtotals[$m] += $uData['months'][$m];
-                $monthlySubtotals[$m] += $uData['months'][$m];
+            foreach ($colKeys as $k) {
+                $unclassifiedSubtotals[$k] += $uData['columns'][$k];
+                $columnSubtotals[$k] += $uData['columns'][$k];
             }
-            $unclassifiedAnnual += $uData['annual_total'];
-            $annualGrandTotal += $uData['annual_total'];
+            $unclassifiedAnnual += $uData['total'];
+            $overallGrandTotal += $uData['total'];
         }
 
         return [
@@ -293,39 +686,90 @@ class MonthlyReportService
                 'subtotals' => $unclassifiedSubtotals,
                 'annual_subtotal' => $unclassifiedAnnual,
             ],
-            'monthly_subtotals' => $monthlySubtotals,
-            'annual_grand_total' => $annualGrandTotal,
+            'monthly_subtotals' => $columnSubtotals,
+            'annual_grand_total' => $overallGrandTotal,
         ];
     }
 
     /**
-     * Report 2: Monthly Patient Complaint Summary
+     * Generalized Report 2 Generator supporting all periods
      */
-    public function generateReport2(int $year): array
+    public function generateGenericReport2(array $config): array
     {
-        // Initialize 34 standard complaint rows
+        $columns = $config['columns'];
+        $bucketResolver = $config['bucket_resolver'];
+        $pcrFilter = $config['pcr_filter'];
+        $customIncidents = $config['custom_incidents'] ?? [];
+
+        $colKeys = array_column($columns, 'key');
+        $blankCols = array_fill_keys($colKeys, 0);
+
+        $pcrComplaints = self::REPORT2_PATIENT_COMPLAINTS;
+
+        // Include any medical complaints from EmergencyComplaint table
+        try {
+            $dbMedComplaints = \App\Models\EmergencyComplaint::where(function($q) {
+                $q->whereRaw('LOWER(TRIM(category)) = ?', ['medical emergency'])
+                  ->orWhereNull('category');
+            })->pluck('complaint_name')->toArray();
+
+            foreach ($dbMedComplaints as $mName) {
+                $mTrim = trim($mName);
+                if (!empty($mTrim)) {
+                    $found = false;
+                    foreach ($pcrComplaints as $existing) {
+                        if (strtolower(trim($existing)) === strtolower($mTrim)) {
+                            $found = true;
+                            break;
+                        }
+                    }
+                    if (!$found) {
+                        $pcrComplaints[] = $mTrim;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        // Include any medical complaints from client's custom incidents
+        if (!empty($customIncidents)) {
+            foreach ($customIncidents as $cat => $incList) {
+                if (strtolower(trim($cat)) === 'medical emergency' && is_array($incList)) {
+                    foreach ($incList as $cItem) {
+                        $cTrim = trim($cItem);
+                        if (!empty($cTrim)) {
+                            $found = false;
+                            foreach ($pcrComplaints as $existing) {
+                                if (strtolower(trim($existing)) === strtolower($cTrim)) {
+                                    $found = true;
+                                    break;
+                                }
+                            }
+                            if (!$found) {
+                                $pcrComplaints[] = $cTrim;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         $complaintsData = [];
-        foreach (self::REPORT2_PATIENT_COMPLAINTS as $pComplaint) {
+        foreach ($pcrComplaints as $pComplaint) {
             $complaintsData[$pComplaint] = [
-                'months' => array_fill(1, 12, 0),
+                'months' => $blankCols,
+                'columns' => $blankCols,
                 'annual_total' => 0,
+                'total' => 0,
             ];
         }
 
         $otherComplaints = [];
 
-        // Query qualifying PCR records for the year
         $pcrs = PatientCareRecord::with(['dispatch.incident'])
-            ->where(function ($q) use ($year) {
-                $q->whereYear('record_date', $year)
-                  ->orWhere(function ($sq) use ($year) {
-                      $sq->whereNull('record_date')->whereYear('created_at', $year);
-                  });
-            })
+            ->where($pcrFilter)
             ->get();
 
         foreach ($pcrs as $pcr) {
-            // Exclude PCRs tied to prank or rejected incidents
             $incident = $pcr->dispatch?->incident;
             if ($incident && ($incident->is_prank || in_array($incident->incident_status, ['rejected', 'cancelled']))) {
                 continue;
@@ -334,45 +778,50 @@ class MonthlyReportService
             $date = $pcr->record_date ?? $incident?->reported_at ?? $pcr->created_at;
             if (!$date) continue;
 
-            $month = (int) Carbon::parse($date)->format('n');
-            if ($month < 1 || $month > 12) continue;
+            $bKey = $bucketResolver($date);
+            if (!$bKey || !isset($blankCols[$bKey])) continue;
 
-            $matchedKey = $this->matchReport2Complaint($pcr);
+            $matchedKey = $this->matchReport2Complaint($pcr, $pcrComplaints);
 
             if ($matchedKey && isset($complaintsData[$matchedKey])) {
-                $complaintsData[$matchedKey]['months'][$month]++;
+                $complaintsData[$matchedKey]['columns'][$bKey]++;
+                $complaintsData[$matchedKey]['months'][$bKey]++;
                 $complaintsData[$matchedKey]['annual_total']++;
+                $complaintsData[$matchedKey]['total']++;
             } else {
                 $otherLabel = !empty($pcr->clinical_chief_complaint) 
                     ? trim($pcr->clinical_chief_complaint) 
                     : 'Other Recorded Condition';
                 if (!isset($otherComplaints[$otherLabel])) {
                     $otherComplaints[$otherLabel] = [
-                        'months' => array_fill(1, 12, 0),
+                        'months' => $blankCols,
+                        'columns' => $blankCols,
                         'annual_total' => 0,
+                        'total' => 0,
                     ];
                 }
-                $otherComplaints[$otherLabel]['months'][$month]++;
+                $otherComplaints[$otherLabel]['columns'][$bKey]++;
+                $otherComplaints[$otherLabel]['months'][$bKey]++;
                 $otherComplaints[$otherLabel]['annual_total']++;
+                $otherComplaints[$otherLabel]['total']++;
             }
         }
 
-        // Calculate Monthly Subtotals and Grand Total
-        $monthlySubtotals = array_fill(1, 12, 0);
-        $annualGrandTotal = 0;
+        $columnSubtotals = $blankCols;
+        $overallGrandTotal = 0;
 
         foreach ($complaintsData as $data) {
-            for ($m = 1; $m <= 12; $m++) {
-                $monthlySubtotals[$m] += $data['months'][$m];
+            foreach ($colKeys as $k) {
+                $columnSubtotals[$k] += $data['columns'][$k];
             }
-            $annualGrandTotal += $data['annual_total'];
+            $overallGrandTotal += $data['total'];
         }
 
         foreach ($otherComplaints as $data) {
-            for ($m = 1; $m <= 12; $m++) {
-                $monthlySubtotals[$m] += $data['months'][$m];
+            foreach ($colKeys as $k) {
+                $columnSubtotals[$k] += $data['columns'][$k];
             }
-            $annualGrandTotal += $data['annual_total'];
+            $overallGrandTotal += $data['total'];
         }
 
         return [
@@ -381,8 +830,8 @@ class MonthlyReportService
                 'has_records' => count($otherComplaints) > 0,
                 'items' => $otherComplaints,
             ],
-            'monthly_subtotals' => $monthlySubtotals,
-            'annual_grand_total' => $annualGrandTotal,
+            'monthly_subtotals' => $columnSubtotals,
+            'annual_grand_total' => $overallGrandTotal,
         ];
     }
 
@@ -429,20 +878,40 @@ class MonthlyReportService
     /**
      * Match complaint to Report 1 Category and Official Chief of Complaint.
      */
-    protected function matchReport1CategoryAndComplaint(string $complaint, Incident $incident): ?array
+    protected function matchReport1CategoryAndComplaint(string $complaint, Incident $incident, array $allCategories = []): ?array
     {
+        if (empty($allCategories)) {
+            $allCategories = self::REPORT1_CATEGORIES;
+        }
+
         $rawNorm = strtolower(trim($complaint));
 
-        // 1. Exact match against official list
-        foreach (self::REPORT1_CATEGORIES as $category => $complaints) {
+        // 1. Exact match against all categories & complaints
+        foreach ($allCategories as $category => $complaints) {
             foreach ($complaints as $target) {
-                if (strtolower($target) === $rawNorm) {
+                if (strtolower(trim($target)) === $rawNorm) {
                     return ['category' => $category, 'complaint' => $target];
                 }
             }
         }
 
-        // 2. Special aliases & spelling preservation
+        // 2. Incident Type direct match against categories
+        $typeName = trim($incident->incidentType?->incident_type_name ?? '');
+        $typeNorm = strtolower($typeName);
+        if (!empty($typeNorm)) {
+            foreach ($allCategories as $category => $complaints) {
+                if (strtolower(trim($category)) === $typeNorm) {
+                    foreach ($complaints as $target) {
+                        if (strtolower(trim($target)) === $rawNorm) {
+                            return ['category' => $category, 'complaint' => $target];
+                        }
+                    }
+                    return ['category' => $category, 'complaint' => !empty($complaint) ? $complaint : ($complaints[0] ?? $typeName)];
+                }
+            }
+        }
+
+        // 3. Special aliases & spelling preservation
         $aliasMap = [
             'severe weather' => ['category' => 'SEVERE WEATHER / FLOOD', 'complaint' => 'Sever Weather'],
             'sever weather' => ['category' => 'SEVERE WEATHER / FLOOD', 'complaint' => 'Sever Weather'],
@@ -480,36 +949,30 @@ class MonthlyReportService
             'robbery' => ['category' => 'CRIME & SECURITY', 'complaint' => 'Assault'],
         ];
 
-        if (isset($aliasMap[$rawNorm])) {
+        if (isset($aliasMap[$rawNorm]) && isset($allCategories[$aliasMap[$rawNorm]['category']])) {
             return $aliasMap[$rawNorm];
         }
 
-        // 3. Substring matching for clinical complaints
-        foreach (self::REPORT1_CATEGORIES as $category => $complaints) {
+        // 4. Substring matching for clinical complaints
+        foreach ($allCategories as $category => $complaints) {
             foreach ($complaints as $target) {
-                $targetNorm = strtolower($target);
-                if (str_contains($rawNorm, $targetNorm) || str_contains($targetNorm, $rawNorm)) {
-                    return ['category' => $category, 'complaint' => $target];
+                $targetNorm = strtolower(trim($target));
+                if (!empty($rawNorm) && !empty($targetNorm)) {
+                    if (str_contains($rawNorm, $targetNorm) || str_contains($targetNorm, $rawNorm)) {
+                        return ['category' => $category, 'complaint' => $target];
+                    }
                 }
             }
         }
 
-        // 4. Incident Type fallback
-        $typeName = strtolower($incident->incidentType?->incident_type_name ?? '');
-        if ($typeName === 'medical emergency') {
-            return ['category' => 'MEDICAL EMERGENCY', 'complaint' => 'Medical Emergency'];
-        }
-        if ($typeName === 'fire emergency') {
-            return ['category' => 'FIRE EMERGENCY', 'complaint' => 'Fire Incidents'];
-        }
-        if (str_contains($typeName, 'weather') || str_contains($typeName, 'flood')) {
-            return ['category' => 'SEVERE WEATHER / FLOOD', 'complaint' => 'Sever Weather'];
-        }
-        if (str_contains($typeName, 'search') || str_contains($typeName, 'rescue')) {
-            return ['category' => 'SEVERE WEATHER / FLOOD', 'complaint' => 'Search and Rescue/Retreival'];
-        }
-        if (str_contains($typeName, 'crime') || str_contains($typeName, 'security')) {
-            return ['category' => 'CRIME & SECURITY', 'complaint' => 'Assault'];
+        // 5. Incident Type substring fallback
+        if (!empty($typeNorm)) {
+            foreach ($allCategories as $category => $complaints) {
+                $catNorm = strtolower(trim($category));
+                if (str_contains($catNorm, $typeNorm) || str_contains($typeNorm, $catNorm)) {
+                    return ['category' => $category, 'complaint' => !empty($complaint) ? $complaint : ($complaints[0] ?? $typeName)];
+                }
+            }
         }
 
         return null;
@@ -518,7 +981,7 @@ class MonthlyReportService
     /**
      * Match PCR record to Report 2 Patient Complaint.
      */
-    protected function matchReport2Complaint(PatientCareRecord $pcr): ?string
+    protected function matchReport2Complaint(PatientCareRecord $pcr, array $allPcrComplaints = []): ?string
     {
         $comp = strtolower(trim($pcr->clinical_chief_complaint ?? ''));
         $assessmentArr = is_array($pcr->assessment) 
@@ -528,9 +991,11 @@ class MonthlyReportService
         $assessmentText = strtolower(implode(' ', $assessmentArr));
         $fullClinical = "{$comp} {$assessmentText}";
 
-        // 1. Direct match with 34 list
-        foreach (self::REPORT2_PATIENT_COMPLAINTS as $target) {
-            if (strtolower($target) === $comp) {
+        $targets = !empty($allPcrComplaints) ? $allPcrComplaints : self::REPORT2_PATIENT_COMPLAINTS;
+
+        // 1. Direct match with complaints list
+        foreach ($targets as $target) {
+            if (strtolower(trim($target)) === $comp) {
                 return $target;
             }
         }

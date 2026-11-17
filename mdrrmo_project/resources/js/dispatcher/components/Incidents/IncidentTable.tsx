@@ -551,13 +551,15 @@ export default function IncidentTable({
                     return <span className="text-slate-400 text-xs italic">None Recorded</span>;
                 }
                 return (
-                    <span 
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-500/20 max-w-[220px] truncate shadow-2xs"
-                        title={complaint}
-                    >
-                        <HeartPulse className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                        <span className="truncate">{complaint}</span>
-                    </span>
+                    <div className="min-w-[170px] max-w-[210px]">
+                        <span 
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-500/20 max-w-full truncate shadow-2xs"
+                            title={complaint}
+                        >
+                            <HeartPulse className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                            <span className="truncate">{complaint}</span>
+                        </span>
+                    </div>
                 );
             },
         },
@@ -566,7 +568,7 @@ export default function IncidentTable({
             header: 'Status',
             sortable: true,
             render: (v, row) => (
-                <div className="flex flex-col gap-1 items-start">
+                <div className="min-w-[110px] flex flex-col gap-1 items-start">
                     <StatusBadge status={v} size="xs" />
                     {(row.is_prank || row.rejection_category === 'prank') && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/50">

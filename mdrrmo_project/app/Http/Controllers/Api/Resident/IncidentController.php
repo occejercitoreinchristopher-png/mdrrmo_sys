@@ -17,6 +17,25 @@ class IncidentController extends Controller
     public function index()
     {
         $user = Auth::user();
+
+        // Auto-link any Phone/SIM incidents created by dispatcher matching this resident's contact number
+        if (! empty($user->phone_number)) {
+            $rawDigits = preg_replace('/\D+/', '', $user->phone_number);
+            if (strlen($rawDigits) >= 10) {
+                $last10 = substr($rawDigits, -10);
+                $phoneVariants = array_unique([
+                    '+63'.$last10,
+                    '0'.$last10,
+                    '63'.$last10,
+                    $user->phone_number,
+                ]);
+
+                Incident::whereNull('resident_id')
+                    ->whereIn('caller_phone_number', $phoneVariants)
+                    ->update(['resident_id' => $user->id]);
+            }
+        }
+
         $isSuspended = $user->isReportingSuspended();
         $prankCount = Incident::where('resident_id', $user->id)
             ->where(function ($q) {
@@ -95,7 +114,11 @@ class IncidentController extends Controller
 
     public function store(Request $request)
     {
-        $user = Auth::user();
+        $user = $request->user() ?: Auth::user();
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
         if ($user->isReportingSuspended()) {
             return response()->json([
                 'message' => 'Your reporting privileges are temporarily suspended until ' . $user->reporting_suspended_until->format('M d, Y h:i A') . ' due to multiple rejected reports.',
@@ -133,7 +156,7 @@ class IncidentController extends Controller
             'photo_captured_at' => 'nullable|date',
         ]);
 
-        $hasActiveIncident = Incident::where('resident_id', Auth::id())
+        $activeIncident = Incident::where('resident_id', $user->id)
             ->whereIn('incident_status', ['pending', 'verified', 'assigned', 'responding'])
             ->where(function ($query) {
                 $query->whereDoesntHave('dispatches')
@@ -141,16 +164,39 @@ class IncidentController extends Controller
                         $d->whereNotIn('dispatch_status', ['completed', 'cancelled']);
                     });
             })
-            ->exists();
+            ->latest()
+            ->first();
 
-        if ($hasActiveIncident) {
-            return response()->json([
-                'message' => 'You already have an active emergency report.',
-            ], 422);
+        if ($activeIncident) {
+            // Auto-cancel stale pending/verified unassigned incident older than 24 hours so residents are never permanently blocked
+            if (in_array($activeIncident->incident_status, ['pending', 'verified'])
+                && ! $activeIncident->dispatches()->whereNotIn('dispatch_status', ['cancelled'])->exists()
+                && $activeIncident->created_at->lt(now()->subHours(24))) {
+                $activeIncident->update([
+                    'incident_status' => 'cancelled',
+                    'resolved_at' => now(),
+                    'verification_remarks' => 'Auto-cancelled: stale unresponded incident (>24h)',
+                ]);
+            } else {
+                $hasActiveDispatch = $activeIncident->dispatches()
+                    ->whereNotIn('dispatch_status', ['completed', 'cancelled'])
+                    ->exists();
+
+                return response()->json([
+                    'message' => 'You already have an active emergency report.',
+                    'active_incident' => [
+                        'id' => $activeIncident->id,
+                        'code' => sprintf('INC-2026-%05d', $activeIncident->id),
+                        'incident_status' => $activeIncident->incident_status,
+                        'can_cancel' => in_array($activeIncident->incident_status, ['pending', 'verified']) && ! $hasActiveDispatch,
+                        'created_at' => $activeIncident->created_at?->toIso8601String(),
+                    ],
+                ], 422);
+            }
         }
 
         $incident = Incident::create([
-            'resident_id' => Auth::id(),
+            'resident_id' => $user->id,
             'incident_type_id' => $validated['incident_type_id'],
             'incident_latitude' => $validated['latitude'],
             'incident_longitude' => $validated['longitude'],

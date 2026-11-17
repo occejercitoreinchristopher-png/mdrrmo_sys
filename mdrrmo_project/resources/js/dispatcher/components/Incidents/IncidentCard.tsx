@@ -116,8 +116,23 @@ export default function IncidentCard({ incident, onClick, selected = false }) {
                     </div>
                 </div>
 
+                {/* Reporter / Resident info */}
+                <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-700 dark:text-slate-200">
+                    <User className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 shrink-0" />
+                    <span className="font-semibold truncate">
+                        {incident.resident
+                            ? `${incident.resident.first_name} ${incident.resident.last_name}`
+                            : (incident.caller_name || (incident.caller_phone_number ? `Caller: ${incident.caller_phone_number}` : 'Citizen / App User'))}
+                    </span>
+                    {(incident.caller_phone_number || incident.resident?.phone_number) && (
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono shrink-0">
+                            &bull; {incident.caller_phone_number || incident.resident?.phone_number}
+                        </span>
+                    )}
+                </div>
+
                 {/* Location */}
-                <div className="flex items-start gap-1.5 mt-2.5 text-xs text-slate-600 dark:text-slate-300">
+                <div className="flex items-start gap-1.5 mt-2 text-xs text-slate-600 dark:text-slate-300">
                     <MapPin className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
                     <span className="line-clamp-2 font-medium">
                         {incident.place_of_incident 
@@ -137,13 +152,23 @@ export default function IncidentCard({ incident, onClick, selected = false }) {
 
                 {/* Responder / Assignment info */}
                 {(incident.incident_status === 'assigned' || incident.incident_status === 'responding') && incident.dispatches?.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/5 flex flex-col gap-1.5">
-                        {incident.dispatches[0].ambulance && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400 font-medium bg-slate-100 dark:bg-white/5 p-1.5 rounded-md">
-                                <Truck className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
-                                <span className="truncate">{incident.dispatches[0].ambulance.name}</span>
+                    <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-white/5 flex flex-col gap-1 text-[10px]">
+                        <div className="flex items-center justify-between gap-1 text-slate-700 dark:text-slate-300 font-medium bg-slate-100 dark:bg-white/5 p-1.5 rounded-md">
+                            <div className="flex items-center gap-1.5 truncate">
+                                <Truck className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
+                                <span className="font-bold text-indigo-700 dark:text-indigo-300">
+                                    {incident.dispatches[0].team ? `Unit ${incident.dispatches[0].team}` : 'Response Unit'}
+                                </span>
+                                {(incident.dispatches[0].ambulance?.vehicle_name || incident.dispatches[0].ambulance?.plate_number || incident.dispatches[0].ambulance?.name) && (
+                                    <span className="truncate text-slate-500 dark:text-slate-400">
+                                        &bull; {incident.dispatches[0].ambulance?.vehicle_name || incident.dispatches[0].ambulance?.plate_number || incident.dispatches[0].ambulance?.name}
+                                    </span>
+                                )}
                             </div>
-                        )}
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-orange-100 dark:bg-orange-950/60 text-orange-700 dark:text-orange-300 border border-orange-300 dark:border-orange-800/60 shrink-0">
+                                {incident.dispatches[0].dispatch_status?.replace(/_/g, ' ') || 'responding'}
+                            </span>
+                        </div>
                     </div>
                 )}
             </div>

@@ -152,5 +152,15 @@
     .no-print {
         display: none !important;
     }
+
+    /* Completely hide background app when printing official modal reports */
+    body.monthly-report-modal-open #app,
+    body.monthly-report-modal-open main,
+    body.monthly-report-modal-open > *:not(#monthly-report-modal-root) {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
 }
 

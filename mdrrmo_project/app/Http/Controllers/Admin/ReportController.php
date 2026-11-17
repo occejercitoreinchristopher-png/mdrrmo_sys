@@ -166,8 +166,28 @@ class ReportController extends Controller
 
     public function monthlySummary(Request $request, \App\Services\MonthlyReportService $service)
     {
-        $year = (int) ($request->query('year') ?: now()->format('Y'));
-        $data = $service->getFullYearReport($year);
+        $customCategories = [];
+        if ($request->filled('custom_categories')) {
+            $raw = $request->input('custom_categories');
+            $customCategories = is_string($raw) ? json_decode($raw, true) : (array) $raw;
+        }
+
+        $customIncidents = [];
+        if ($request->filled('custom_incidents')) {
+            $raw = $request->input('custom_incidents');
+            $customIncidents = is_string($raw) ? json_decode($raw, true) : (array) $raw;
+        }
+
+        $params = [
+            'period' => $request->query('period', 'yearly'),
+            'year' => (int) ($request->query('year') ?: now()->format('Y')),
+            'month' => (int) ($request->query('month') ?: now()->format('n')),
+            'date' => $request->query('date', now()->format('Y-m-d')),
+            'custom_categories' => $customCategories ?: [],
+            'custom_incidents' => $customIncidents ?: [],
+        ];
+
+        $data = $service->getFilteredReport($params);
 
         return response()->json($data);
     }

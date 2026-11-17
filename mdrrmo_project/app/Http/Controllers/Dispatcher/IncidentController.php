@@ -737,11 +737,19 @@ class IncidentController extends Controller
         }
 
         // Check if there is an existing resident account with this phone number
+        $rawDigits = preg_replace('/\D+/', '', $normalizedPhone);
+        $last10 = substr($rawDigits, -10);
+        $phoneVariants = array_unique([
+            $normalizedPhone,
+            '0'.$last10,
+            '+63'.$last10,
+            '63'.$last10,
+        ]);
+
         $resident = User::where('role', 'resident')
             ->with(['residentProfile.barangay'])
-            ->where(function ($q) use ($normalizedPhone) {
-                $q->where('phone_number', $normalizedPhone)
-                    ->orWhere('phone_number', '0'.substr($normalizedPhone, 3));
+            ->where(function ($q) use ($phoneVariants) {
+                $q->whereIn('phone_number', $phoneVariants);
             })
             ->first();
 
