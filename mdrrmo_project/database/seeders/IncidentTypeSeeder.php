@@ -22,17 +22,17 @@ class IncidentTypeSeeder extends Seeder
             ],
             [
                 'id' => 3,
-                'incident_type_name' => 'Vehicular Accident',
-                'type_description' => 'Motor vehicle collision, motorcycle crash, pedestrian hit-and-run, road rollover, highway trauma.',
+                'incident_type_name' => 'Severe Weather / Flood',
+                'type_description' => 'Flash flood, storm surge, severe typhoon, river overflow, landslide danger, weather calamity.',
             ],
             [
                 'id' => 4,
-                'incident_type_name' => 'Crime & Violence',
-                'type_description' => 'Physical assault, armed robbery, domestic dispute, civil disturbance, stabbing, shooting incident.',
+                'incident_type_name' => 'Crime & Security',
+                'type_description' => 'Physical assault, armed robbery, domestic dispute, civil disturbance, security threat, violence.',
             ],
             [
                 'id' => 5,
-                'incident_type_name' => 'Search and Rescue',
+                'incident_type_name' => 'Search & Rescue',
                 'type_description' => 'Drowning, river current sweep, trapped individuals, landslide rescue, lost wilderness hikers, collapsed structure.',
             ],
         ];
