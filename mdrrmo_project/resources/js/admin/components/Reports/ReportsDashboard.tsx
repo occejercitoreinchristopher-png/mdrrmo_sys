@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePage } from '@inertiajs/react';
 import PageHeader from '@/shared/components/PageHeader';
 import { Download, Printer, FileText } from 'lucide-react';
 import { toast } from 'sonner';
@@ -9,8 +10,17 @@ import IncidentIntelligence from './IncidentIntelligence';
 import ResponseOperations from './ResponseOperations';
 import PatientCareAnalytics from './PatientCareAnalytics';
 import ReportsGeographic from './ReportsGeographic';
+import MonthlyReportPrintModal from './MonthlyReportPrintModal';
 
-export default function ReportsDashboard({ stats = {}, incidents = [], lookups = {}, initialFilters = {} }: any) {
+export default function ReportsDashboard({ 
+    stats = {}, 
+    incidents = [], 
+    lookups = {}, 
+    initialFilters = {}, 
+    initialMonthlyReport = null 
+}: any) {
+    const { auth } = usePage().props as any;
+    const [isMonthlyReportModalOpen, setIsMonthlyReportModalOpen] = useState(false);
     
     const handleExportCSV = () => {
         const headers = [
@@ -89,6 +99,16 @@ export default function ReportsDashboard({ stats = {}, incidents = [], lookups =
 
             {/* Actions for Web (Hidden in Print) */}
             <div className="flex flex-wrap items-center gap-3 print:hidden border-b border-slate-200 dark:border-white/10 pb-6">
+                {/* Official MDRRMO Print Report Button */}
+                <button
+                    onClick={() => setIsMonthlyReportModalOpen(true)}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-red-600/20 transition-all cursor-pointer active:scale-95"
+                    title="Open official MDRRMO Monthly Responses & Patient Complaints report with print preview"
+                >
+                    <Printer className="w-4 h-4" />
+                    <span>Print Report</span>
+                </button>
+
                 <button
                     onClick={handleExportCSV}
                     className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-semibold text-xs sm:text-sm shadow-sm hover:bg-slate-800 dark:hover:bg-slate-100 transition-all cursor-pointer active:scale-95"
@@ -96,12 +116,14 @@ export default function ReportsDashboard({ stats = {}, incidents = [], lookups =
                     <FileText className="w-4 h-4" />
                     <span>Export CSV / Excel</span>
                 </button>
+
                 <button
                     onClick={handlePrint}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-xs sm:text-sm shadow-sm hover:bg-indigo-700 transition-all cursor-pointer active:scale-95"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 font-semibold text-xs sm:text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer active:scale-95"
+                    title="Quick print raw overview dashboard"
                 >
                     <Printer className="w-4 h-4" />
-                    <span>Print PDF Report</span>
+                    <span>Quick Dashboard Print</span>
                 </button>
             </div>
 
@@ -117,6 +139,14 @@ export default function ReportsDashboard({ stats = {}, incidents = [], lookups =
                 <hr className="border-slate-200 dark:border-white/5 print:hidden" />
                 <ReportsGeographic incidents={incidents} />
             </div>
+
+            {/* Dedicated Official MDRRMO Opol Monthly Report Print Preview Modal */}
+            <MonthlyReportPrintModal
+                isOpen={isMonthlyReportModalOpen}
+                onClose={() => setIsMonthlyReportModalOpen(false)}
+                initialData={initialMonthlyReport}
+                currentUser={auth?.user}
+            />
             
         </div>
     );

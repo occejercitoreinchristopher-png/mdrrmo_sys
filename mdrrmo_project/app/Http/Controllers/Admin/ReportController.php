@@ -150,12 +150,25 @@ class ReportController extends Controller
         $geojsonPath = resource_path('data/opol_barangays.json');
         $barangayGeojson = file_exists($geojsonPath) ? json_decode(file_get_contents($geojsonPath), true) : null;
 
+        $monthlyReportService = new \App\Services\MonthlyReportService();
+        $currentYear = (int) ($request->input('year') ?: now()->format('Y'));
+        $monthlyReportData = $monthlyReportService->getFullYearReport($currentYear);
+
         return Inertia::render('admin/Reports', [
             'stats' => $stats,
             'incidents' => $incidents->values(),
             'lookups' => $lookups,
             'barangayGeojson' => $barangayGeojson,
             'filters' => $request->only(['date_from', 'date_to', 'barangay', 'incident_type_id', 'status', 'responder_id', 'ambulance_id']),
+            'monthlyReportData' => $monthlyReportData,
         ]);
+    }
+
+    public function monthlySummary(Request $request, \App\Services\MonthlyReportService $service)
+    {
+        $year = (int) ($request->query('year') ?: now()->format('Y'));
+        $data = $service->getFullYearReport($year);
+
+        return response()->json($data);
     }
 }

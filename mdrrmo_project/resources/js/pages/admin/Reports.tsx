@@ -1,7 +1,7 @@
 import AdminLayout from '@/admin/layouts/AdminLayout';
 import ReportsDashboard from '@/admin/components/Reports/ReportsDashboard';
 
-export default function ReportsPage({ stats, incidents, lookups, filters }) {
+export default function ReportsPage({ stats, incidents, lookups, filters, monthlyReportData }: any) {
     return (
         <AdminLayout title="Reports & Analytics">
             <ReportsDashboard 
@@ -9,6 +9,7 @@ export default function ReportsPage({ stats, incidents, lookups, filters }) {
                 incidents={incidents ?? []} 
                 lookups={lookups ?? {}} 
                 initialFilters={filters ?? {}} 
+                initialMonthlyReport={monthlyReportData ?? null}
             />
         </AdminLayout>
     );
