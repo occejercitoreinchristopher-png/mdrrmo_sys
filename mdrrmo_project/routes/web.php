@@ -82,6 +82,7 @@ Route::middleware(['auth', 'role:admin,dispatcher'])->group(function () {
     Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto'])->name('admin.profile.photo.destroy');
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('admin.profile.password.update');
     Route::post('/incident-types', [\App\Http\Controllers\Admin\IncidentTypeController::class, 'store'])->name('incident-types.store');
+    Route::post('/chief-complaints', [\App\Http\Controllers\Shared\ChiefComplaintController::class, 'store'])->name('chief-complaints.store');
 });
 
 // Admin Routes

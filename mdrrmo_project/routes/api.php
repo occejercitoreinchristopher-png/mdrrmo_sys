@@ -23,6 +23,7 @@ Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
 Route::get('/ping', fn () => response()->json(['status' => 'ok', 'timestamp' => now()->toIso8601String()]));
 Route::get('/barangays', fn () => response()->json(Barangay::orderBy('barangay_name')->get(['id', 'barangay_name'])));
 Route::get('/incident-types', fn () => response()->json(IncidentType::orderBy('id')->get(['id', 'incident_type_name', 'type_description'])));
+Route::get('/chief-complaints', [\App\Http\Controllers\Shared\ChiefComplaintController::class, 'index']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Broadcast::routes(['middleware' => ['auth:sanctum']]);

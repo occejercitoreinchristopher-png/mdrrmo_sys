@@ -7,7 +7,7 @@ export const MAIN_CATEGORIES = [
     'Fire Emergency',
     'Severe Weather / Flood',
     'Crime & Security',
-    'Other / Non-Emergency',
+    'Search & Rescue',
 ] as const;
 
 export type MainCategory = typeof MAIN_CATEGORIES[number];
@@ -71,8 +71,10 @@ export const INCIDENT_TYPES_BY_CATEGORY: Record<MainCategory, string[]> = {
     ],
     'Severe Weather / Flood': [
         'Severe Weather',
-        'Search and Rescue/Retrieval',
-        'Water Rescue/Drowning Incident',
+        'Flash Flood Emergency',
+        'Storm Surge',
+        'Typhoon Disaster',
+        'Landslide Incident',
         'Evacuation Center Management',
     ],
     'Crime & Security': [
@@ -80,14 +82,18 @@ export const INCIDENT_TYPES_BY_CATEGORY: Record<MainCategory, string[]> = {
         'Hostage Situation',
         'Terrorism',
         'Assault',
-        'Missing Persons',
+        'Civil Disturbance',
+        'Armed Robbery',
+        'Theft',
     ],
-    'Other / Non-Emergency': [
-        'Public Service',
-        'Training',
-        'Stand-By Unit',
-        'Calls (Emergency, Assistance and Inquiry)',
-        'Waiver',
+    'Search & Rescue': [
+        'Search and Rescue/Retrieval',
+        'Water Rescue/Drowning Incident',
+        'Mountain Search and Rescue',
+        'Collapsed Structure Rescue',
+        'Trapped Victims Extraction',
+        'River Current Sweep Retrieval',
+        'Missing Persons',
     ],
 };
 
@@ -98,7 +104,7 @@ export const ALL_INCIDENT_TYPES: string[] = Object.values(INCIDENT_TYPES_BY_CATE
  */
 export function getCategoryForIncident(complaintOrType?: string | null): string {
     if (!complaintOrType || typeof complaintOrType !== 'string') {
-        return 'Other / Non-Emergency';
+        return 'Medical Emergency';
     }
 
     const norm = complaintOrType.trim().toLowerCase();
@@ -125,20 +131,23 @@ export function getCategoryForIncident(complaintOrType?: string | null): string 
     }
 
     // Keyword & legacy alias heuristics
+    if (norm.includes('search') || norm.includes('rescue') || norm.includes('drown') || norm.includes('water') || norm.includes('sweep') || norm.includes('trap')) {
+        return 'Search & Rescue';
+    }
+    if (norm.includes('flood') || norm.includes('weather') || norm.includes('typhoon') || norm.includes('surge') || norm.includes('storm') || norm.includes('landslide')) {
+        return 'Severe Weather / Flood';
+    }
+    if (norm.includes('fire') || norm.includes('conflagration') || norm.includes('smoke') || norm.includes('burn')) {
+        return 'Fire Emergency';
+    }
+    if (norm.includes('crime') || norm.includes('violence') || norm.includes('assault') || norm.includes('threat') || norm.includes('hostage') || norm.includes('terror') || norm.includes('stab') || norm.includes('robbery') || norm.includes('theft')) {
+        return 'Crime & Security';
+    }
     if (norm.includes('vehicular') || norm.includes('accident') || norm.includes('medical') || norm.includes('trauma') || norm.includes('cpr') || norm.includes('patient') || norm.includes('injury')) {
         return 'Medical Emergency';
     }
-    if (norm.includes('fire') || norm.includes('conflagration') || norm.includes('smoke')) {
-        return 'Fire Emergency';
-    }
-    if (norm.includes('flood') || norm.includes('weather') || norm.includes('typhoon') || norm.includes('drown') || norm.includes('rescue')) {
-        return 'Severe Weather / Flood';
-    }
-    if (norm.includes('crime') || norm.includes('violence') || norm.includes('assault') || norm.includes('threat') || norm.includes('hostage') || norm.includes('terror') || norm.includes('stab')) {
-        return 'Crime & Security';
-    }
 
-    return 'Other / Non-Emergency';
+    return 'Medical Emergency';
 }
 
 /**

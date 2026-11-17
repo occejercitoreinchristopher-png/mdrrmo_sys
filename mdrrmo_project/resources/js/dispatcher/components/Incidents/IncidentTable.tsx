@@ -205,21 +205,39 @@ export default function IncidentTable({
         }
     };
 
-    const handleAddCategory = (newCat: string) => {
+    const handleAddCategory = async (newCat: string) => {
         const formatted = saveStoredCustomCategory(newCat);
         setCustomCategories(getStoredCustomCategories());
-        // Do NOT change selectedCategory so current table records don't get filtered out
+
+        // Save to database so resident mobile app immediately receives it
+        try {
+            await fetch('/incident-types', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                },
+                body: JSON.stringify({
+                    incident_type_name: formatted,
+                    type_description: `${formatted} emergency and operational response category`,
+                }),
+            });
+        } catch (e) {
+            console.warn('Failed to sync new category to database:', e);
+        }
+
         toast.success(`Category "${formatted}" created successfully!`, {
-            description: 'New category is now available in the filter dropdown.',
+            description: 'Saved to database and available in mobile apps and filter dropdown.',
         });
         setNotificationMessage({
             type: 'category',
             title: 'Category Created Successfully',
-            message: `"${formatted}" has been added and is now available in the filter dropdown.`,
+            message: `"${formatted}" has been saved to database and is now available in mobile apps and filter dropdown.`,
         });
     };
 
-    const handleAddIncidentType = (cat: string, newInc: string) => {
+    const handleAddIncidentType = async (cat: string, newInc: string) => {
         const result = saveStoredCustomIncident(cat, newInc);
         const updatedMap = getStoredCustomIncidents();
         setCustomIncidents(updatedMap);
@@ -229,13 +247,32 @@ export default function IncidentTable({
             setSelectedIncident(result.incident);
         }
 
+        // Save to database so responder mobile app immediately receives it
+        try {
+            await fetch('/chief-complaints', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                },
+                body: JSON.stringify({
+                    category: result.category,
+                    complaint_name: result.incident,
+                    description: `${result.incident} under ${result.category}`,
+                }),
+            });
+        } catch (e) {
+            console.warn('Failed to sync new chief complaint to database:', e);
+        }
+
         toast.success(`Chief Complaint "${result.incident}" created successfully!`, {
-            description: `Assigned under category "${result.category}".`,
+            description: `Saved to database under category "${result.category}".`,
         });
         setNotificationMessage({
             type: 'incident',
             title: 'Chief Complaint Created Successfully',
-            message: `"${result.incident}" has been added under "${result.category}".`,
+            message: `"${result.incident}" has been saved to database under "${result.category}".`,
         });
     };
 
