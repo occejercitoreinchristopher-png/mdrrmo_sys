@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { router } from '@inertiajs/react';
-import { Eye, AlertTriangle, X, PhoneCall, MapPin, Activity, RotateCcw, ChevronDown, Search, Plus, CheckCircle2, HeartPulse } from 'lucide-react';
+import { Eye, AlertTriangle, X, PhoneCall, MapPin, Activity, RotateCcw, ChevronDown, Search, Plus, CheckCircle2, HeartPulse, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import DataTable from '@/shared/components/DataTable';
 import StatusBadge from '@/shared/components/StatusBadge';
@@ -15,6 +15,7 @@ import CreatePhoneIncidentModal from './CreatePhoneIncidentModal';
 import CreateDispatchModal from '@/dispatcher/components/Dispatches/CreateDispatchModal';
 import AddCategoryModal from './AddCategoryModal';
 import AddIncidentTypeModal from './AddIncidentTypeModal';
+import MonthlyReportPrintModal from '@/admin/components/Reports/MonthlyReportPrintModal';
 import { 
     MAIN_CATEGORIES, 
     INCIDENT_TYPES_BY_CATEGORY, 
@@ -99,6 +100,7 @@ export default function IncidentTable({
     // Custom Category & Incident Modal states
     const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
     const [isAddIncidentModalOpen, setIsAddIncidentModalOpen] = useState(false);
+    const [isMonthlyReportModalOpen, setIsMonthlyReportModalOpen] = useState(false);
     const [customCategories, setCustomCategories] = useState<string[]>([]);
     const [customIncidents, setCustomIncidents] = useState<Record<string, string[]>>({});
     const [notificationMessage, setNotificationMessage] = useState<{
@@ -669,8 +671,17 @@ export default function IncidentTable({
                                     </button>
                                 )}
 
-                                {/* + Chief Complaint and + Category Buttons */}
+                                {/* Print Report, + Chief Complaint and + Category Buttons */}
                                 <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsMonthlyReportModalOpen(true)}
+                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-500 active:bg-red-700 shadow-sm shadow-red-600/25 border border-red-500/30 transition-all cursor-pointer"
+                                        title="Print Official MDRRMO Monthly Responses & Patient Complaints Report"
+                                    >
+                                        <Printer className="w-3.5 h-3.5" />
+                                        <span>Print Report</span>
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => setIsAddIncidentModalOpen(true)}
@@ -993,6 +1004,12 @@ export default function IncidentTable({
                 onAddIncidentType={handleAddIncidentType}
                 categories={availableCategories}
                 defaultCategory={selectedCategory !== 'all' ? selectedCategory : undefined}
+            />
+
+            {/* Official MDRRMO Monthly Response Report Print Preview Modal */}
+            <MonthlyReportPrintModal
+                isOpen={isMonthlyReportModalOpen}
+                onClose={() => setIsMonthlyReportModalOpen(false)}
             />
         </div>
     );

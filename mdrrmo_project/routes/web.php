@@ -83,6 +83,7 @@ Route::middleware(['auth', 'role:admin,dispatcher'])->group(function () {
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('admin.profile.password.update');
     Route::post('/incident-types', [\App\Http\Controllers\Admin\IncidentTypeController::class, 'store'])->name('incident-types.store');
     Route::post('/chief-complaints', [\App\Http\Controllers\Shared\ChiefComplaintController::class, 'store'])->name('chief-complaints.store');
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports');
     Route::get('/reports/monthly-summary', [\App\Http\Controllers\Admin\ReportController::class, 'monthlySummary'])->name('shared.reports.monthly-summary');
 });
 
@@ -165,6 +166,9 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
     // PCRs
     Route::get('/patient-care-records', [PatientCareRecordController::class, 'index'])->name('patient-care-records');
     Route::get('/patient-care-records/{record}', [PatientCareRecordController::class, 'show'])->name('patient-care-records.show');
+
+    // Reports & Analytics
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports');
 
     // Dispatch Logs
     Route::get('/dispatch-logs/api/fetch', [\App\Http\Controllers\Admin\DispatchLogController::class, 'fetchLogs'])->name('dispatch-logs.fetch');
