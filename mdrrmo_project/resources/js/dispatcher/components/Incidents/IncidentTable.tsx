@@ -413,7 +413,7 @@ export default function IncidentTable({
         },
         {
             key: 'incident_type',
-            header: 'Incident Type',
+            header: 'Category',
             render: (v, row) => {
                 const name = row.incident_type?.name;
                 if (!name) {
