@@ -11,7 +11,7 @@ import Pagination from '@/shared/components/Pagination';
 import IncidentRowActionsDropdown from './IncidentRowPrintDropdown';
 import IncidentLocateModal from './IncidentLocateModal';
 import IncidentPinsMapModal from './IncidentPinsMapModal';
-import ChiefComplaintCombobox from './ChiefComplaintCombobox';
+import MultiSelectFilterCombobox from './MultiSelectFilterCombobox';
 import IncidentDetails from './IncidentDetails';
 import RejectModal from './RejectModal';
 import IncidentKanbanBoard from './IncidentKanbanBoard';
@@ -102,12 +102,12 @@ export default function IncidentTable({
     const [assigningIncident, setAssigningIncident] = useState<any | null>(null);
     const [phoneCallModalOpen, setPhoneCallModalOpen] = useState(false);
 
-    // Archive / History horizontal filtering states: Category, Incident, Month, Time, Zone
-    const [selectedCategory, setSelectedCategory] = useState<string>('all');
-    const [selectedIncident, setSelectedIncident] = useState<string>('all');
-    const [selectedMonth, setSelectedMonth] = useState<string>('all');
-    const [selectedTime, setSelectedTime] = useState<string>('all');
-    const [selectedZone, setSelectedZone] = useState<string>('all');
+    // Archive / History horizontal multi-select filtering states: Category, Chief Complaint, Month, Time, Barangay
+    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+    const [selectedIncidents, setSelectedIncidents] = useState<string[]>([]);
+    const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+    const [selectedTimes, setSelectedTimes] = useState<string[]>([]);
+    const [selectedZones, setSelectedZones] = useState<string[]>([]);
 
     // Custom Category & Incident Modal states
     const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
@@ -175,11 +175,11 @@ export default function IncidentTable({
         isFetching: isRecordsFetching,
     } = useIncidentRecordsQuery({
         enabled: statusFilter === 'history',
-        category: selectedCategory,
-        incident: selectedIncident,
-        month: selectedMonth,
-        time: selectedTime,
-        barangay: selectedZone,
+        categories: selectedCategories,
+        incidents: selectedIncidents,
+        months: selectedMonths,
+        times: selectedTimes,
+        barangays: selectedZones,
         customIncidents,
         initialIncidents: archiveDataset,
         initialTotal: pagination?.total ?? archiveDataset.length,
@@ -192,9 +192,9 @@ export default function IncidentTable({
         return Array.from(new Set([...MAIN_CATEGORIES, ...customCategories]));
     }, [customCategories]);
 
-    // Available Incidents / Specific Complaints (2. Incident) dynamically filtered by selected Category + DB + custom incidents
+    // Available Incidents / Specific Complaints (2. Chief Complaint) dynamically filtered by selected Categories + DB + custom incidents
     const availableIncidents = useMemo(() => {
-        if (!selectedCategory || selectedCategory === 'all') {
+        if (selectedCategories.length === 0) {
             const allCustom = Object.values(customIncidents).flat();
             const allDbByCat = Object.values(dbChiefComplaintsByCategory || {}).flat();
             return Array.from(
@@ -207,61 +207,54 @@ export default function IncidentTable({
             ).sort((a, b) => a.localeCompare(b));
         }
 
-        // Base complaints if it's one of the 5 official categories
-        const base = INCIDENT_TYPES_BY_CATEGORY[selectedCategory as any] || [];
+        const collected: string[] = [];
+        for (const selCat of selectedCategories) {
+            const base = INCIDENT_TYPES_BY_CATEGORY[selCat as any] || [];
+            collected.push(...base);
 
-        // Find DB & custom incidents matching this category (case-insensitive lookup)
-        const targetNorm = selectedCategory.trim().toLowerCase();
-        let extraForCat: string[] = [];
-        for (const sourceMap of [dbChiefComplaintsByCategory || {}, customIncidents]) {
-            for (const [catKey, incList] of Object.entries(sourceMap)) {
-                if (catKey.trim().toLowerCase() === targetNorm && Array.isArray(incList)) {
-                    extraForCat = [...extraForCat, ...incList];
+            const targetNorm = selCat.trim().toLowerCase();
+            for (const sourceMap of [dbChiefComplaintsByCategory || {}, customIncidents]) {
+                for (const [catKey, incList] of Object.entries(sourceMap)) {
+                    if (catKey.trim().toLowerCase() === targetNorm && Array.isArray(incList)) {
+                        collected.push(...incList);
+                    }
                 }
             }
         }
 
         return Array.from(
-            new Set([...base, ...extraForCat].filter((item) => typeof item === 'string' && item.trim().length > 0)),
+            new Set(collected.filter((item) => typeof item === 'string' && item.trim().length > 0)),
         ).sort((a, b) => a.localeCompare(b));
-    }, [selectedCategory, customIncidents, chiefComplaints, dbChiefComplaintsByCategory]);
+    }, [selectedCategories, customIncidents, chiefComplaints, dbChiefComplaintsByCategory]);
 
-    // Handle cascading category change
-    const handleCategoryChange = (cat: string) => {
-        setSelectedCategory(cat);
-        if (selectedIncident !== 'all' && cat !== 'all') {
-            const standardAllowed = INCIDENT_TYPES_BY_CATEGORY[cat as any] || [];
-            const targetNorm = cat.trim().toLowerCase();
-            let customAllowed: string[] = [];
-            for (const [k, list] of Object.entries(customIncidents)) {
-                if (k.trim().toLowerCase() === targetNorm && Array.isArray(list)) {
-                    customAllowed = [...customAllowed, ...list];
+    // Handle cascading multi-category change
+    const handleCategoriesChange = (nextCats: string[]) => {
+        setSelectedCategories(nextCats);
+        if (selectedIncidents.length > 0 && nextCats.length > 0) {
+            const allowedSet = new Set<string>();
+            for (const cat of nextCats) {
+                for (const item of INCIDENT_TYPES_BY_CATEGORY[cat as any] || []) {
+                    allowedSet.add(item);
+                }
+                const targetNorm = cat.trim().toLowerCase();
+                for (const sourceMap of [dbChiefComplaintsByCategory || {}, customIncidents]) {
+                    for (const [k, list] of Object.entries(sourceMap)) {
+                        if (k.trim().toLowerCase() === targetNorm && Array.isArray(list)) {
+                            for (const item of list) allowedSet.add(item);
+                        }
+                    }
                 }
             }
-            const allowed = [...standardAllowed, ...customAllowed];
-            if (!allowed.includes(selectedIncident)) {
-                setSelectedIncident('all');
+            const pruned = selectedIncidents.filter((inc) => allowedSet.has(inc));
+            if (pruned.length !== selectedIncidents.length) {
+                setSelectedIncidents(pruned);
             }
         }
     };
 
-    // Handle incident change with auto category sync
-    const handleIncidentChange = (incName: string) => {
-        setSelectedIncident(incName);
-        if (incName !== 'all') {
-            let parentCat: string | null = getCategoryForIncident(incName);
-            if (!parentCat || parentCat === 'Other / Non-Emergency') {
-                for (const [c, list] of Object.entries(customIncidents)) {
-                    if (Array.isArray(list) && list.some(item => item.toLowerCase() === incName.toLowerCase())) {
-                        parentCat = c;
-                        break;
-                    }
-                }
-            }
-            if (parentCat && selectedCategory === 'all') {
-                setSelectedCategory(parentCat);
-            }
-        }
+    // Handle multi-incident change
+    const handleIncidentsChange = (nextIncs: string[]) => {
+        setSelectedIncidents(nextIncs);
     };
 
     const handleAddCategory = async (newCat: string) => {
@@ -301,9 +294,15 @@ export default function IncidentTable({
         const updatedMap = getStoredCustomIncidents();
         setCustomIncidents(updatedMap);
 
-        // If the user currently has this category selected in the filter, select the new incident
-        if (selectedCategory.trim().toLowerCase() === cat.trim().toLowerCase()) {
-            setSelectedIncident(result.incident);
+        // If the user currently has this category selected in the filter, add the new incident to selection
+        if (
+            selectedCategories.some(
+                (c) => c.trim().toLowerCase() === cat.trim().toLowerCase(),
+            )
+        ) {
+            setSelectedIncidents((prev) =>
+                prev.includes(result.incident) ? prev : [...prev, result.incident],
+            );
         }
 
         // Save to database so responder mobile app immediately receives it
@@ -347,11 +346,11 @@ export default function IncidentTable({
 
     // Check if any filters are active
     const hasActiveFilters = 
-        selectedCategory !== 'all' || 
-        selectedIncident !== 'all' || 
-        selectedMonth !== 'all' || 
-        selectedTime !== 'all' || 
-        selectedZone !== 'all' || 
+        selectedCategories.length > 0 || 
+        selectedIncidents.length > 0 || 
+        selectedMonths.length > 0 || 
+        selectedTimes.length > 0 || 
+        selectedZones.length > 0 || 
         searchQuery.trim().length > 0;
 
     // Helper to resolve PCR Chief Complaint
@@ -478,11 +477,11 @@ export default function IncidentTable({
     };
 
     const handleResetFilters = () => {
-        setSelectedCategory('all');
-        setSelectedIncident('all');
-        setSelectedMonth('all');
-        setSelectedTime('all');
-        setSelectedZone('all');
+        setSelectedCategories([]);
+        setSelectedIncidents([]);
+        setSelectedMonths([]);
+        setSelectedTimes([]);
+        setSelectedZones([]);
         clearSearch();
         setRecordsPage(1);
     };
@@ -764,108 +763,91 @@ export default function IncidentTable({
                             </div>
                         )}
 
-                        {/* HORIZONTAL FILTER ROW: 1. Category, 2. Incident, 3. Month, 4. Time, 5. Zone */}
+                        {/* HORIZONTAL MULTI-SELECT FILTER ROW: 1. Category, 2. Chief Complaint, 3. Month, 4. Time, 5. Barangay */}
                         <div className="px-4 py-3 bg-slate-50/70 dark:bg-white/[0.02] border-b border-slate-200/80 dark:border-white/10">
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                                 
-                                {/* 1. Category */}
+                                {/* 1. Category (Multi-Select) */}
                                 <div>
                                     <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                                         Category
                                     </label>
-                                    <div className="relative">
-                                        <select
-                                            value={selectedCategory}
-                                            onChange={(e) => handleCategoryChange(e.target.value)}
-                                            className="w-full text-xs py-2 pl-3 pr-8 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer appearance-none shadow-2xs truncate font-medium"
-                                        >
-                                            <option value="all">All Categories</option>
-                                            {availableCategories.map((cat) => (
-                                                <option key={cat} value={cat} className="capitalize text-xs">
-                                                    {cat}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                    </div>
+                                    <MultiSelectFilterCombobox
+                                        values={selectedCategories}
+                                        onChange={handleCategoriesChange}
+                                        options={availableCategories.map((cat) => ({
+                                            value: cat,
+                                            label: cat,
+                                        }))}
+                                        allLabel="All Categories"
+                                        searchable={true}
+                                        searchPlaceholder="Search category..."
+                                    />
                                 </div>
 
-                                {/* 2. Chief Complaint (Searchable Combobox) */}
+                                {/* 2. Chief Complaint (Multi-Select Searchable Combobox) */}
                                 <div>
                                     <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                                         Chief Complaint
                                     </label>
-                                    <ChiefComplaintCombobox
-                                        value={selectedIncident}
-                                        onChange={handleIncidentChange}
-                                        options={availableIncidents}
-                                        placeholder="Type to search chief complaint..."
+                                    <MultiSelectFilterCombobox
+                                        values={selectedIncidents}
+                                        onChange={handleIncidentsChange}
+                                        options={availableIncidents.map((incName) => ({
+                                            value: incName,
+                                            label: incName,
+                                        }))}
                                         allLabel="All Chief Complaints"
+                                        searchable={true}
+                                        searchPlaceholder="Type to search chief complaint..."
                                     />
                                 </div>
 
-                                {/* 3. Month */}
+                                {/* 3. Month (Multi-Select) */}
                                 <div>
                                     <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                                         Month
                                     </label>
-                                    <div className="relative">
-                                        <select
-                                            value={selectedMonth}
-                                            onChange={(e) => setSelectedMonth(e.target.value)}
-                                            className="w-full text-xs py-2 pl-3 pr-8 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer appearance-none shadow-2xs truncate"
-                                        >
-                                            {MONTH_OPTIONS.map((m) => (
-                                                <option key={m.value} value={m.value}>
-                                                    {m.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                    </div>
+                                    <MultiSelectFilterCombobox
+                                        values={selectedMonths}
+                                        onChange={setSelectedMonths}
+                                        options={MONTH_OPTIONS.filter((m) => m.value !== 'all')}
+                                        allLabel="All Months"
+                                        searchable={true}
+                                        searchPlaceholder="Search month..."
+                                    />
                                 </div>
 
-                                {/* 4. Time */}
+                                {/* 4. Time (Multi-Select) */}
                                 <div>
                                     <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                                         Time
                                     </label>
-                                    <div className="relative">
-                                        <select
-                                            value={selectedTime}
-                                            onChange={(e) => setSelectedTime(e.target.value)}
-                                            className="w-full text-xs py-2 pl-3 pr-8 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer appearance-none shadow-2xs truncate"
-                                        >
-                                            {TIME_OPTIONS.map((t) => (
-                                                <option key={t.value} value={t.value}>
-                                                    {t.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                    </div>
+                                    <MultiSelectFilterCombobox
+                                        values={selectedTimes}
+                                        onChange={setSelectedTimes}
+                                        options={TIME_OPTIONS.filter((t) => t.value !== 'all')}
+                                        allLabel="All Times"
+                                        searchable={false}
+                                    />
                                 </div>
 
-                                {/* 5. Barangay */}
+                                {/* 5. Barangay (Multi-Select) */}
                                 <div>
                                     <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                                         Barangay
                                     </label>
-                                    <div className="relative">
-                                        <select
-                                            value={selectedZone}
-                                            onChange={(e) => setSelectedZone(e.target.value)}
-                                            className="w-full text-xs py-2 pl-3 pr-8 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer appearance-none shadow-2xs truncate font-medium"
-                                        >
-                                            <option value="all">All Barangays</option>
-                                            {availableZones.map((z) => (
-                                                <option key={z} value={z}>
-                                                    Brgy. {z}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                    </div>
+                                    <MultiSelectFilterCombobox
+                                        values={selectedZones}
+                                        onChange={setSelectedZones}
+                                        options={availableZones.map((z) => ({
+                                            value: z,
+                                            label: `Brgy. ${z}`,
+                                        }))}
+                                        allLabel="All Barangays"
+                                        searchable={true}
+                                        searchPlaceholder="Search barangay..."
+                                    />
                                 </div>
 
                             </div>
@@ -878,50 +860,104 @@ export default function IncidentTable({
                                     Active:
                                 </span>
 
-                                {selectedCategory !== 'all' && (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/20">
-                                        <span>Category: {selectedCategory}</span>
-                                        <button onClick={() => setSelectedCategory('all')} className="hover:opacity-75 cursor-pointer">
+                                {selectedCategories.map((cat) => (
+                                    <span
+                                        key={`cat-${cat}`}
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/20"
+                                    >
+                                        <span>Category: {cat}</span>
+                                        <button
+                                            onClick={() =>
+                                                handleCategoriesChange(
+                                                    selectedCategories.filter((c) => c !== cat),
+                                                )
+                                            }
+                                            className="hover:opacity-75 cursor-pointer"
+                                        >
                                             <X className="w-3 h-3 ml-0.5" />
                                         </button>
                                     </span>
-                                )}
+                                ))}
 
-                                {selectedIncident !== 'all' && (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/20">
-                                        <span>Chief Complaint: {selectedIncident}</span>
-                                        <button onClick={() => setSelectedIncident('all')} className="hover:opacity-75 cursor-pointer">
+                                {selectedIncidents.map((incName) => (
+                                    <span
+                                        key={`inc-${incName}`}
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/20"
+                                    >
+                                        <span>Chief Complaint: {incName}</span>
+                                        <button
+                                            onClick={() =>
+                                                handleIncidentsChange(
+                                                    selectedIncidents.filter((i) => i !== incName),
+                                                )
+                                            }
+                                            className="hover:opacity-75 cursor-pointer"
+                                        >
                                             <X className="w-3 h-3 ml-0.5" />
                                         </button>
                                     </span>
-                                )}
+                                ))}
 
-                                {selectedMonth !== 'all' && (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20">
-                                        <span>Month: {MONTH_OPTIONS.find(m => m.value === selectedMonth)?.label}</span>
-                                        <button onClick={() => setSelectedMonth('all')} className="hover:opacity-75 cursor-pointer">
+                                {selectedMonths.map((monthVal) => (
+                                    <span
+                                        key={`month-${monthVal}`}
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20"
+                                    >
+                                        <span>
+                                            Month: {MONTH_OPTIONS.find((m) => m.value === monthVal)?.label || monthVal}
+                                        </span>
+                                        <button
+                                            onClick={() =>
+                                                setSelectedMonths(
+                                                    selectedMonths.filter((m) => m !== monthVal),
+                                                )
+                                            }
+                                            className="hover:opacity-75 cursor-pointer"
+                                        >
                                             <X className="w-3 h-3 ml-0.5" />
                                         </button>
                                     </span>
-                                )}
+                                ))}
 
-                                {selectedTime !== 'all' && (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/20">
-                                        <span>Time: {TIME_OPTIONS.find(t => t.value === selectedTime)?.label}</span>
-                                        <button onClick={() => setSelectedTime('all')} className="hover:opacity-75 cursor-pointer">
+                                {selectedTimes.map((timeVal) => (
+                                    <span
+                                        key={`time-${timeVal}`}
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/20"
+                                    >
+                                        <span>
+                                            Time: {TIME_OPTIONS.find((t) => t.value === timeVal)?.label || timeVal}
+                                        </span>
+                                        <button
+                                            onClick={() =>
+                                                setSelectedTimes(
+                                                    selectedTimes.filter((t) => t !== timeVal),
+                                                )
+                                            }
+                                            className="hover:opacity-75 cursor-pointer"
+                                        >
                                             <X className="w-3 h-3 ml-0.5" />
                                         </button>
                                     </span>
-                                )}
+                                ))}
 
-                                {selectedZone !== 'all' && (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-500/20">
-                                        <span>Brgy. {selectedZone}</span>
-                                        <button onClick={() => setSelectedZone('all')} className="hover:opacity-75 cursor-pointer">
+                                {selectedZones.map((zoneVal) => (
+                                    <span
+                                        key={`zone-${zoneVal}`}
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-500/20"
+                                    >
+                                        <span>Brgy. {zoneVal}</span>
+                                        <button
+                                            onClick={() =>
+                                                setSelectedZones(
+                                                    selectedZones.filter((z) => z !== zoneVal),
+                                                )
+                                            }
+                                            className="hover:opacity-75 cursor-pointer"
+                                        >
                                             <X className="w-3 h-3 ml-0.5" />
                                         </button>
                                     </span>
-                                )}
+                                ))}
 
                                 {searchQuery.trim() && (
                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-200/80 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/10">
@@ -1123,7 +1159,7 @@ export default function IncidentTable({
                 onClose={() => setIsAddIncidentModalOpen(false)}
                 onAddIncidentType={handleAddIncidentType}
                 categories={availableCategories}
-                defaultCategory={selectedCategory !== 'all' ? selectedCategory : undefined}
+                defaultCategory={selectedCategories.length === 1 ? selectedCategories[0] : undefined}
             />
 
             {/* Official MDRRMO Monthly Response Report Print Preview Modal */}
@@ -1137,17 +1173,17 @@ export default function IncidentTable({
                 open={isPinsMapModalOpen}
                 onClose={() => setIsPinsMapModalOpen(false)}
                 filters={{
-                    category: selectedCategory,
-                    incident: selectedIncident,
-                    month: selectedMonth,
-                    monthLabel:
-                        MONTH_OPTIONS.find((m) => m.value === selectedMonth)?.label ||
-                        'All Months',
-                    time: selectedTime,
-                    timeLabel:
-                        TIME_OPTIONS.find((t) => t.value === selectedTime)?.label ||
-                        'All Times',
-                    barangay: selectedZone,
+                    categories: selectedCategories,
+                    incidents: selectedIncidents,
+                    months: selectedMonths,
+                    monthLabels: selectedMonths.map(
+                        (mv) => MONTH_OPTIONS.find((m) => m.value === mv)?.label || mv,
+                    ),
+                    times: selectedTimes,
+                    timeLabels: selectedTimes.map(
+                        (tv) => TIME_OPTIONS.find((t) => t.value === tv)?.label || tv,
+                    ),
+                    barangays: selectedZones,
                     search: searchQuery,
                     customIncidents,
                 }}

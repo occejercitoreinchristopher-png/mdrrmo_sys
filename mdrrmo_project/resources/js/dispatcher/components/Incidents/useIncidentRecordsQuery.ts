@@ -14,11 +14,11 @@ export interface IncidentRecordsResponse {
 
 interface UseIncidentRecordsQueryOptions {
     enabled: boolean;
-    category: string;
-    incident: string;
-    month: string;
-    time: string;
-    barangay: string;
+    categories: string[];
+    incidents: string[];
+    months: string[];
+    times: string[];
+    barangays: string[];
     customIncidents?: Record<string, string[]>;
     initialIncidents?: any[];
     initialTotal?: number;
@@ -28,11 +28,11 @@ interface UseIncidentRecordsQueryOptions {
 
 export function useIncidentRecordsQuery({
     enabled,
-    category,
-    incident,
-    month,
-    time,
-    barangay,
+    categories,
+    incidents,
+    months,
+    times,
+    barangays,
     customIncidents = {},
     initialIncidents = [],
     initialTotal,
@@ -69,19 +69,25 @@ export function useIncidentRecordsQuery({
         };
     }, [searchQuery, debounceMs]);
 
+    const categoriesKey = categories.join('\x1f');
+    const incidentsKey = incidents.join('\x1f');
+    const monthsKey = months.join('\x1f');
+    const timesKey = times.join('\x1f');
+    const barangaysKey = barangays.join('\x1f');
+
     // Reset to page 1 whenever any dropdown filter or perPage changes
     useEffect(() => {
         setPage(1);
-    }, [category, incident, month, time, barangay, perPage]);
+    }, [categoriesKey, incidentsKey, monthsKey, timesKey, barangaysKey, perPage]);
 
     const isDefaultUnfilteredPage1 =
         page === 1 &&
         !debouncedSearch &&
-        category === 'all' &&
-        incident === 'all' &&
-        month === 'all' &&
-        time === 'all' &&
-        barangay === 'all';
+        categories.length === 0 &&
+        incidents.length === 0 &&
+        months.length === 0 &&
+        times.length === 0 &&
+        barangays.length === 0;
 
     const fallbackTotal = initialTotal ?? initialIncidents.length;
 
@@ -90,11 +96,11 @@ export function useIncidentRecordsQuery({
         'incident-records',
         {
             search: debouncedSearch,
-            category,
-            incident,
-            month,
-            time,
-            barangay,
+            categories: categoriesKey,
+            incidents: incidentsKey,
+            months: monthsKey,
+            times: timesKey,
+            barangays: barangaysKey,
             page,
             perPage,
         },
@@ -116,11 +122,11 @@ export function useIncidentRecordsQuery({
             });
 
             if (debouncedSearch) params.set('search', debouncedSearch);
-            if (category && category !== 'all') params.set('category', category);
-            if (incident && incident !== 'all') params.set('incident', incident);
-            if (month && month !== 'all') params.set('month', month);
-            if (time && time !== 'all') params.set('time', time);
-            if (barangay && barangay !== 'all') params.set('barangay', barangay);
+            categories.forEach((c) => params.append('category[]', c));
+            incidents.forEach((i) => params.append('incident[]', i));
+            months.forEach((m) => params.append('month[]', m));
+            times.forEach((t) => params.append('time[]', t));
+            barangays.forEach((b) => params.append('barangay[]', b));
 
             if (customIncidents && Object.keys(customIncidents).length > 0) {
                 params.set('custom_incidents', JSON.stringify(customIncidents));

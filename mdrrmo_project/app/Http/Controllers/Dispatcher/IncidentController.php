@@ -149,11 +149,30 @@ class IncidentController extends Controller
         $page = max(1, (int) $request->query('page', 1));
         $perPage = min(100, max(5, (int) $request->query('per_page', 10)));
         $search = trim((string) $request->query('search', ''));
-        $selectedCategory = trim((string) $request->query('category', 'all'));
-        $selectedIncident = trim((string) $request->query('incident', 'all'));
-        $selectedMonth = (string) $request->query('month', 'all');
-        $selectedTime = (string) $request->query('time', 'all');
-        $selectedZone = trim((string) $request->query('barangay', 'all'));
+
+        $parseMultiParam = static function ($raw): array {
+            if ($raw === null || $raw === '') {
+                return [];
+            }
+            $items = is_array($raw) ? $raw : [$raw];
+            $cleaned = [];
+            foreach ($items as $v) {
+                if (! is_scalar($v)) {
+                    continue;
+                }
+                $s = trim((string) $v);
+                if ($s !== '' && strtolower($s) !== 'all') {
+                    $cleaned[] = $s;
+                }
+            }
+            return array_values(array_unique($cleaned));
+        };
+
+        $selectedCategories = $parseMultiParam($request->query('category'));
+        $selectedIncidents = $parseMultiParam($request->query('incident'));
+        $selectedMonths = $parseMultiParam($request->query('month'));
+        $selectedTimes = $parseMultiParam($request->query('time'));
+        $selectedZones = $parseMultiParam($request->query('barangay'));
 
         // Merge DB custom complaints with any client-passed custom_incidents
         $customMap = [];
@@ -214,37 +233,52 @@ class IncidentController extends Controller
         ->where('is_prank', false)
         ->latest();
 
-        // SQL-level Month filter (JS sends 0..11)
-        if ($selectedMonth !== 'all' && is_numeric($selectedMonth)) {
-            $sqlMonth = (int) $selectedMonth + 1;
-            if ($sqlMonth >= 1 && $sqlMonth <= 12) {
-                $query->where(function ($mq) use ($sqlMonth) {
-                    $mq->whereMonth('reported_at', $sqlMonth)
-                       ->orWhere(function ($smq) use ($sqlMonth) {
-                           $smq->whereNull('reported_at')->whereMonth('created_at', $sqlMonth);
-                       });
+        // SQL-level Month filter (JS sends 0..11; supports single or multiple months)
+        if (! empty($selectedMonths)) {
+            $sqlMonths = [];
+            foreach ($selectedMonths as $m) {
+                if (is_numeric($m)) {
+                    $sqlMonth = (int) $m + 1;
+                    if ($sqlMonth >= 1 && $sqlMonth <= 12) {
+                        $sqlMonths[] = $sqlMonth;
+                    }
+                }
+            }
+            $sqlMonths = array_values(array_unique($sqlMonths));
+            if (! empty($sqlMonths)) {
+                $placeholders = implode(',', array_fill(0, count($sqlMonths), '?'));
+                $query->whereRaw("MONTH(COALESCE(reported_at, created_at)) IN ({$placeholders})", $sqlMonths);
+            }
+        }
+
+        // SQL-level Time-of-day filter (supports single or multiple time ranges)
+        if (! empty($selectedTimes)) {
+            $validTimes = array_values(array_filter(
+                array_map('strtolower', $selectedTimes),
+                static fn ($t) => in_array($t, ['morning', 'afternoon', 'evening', 'night'], true)
+            ));
+            if (! empty($validTimes)) {
+                $query->where(function ($tq) use ($validTimes) {
+                    foreach ($validTimes as $t) {
+                        $hourRange = match ($t) {
+                            'morning' => [6, 11],
+                            'afternoon' => [12, 17],
+                            'evening' => [18, 23],
+                            'night' => [0, 5],
+                        };
+                        $tq->orWhereRaw('HOUR(COALESCE(reported_at, created_at)) BETWEEN ? AND ?', $hourRange);
+                    }
                 });
             }
         }
 
-        // SQL-level Time-of-day filter
-        if (in_array($selectedTime, ['morning', 'afternoon', 'evening', 'night'], true)) {
-            $hourRange = match ($selectedTime) {
-                'morning' => [6, 11],
-                'afternoon' => [12, 17],
-                'evening' => [18, 23],
-                'night' => [0, 5],
-            };
-            $query->whereRaw('HOUR(COALESCE(reported_at, created_at)) BETWEEN ? AND ?', $hourRange);
-        }
-
         $records = $query->get();
 
-        // Filter by Category, Chief Complaint, Barangay, and Debounced Search Keyword
+        // Filter by Categories, Chief Complaints, Barangays, and Debounced Search Keyword
         $filtered = $records->filter(function (Incident $inc) use (
-            $selectedCategory,
-            $selectedIncident,
-            $selectedZone,
+            $selectedCategories,
+            $selectedIncidents,
+            $selectedZones,
             $search,
             $customMap
         ) {
@@ -252,49 +286,64 @@ class IncidentController extends Controller
             $incTypeName = trim((string) ($inc->incidentType?->incident_type_name ?? ''));
             $authoritativeCat = $this->resolveCategoryForIncident($incComplaint, $incTypeName, $customMap);
 
-            // 1. Category Filter
-            if ($selectedCategory !== '' && strtolower($selectedCategory) !== 'all') {
-                $selCatLower = strtolower($selectedCategory);
-                $customMatches = false;
-                foreach ($customMap as $cKey => $cList) {
-                    if (strtolower(trim($cKey)) === $selCatLower) {
-                        foreach ($cList as $ci) {
-                            $normCi = strtolower(trim($ci));
-                            if (
-                                ($incComplaint !== '' && str_contains(strtolower($incComplaint), $normCi)) ||
-                                ($incTypeName !== '' && str_contains(strtolower($incTypeName), $normCi))
-                            ) {
-                                $customMatches = true;
-                                break 2;
+            // 1. Category Filter (matches ANY selected category)
+            if (! empty($selectedCategories)) {
+                $matchesAnyCategory = false;
+                foreach ($selectedCategories as $selCat) {
+                    $selCatLower = strtolower($selCat);
+                    $customMatches = false;
+                    foreach ($customMap as $cKey => $cList) {
+                        if (strtolower(trim($cKey)) === $selCatLower) {
+                            foreach ($cList as $ci) {
+                                $normCi = strtolower(trim($ci));
+                                if (
+                                    ($incComplaint !== '' && str_contains(strtolower($incComplaint), $normCi)) ||
+                                    ($incTypeName !== '' && str_contains(strtolower($incTypeName), $normCi))
+                                ) {
+                                    $customMatches = true;
+                                    break 2;
+                                }
                             }
                         }
                     }
+
+                    if (
+                        strtolower(trim($authoritativeCat)) === $selCatLower ||
+                        strtolower(trim($incTypeName)) === $selCatLower ||
+                        $customMatches
+                    ) {
+                        $matchesAnyCategory = true;
+                        break;
+                    }
                 }
 
-                $matchesCategory =
-                    strtolower(trim($authoritativeCat)) === $selCatLower ||
-                    strtolower(trim($incTypeName)) === $selCatLower ||
-                    $customMatches;
-
-                if (! $matchesCategory) {
+                if (! $matchesAnyCategory) {
                     return false;
                 }
             }
 
-            // 2. Chief Complaint / Incident Filter
-            if ($selectedIncident !== '' && strtolower($selectedIncident) !== 'all') {
-                $target = strtolower($selectedIncident);
-                if (
-                    ! str_contains(strtolower($incComplaint), $target) &&
-                    ! str_contains(strtolower($incTypeName), $target)
-                ) {
+            // 2. Chief Complaint / Incident Filter (matches ANY selected chief complaint)
+            if (! empty($selectedIncidents)) {
+                $matchesAnyIncident = false;
+                $incComplaintLower = strtolower($incComplaint);
+                $incTypeLower = strtolower($incTypeName);
+                foreach ($selectedIncidents as $selInc) {
+                    $target = strtolower($selInc);
+                    if (
+                        str_contains($incComplaintLower, $target) ||
+                        str_contains($incTypeLower, $target)
+                    ) {
+                        $matchesAnyIncident = true;
+                        break;
+                    }
+                }
+                if (! $matchesAnyIncident) {
                     return false;
                 }
             }
 
-            // 3. Barangay / Zone Filter
-            if ($selectedZone !== '' && strtolower($selectedZone) !== 'all') {
-                $normTarget = preg_replace('/[\s-]+/', '', strtolower($selectedZone));
+            // 3. Barangay / Zone Filter (matches ANY selected barangay)
+            if (! empty($selectedZones)) {
                 $rawBarangay = $inc->barangay;
                 $barangayStr = is_array($rawBarangay)
                     ? ($rawBarangay['barangay_name'] ?? $rawBarangay['name'] ?? '')
@@ -304,7 +353,15 @@ class IncidentController extends Controller
                 $placeRaw = $inc->place_of_incident ?? $inc->incident_address ?? (is_string($inc->location) ? $inc->location : '');
                 $placeNorm = preg_replace('/[\s-]+/', '', strtolower((string) $placeRaw));
 
-                if (! str_contains($incBarangay, $normTarget) && ! str_contains($placeNorm, $normTarget)) {
+                $matchesAnyZone = false;
+                foreach ($selectedZones as $selZone) {
+                    $normTarget = preg_replace('/[\s-]+/', '', strtolower($selZone));
+                    if (str_contains($incBarangay, $normTarget) || str_contains($placeNorm, $normTarget)) {
+                        $matchesAnyZone = true;
+                        break;
+                    }
+                }
+                if (! $matchesAnyZone) {
                     return false;
                 }
             }

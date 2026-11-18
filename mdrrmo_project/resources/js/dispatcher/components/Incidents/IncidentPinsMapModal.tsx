@@ -19,13 +19,13 @@ import { useAppearance } from '@/shared/contexts/ThemeContext';
 import StatusBadge from '@/shared/components/StatusBadge';
 
 export interface IncidentPinsMapFilters {
-    category: string;
-    incident: string;
-    month: string;
-    monthLabel: string;
-    time: string;
-    timeLabel: string;
-    barangay: string;
+    categories: string[];
+    incidents: string[];
+    months: string[];
+    monthLabels: string[];
+    times: string[];
+    timeLabels: string[];
+    barangays: string[];
     search: string;
     customIncidents?: Record<string, string[]>;
 }
@@ -125,6 +125,12 @@ export default function IncidentPinsMapModal({
         zoom: 12.2,
     });
 
+    const categoriesKey = filters.categories.join('\x1f');
+    const incidentsKey = filters.incidents.join('\x1f');
+    const monthsKey = filters.months.join('\x1f');
+    const timesKey = filters.times.join('\x1f');
+    const barangaysKey = filters.barangays.join('\x1f');
+
     // Fetch ALL matching filtered incidents from the same backend endpoint
     const { data, isLoading, isFetching } = useQuery<{
         data: any[];
@@ -134,11 +140,11 @@ export default function IncidentPinsMapModal({
         queryKey: [
             'incident-records-all-pins',
             {
-                category: filters.category,
-                incident: filters.incident,
-                month: filters.month,
-                time: filters.time,
-                barangay: filters.barangay,
+                categories: categoriesKey,
+                incidents: incidentsKey,
+                months: monthsKey,
+                times: timesKey,
+                barangays: barangaysKey,
                 search: filters.search.trim(),
                 customIncidents: filters.customIncidents || {},
             },
@@ -146,11 +152,11 @@ export default function IncidentPinsMapModal({
         queryFn: async ({ signal }) => {
             const params = new URLSearchParams({ all: '1' });
             if (filters.search.trim()) params.set('search', filters.search.trim());
-            if (filters.category && filters.category !== 'all') params.set('category', filters.category);
-            if (filters.incident && filters.incident !== 'all') params.set('incident', filters.incident);
-            if (filters.month && filters.month !== 'all') params.set('month', filters.month);
-            if (filters.time && filters.time !== 'all') params.set('time', filters.time);
-            if (filters.barangay && filters.barangay !== 'all') params.set('barangay', filters.barangay);
+            filters.categories.forEach((c) => params.append('category[]', c));
+            filters.incidents.forEach((i) => params.append('incident[]', i));
+            filters.months.forEach((m) => params.append('month[]', m));
+            filters.times.forEach((t) => params.append('time[]', t));
+            filters.barangays.forEach((b) => params.append('barangay[]', b));
             if (filters.customIncidents && Object.keys(filters.customIncidents).length > 0) {
                 params.set('custom_incidents', JSON.stringify(filters.customIncidents));
             }
@@ -239,22 +245,24 @@ export default function IncidentPinsMapModal({
         return Object.entries(counts).sort((a, b) => b[1] - a[1]);
     }, [plottedIncidents]);
 
-    // Highlighted barangay boundary when Barangay filter is active
+    // Highlighted barangay boundaries when 1+ Barangays are selected
     const highlightedBarangayGeojson = useMemo(() => {
-        if (!barangayGeojson?.features || !filters.barangay || filters.barangay === 'all') {
+        if (!barangayGeojson?.features || filters.barangays.length === 0) {
             return null;
         }
-        const norm = filters.barangay.toLowerCase().replace(/[\s-]/g, '');
+        const normTargets = filters.barangays.map((b) =>
+            b.toLowerCase().replace(/[\s-]/g, ''),
+        );
         const matching = barangayGeojson.features.filter((f: any) => {
             const name = (f.properties?.name ?? '').toLowerCase().replace(/[\s-]/g, '');
-            return name === norm;
+            return normTargets.includes(name);
         });
         if (matching.length === 0) return null;
         return {
             type: 'FeatureCollection' as const,
             features: matching,
         };
-    }, [barangayGeojson, filters.barangay]);
+    }, [barangayGeojson, barangaysKey]);
 
     const mapStyleUrl = useMemo(() => {
         switch (mapStyleMode) {
@@ -346,7 +354,7 @@ export default function IncidentPinsMapModal({
             fitAllPins();
         }, 180);
         return () => clearTimeout(timer);
-    }, [open, mapLoaded, plottedIncidents.length, filters.barangay, filters.category, filters.incident, filters.month, filters.time, filters.search]);
+    }, [open, mapLoaded, plottedIncidents.length, barangaysKey, categoriesKey, incidentsKey, monthsKey, timesKey, filters.search]);
 
     // ResizeObserver for Mapbox canvas inside modal
     useEffect(() => {
@@ -367,12 +375,27 @@ export default function IncidentPinsMapModal({
     // Build active filter summary items
     const activeFilterChips = useMemo(() => {
         const chips: { label: string; value: string }[] = [];
-        if (filters.category !== 'all') chips.push({ label: 'Category', value: filters.category });
-        if (filters.incident !== 'all') chips.push({ label: 'Chief Complaint', value: filters.incident });
-        if (filters.month !== 'all') chips.push({ label: 'Month', value: filters.monthLabel });
-        if (filters.time !== 'all') chips.push({ label: 'Time', value: filters.timeLabel });
-        if (filters.barangay !== 'all') chips.push({ label: 'Barangay', value: `Brgy. ${filters.barangay}` });
-        if (filters.search.trim()) chips.push({ label: 'Search', value: `"${filters.search.trim()}"` });
+        if (filters.categories.length > 0) {
+            chips.push({ label: 'Category', value: filters.categories.join(', ') });
+        }
+        if (filters.incidents.length > 0) {
+            chips.push({ label: 'Chief Complaint', value: filters.incidents.join(', ') });
+        }
+        if (filters.monthLabels.length > 0) {
+            chips.push({ label: 'Month', value: filters.monthLabels.join(', ') });
+        }
+        if (filters.timeLabels.length > 0) {
+            chips.push({ label: 'Time', value: filters.timeLabels.join(', ') });
+        }
+        if (filters.barangays.length > 0) {
+            chips.push({
+                label: 'Barangay',
+                value: filters.barangays.map((b) => `Brgy. ${b}`).join(', '),
+            });
+        }
+        if (filters.search.trim()) {
+            chips.push({ label: 'Search', value: `"${filters.search.trim()}"` });
+        }
         return chips;
     }, [filters]);
 
