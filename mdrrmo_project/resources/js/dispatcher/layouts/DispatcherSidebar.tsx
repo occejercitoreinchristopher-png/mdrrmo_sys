@@ -199,7 +199,7 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
         {
             group: 'Main',
             items: [
-                { label: 'Live Overview', icon: LayoutDashboard, href: '/dispatcher/dashboard' },
+                { label: 'Dashboard', icon: LayoutDashboard, href: '/dispatcher/dashboard' },
             ],
         },
         {
