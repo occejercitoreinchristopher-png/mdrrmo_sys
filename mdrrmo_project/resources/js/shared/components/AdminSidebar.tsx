@@ -6,7 +6,6 @@ import {
     Ambulance,
     MapPin,
     BarChart3,
-    Printer,
     User,
     Shield,
     CheckCircle2,
@@ -43,7 +42,6 @@ const navigation = [
         group: 'Analytics & Governance',
         items: [
             { label: 'Reports & Analytics', icon: BarChart3, href: '/admin/reports' },
-            { label: 'Monthly Report (Print)', icon: Printer, href: '/reports?print=monthly' },
             { label: 'Account Profile', icon: User, href: '/profile' },
         ],
     },
