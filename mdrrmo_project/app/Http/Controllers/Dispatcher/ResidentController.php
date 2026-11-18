@@ -129,6 +129,8 @@ class ResidentController extends Controller
 
         $resident->load(['residentProfile.barangay']);
         $resident->loadCount('reportedIncidents');
+        $resident->syncVerificationStatus();
+        $completeness = $resident->checkProfileCompleteness();
 
         // Strictly fetch incidents associated with this resident
         $incidents = $resident->reportedIncidents()
@@ -146,6 +148,7 @@ class ResidentController extends Controller
         return Inertia::render('dispatcher/ResidentDetails', [
             'resident' => $resident,
             'incidents' => $incidents,
+            'missingFields' => $completeness['missing_fields'],
         ]);
     }
 }

@@ -93,14 +93,22 @@ interface ResidentDetailsProps {
         last_name: string;
         email: string;
         phone_number?: string | null;
+        gender?: string | null;
+        birthdate?: string | null;
+        birthday?: string | null;
+        age?: number | null;
+        address?: string | null;
         role: string;
         status: string;
+        verification_status?: 'Verified' | 'Pending' | string | null;
+        is_verified?: boolean;
         created_at: string;
         reported_incidents_count: number;
         profile_photo_url?: string | null;
         resident_profile?: ResidentProfile | null;
     };
     incidents: IncidentRecord[];
+    missingFields?: string[];
 }
 
 interface InfoFieldCardProps {
@@ -171,7 +179,7 @@ function InfoFieldCard({
     );
 }
 
-export default function ResidentDetailsPage({ resident, incidents = [] }: ResidentDetailsProps) {
+export default function ResidentDetailsPage({ resident, incidents = [], missingFields = [] }: ResidentDetailsProps) {
     const { auth } = usePage().props as any;
     const Layout = auth?.user?.role === 'admin' ? AdminLayout : DispatcherLayout;
     
@@ -180,6 +188,9 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
     const [activeTab, setActiveTab] = useState<'overview' | 'incidents'>('overview');
 
     const profile = resident.resident_profile;
+    const isVerified = resident.is_verified ?? resident.verification_status === 'Verified';
+    const rawGender = resident.gender || profile?.gender || null;
+    const rawBirthdate = resident.birthdate || resident.birthday || profile?.birthdate || null;
     const rawBarangay = profile?.barangay?.barangay_name || 'Unassigned';
     const barangayName = toPascalCase(rawBarangay);
     const rawFullName = [resident?.first_name, resident?.middle_name, resident?.last_name]
@@ -227,12 +238,21 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
         return 'Opol, Misamis Oriental';
     };
 
-    // Full address computation
-    const addressParts = [
-        profile?.barangay ? `Barangay ${toPascalCase(profile.barangay.barangay_name)}` : null,
-        'Opol, Misamis Oriental',
-    ].filter(Boolean);
-    const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : 'No address provided';
+    // Full address computation (prefer saved home address from users table, then barangay fallback)
+    const fullAddress = (() => {
+        const savedAddress = resident.address?.trim();
+        if (savedAddress) {
+            const brgy = profile?.barangay?.barangay_name;
+            if (brgy && !savedAddress.toLowerCase().includes(brgy.toLowerCase())) {
+                return `${savedAddress}, Barangay ${toPascalCase(brgy)}, Opol, Misamis Oriental`;
+            }
+            return savedAddress;
+        }
+        if (profile?.barangay?.barangay_name) {
+            return `Barangay ${toPascalCase(profile.barangay.barangay_name)}, Opol, Misamis Oriental`;
+        }
+        return 'No address provided';
+    })();
 
     const formattedRegisteredDate = resident.created_at
         ? new Date(resident.created_at).toLocaleDateString('en-PH', {
@@ -242,17 +262,35 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
         })
         : '—';
 
-    const formattedBirthdate = profile?.birthdate
-        ? new Date(profile.birthdate).toLocaleDateString('en-PH', {
+    const parsedBirthdate = (() => {
+        if (!rawBirthdate) return null;
+        const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(rawBirthdate));
+        const d = isoMatch
+            ? new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]))
+            : new Date(rawBirthdate);
+        return isNaN(d.getTime()) ? null : d;
+    })();
+
+    const formattedBirthdate = parsedBirthdate
+        ? parsedBirthdate.toLocaleDateString('en-PH', {
             month: 'long',
             day: 'numeric',
             year: 'numeric',
         })
         : null;
 
-    const calculatedAge = profile?.birthdate
-        ? new Date().getFullYear() - new Date(profile.birthdate).getFullYear()
-        : null;
+    const calculatedAge = (() => {
+        if (parsedBirthdate) {
+            const today = new Date();
+            let years = today.getFullYear() - parsedBirthdate.getFullYear();
+            const monthDiff = today.getMonth() - parsedBirthdate.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < parsedBirthdate.getDate())) {
+                years--;
+            }
+            if (years >= 0 && years <= 120) return years;
+        }
+        return typeof resident.age === 'number' && resident.age > 0 ? resident.age : null;
+    })();
 
     const handleCopy = (text: string, title: string) => {
         navigator.clipboard.writeText(text);
@@ -299,7 +337,7 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
                         className="group inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-950 dark:text-slate-200 dark:hover:text-white bg-white hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200/80 dark:border-white/10 shadow-sm transition-all duration-150 cursor-pointer"
                     >
                         <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:text-slate-900 dark:text-slate-400 dark:group-hover:text-white group-hover:-translate-x-0.5 transition-transform" />
-                        <span>Back to Verified Residents</span>
+                        <span>Back to Residents</span>
                     </Link>
                 </div>
 
@@ -360,10 +398,17 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
                                         <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight uppercase">
                                             {displayFullName}
                                         </h1>
-                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20">
-                                            <ShieldCheck className="w-3 h-3" />
-                                            Verified Resident
-                                        </span>
+                                        {isVerified ? (
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                                                <ShieldCheck className="w-3 h-3" />
+                                                Verified Resident
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25">
+                                                <Clock className="w-3 h-3" />
+                                                Pending Verification
+                                            </span>
+                                        )}
                                     </div>
 
                                     <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
@@ -510,6 +555,17 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
                                         </div>
                                     </div>
 
+                                    {!isVerified && missingFields.length > 0 && (
+                                        <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300">
+                                            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+                                            <div className="text-xs leading-relaxed">
+                                                <span className="font-bold">Profile Pending Completion:</span>{' '}
+                                                This resident has not yet completed their Personal Info in the mobile app. Missing:{' '}
+                                                <span className="font-semibold">{missingFields.join(', ')}</span>.
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* 3-Column Names */}
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                                         <InfoFieldCard
@@ -537,7 +593,7 @@ export default function ResidentDetailsPage({ resident, incidents = [] }: Reside
                                         <InfoFieldCard
                                             icon={UserIcon}
                                             label="Gender"
-                                            value={profile?.gender || '—'}
+                                            value={rawGender}
                                             uppercaseValue={true}
                                         />
                                         <InfoFieldCard

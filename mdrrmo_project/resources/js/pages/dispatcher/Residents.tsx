@@ -52,8 +52,14 @@ interface ResidentUser {
     last_name: string;
     email: string;
     phone_number?: string | null;
+    gender?: string | null;
+    birthdate?: string | null;
+    birthday?: string | null;
+    age?: number | null;
     role: string;
     status: string;
+    verification_status?: string | null;
+    is_verified?: boolean;
     created_at: string;
     resident_profile?: ResidentProfile | null;
     reported_incidents_count: number;
@@ -424,6 +430,24 @@ export default function ResidentsPage({ residents, simCallers, barangays = [], f
                                         const initials = `${res.first_name?.[0] || ''}${res.last_name?.[0] || ''}`.toUpperCase();
                                         const formattedName = toPascalCase(fullName);
                                         const formattedBarangay = toPascalCase(barangayName);
+                                        const displayGender = res.gender || profile?.gender || null;
+                                        const rawBirthdate = res.birthdate || res.birthday || profile?.birthdate || null;
+                                        const displayAge = (() => {
+                                            if (rawBirthdate) {
+                                                const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(rawBirthdate));
+                                                const d = isoMatch
+                                                    ? new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]))
+                                                    : new Date(rawBirthdate);
+                                                if (!isNaN(d.getTime())) {
+                                                    const today = new Date();
+                                                    let years = today.getFullYear() - d.getFullYear();
+                                                    const m = today.getMonth() - d.getMonth();
+                                                    if (m < 0 || (m === 0 && today.getDate() < d.getDate())) years--;
+                                                    if (years >= 0 && years <= 120) return years;
+                                                }
+                                            }
+                                            return typeof res.age === 'number' && res.age > 0 ? res.age : null;
+                                        })();
 
                                         const formattedDate = res.created_at
                                             ? new Date(res.created_at).toLocaleDateString('en-PH', {
@@ -450,8 +474,8 @@ export default function ResidentsPage({ residents, simCallers, barangays = [], f
                                                                 {formattedName}
                                                             </p>
                                                             <p className="text-[11px] text-slate-500 dark:text-slate-400 capitalize">
-                                                                {profile?.gender ? profile.gender : 'Gender not set'}
-                                                                {profile?.birthdate ? ` • ${new Date().getFullYear() - new Date(profile.birthdate).getFullYear()} yrs` : ''}
+                                                                {displayGender ? displayGender : 'Gender not set'}
+                                                                {displayAge !== null ? ` • ${displayAge} yrs` : ''}
                                                             </p>
                                                         </div>
                                                     </div>

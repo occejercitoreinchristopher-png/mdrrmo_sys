@@ -77,6 +77,8 @@ class UserController extends Controller
 
         $resident->load(['residentProfile.barangay']);
         $resident->loadCount('reportedIncidents');
+        $resident->syncVerificationStatus();
+        $completeness = $resident->checkProfileCompleteness();
 
         $incidents = $resident->reportedIncidents()
             ->with([
@@ -93,6 +95,7 @@ class UserController extends Controller
         return Inertia::render('dispatcher/ResidentDetails', [
             'resident' => $resident,
             'incidents' => $incidents,
+            'missingFields' => $completeness['missing_fields'],
         ]);
     }
 
