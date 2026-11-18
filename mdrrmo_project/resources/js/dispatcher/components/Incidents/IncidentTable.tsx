@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { router } from '@inertiajs/react';
-import { Eye, AlertTriangle, X, PhoneCall, MapPin, Activity, RotateCcw, ChevronDown, Search, Plus, CheckCircle2, HeartPulse, Printer, Loader2 } from 'lucide-react';
+import { router, usePage } from '@inertiajs/react';
+import { AlertTriangle, X, PhoneCall, MapPin, Activity, RotateCcw, ChevronDown, Search, Plus, CheckCircle2, HeartPulse, Printer, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import DataTable from '@/shared/components/DataTable';
 import StatusBadge from '@/shared/components/StatusBadge';
@@ -8,6 +8,8 @@ import Button from '@/shared/components/Button';
 import PageHeader from '@/shared/components/PageHeader';
 import Card from '@/shared/components/Card';
 import Pagination from '@/shared/components/Pagination';
+import IncidentRowActionsDropdown from './IncidentRowPrintDropdown';
+import IncidentLocateModal from './IncidentLocateModal';
 import IncidentDetails from './IncidentDetails';
 import RejectModal from './RejectModal';
 import IncidentKanbanBoard from './IncidentKanbanBoard';
@@ -84,8 +86,14 @@ export default function IncidentTable({
     ambulances?: any[];
     responders?: any[];
 }) {
+    const { auth } = usePage<{ auth?: { user?: { first_name?: string; last_name?: string; name?: string } } }>().props;
+    const preparedByName = auth?.user
+        ? ([auth.user.first_name, auth.user.last_name].filter(Boolean).join(' ') || auth.user.name || undefined)
+        : undefined;
+
     // Active / Kanban states
     const [viewing, setViewing] = useState(null);
+    const [locatingIncident, setLocatingIncident] = useState<any | null>(null);
     const [rejecting, setRejecting] = useState(null);
     const [assigningIncident, setAssigningIncident] = useState<any | null>(null);
     const [phoneCallModalOpen, setPhoneCallModalOpen] = useState(false);
@@ -402,6 +410,56 @@ export default function IncidentTable({
         return 'Medical Emergency';
     };
 
+    // Helper to extract printable PCR records attached to an incident row
+    const getIncidentPcrEntries = (row: any): { id: number | string; label: string; record: any }[] => {
+        if (!row) return [];
+        const entries: { id: number | string; label: string; record: any }[] = [];
+        const seenIds = new Set<string | number>();
+
+        const pushPcr = (pcr: any, dispatch: any) => {
+            if (!pcr || typeof pcr !== 'object') return;
+            const key = pcr.id ?? `${dispatch?.id ?? 'd'}-${entries.length}`;
+            if (seenIds.has(key)) return;
+            seenIds.add(key);
+
+            const patient = pcr.patient || {};
+            const patientName = [patient.first_name, patient.last_name].filter(Boolean).join(' ')
+                || patient.full_name
+                || pcr.patient_name
+                || '';
+
+            entries.push({
+                id: key,
+                label: patientName,
+                record: {
+                    ...pcr,
+                    dispatch: {
+                        ...(dispatch || pcr.dispatch || {}),
+                        incident: row,
+                    },
+                },
+            });
+        };
+
+        if (Array.isArray(row.dispatches)) {
+            for (const d of row.dispatches) {
+                const list = d?.patient_care_records || d?.patientCareRecords;
+                if (Array.isArray(list)) {
+                    for (const p of list) pushPcr(p, d);
+                }
+                const single = d?.patient_care_record || d?.patientCareRecord;
+                if (single) pushPcr(single, d);
+            }
+        }
+
+        const directList = row.patient_care_records || row.patientCareRecords;
+        if (Array.isArray(directList)) {
+            for (const p of directList) pushPcr(p, null);
+        }
+
+        return entries;
+    };
+
     const handleResetFilters = () => {
         setSelectedCategory('all');
         setSelectedIncident('all');
@@ -523,17 +581,13 @@ export default function IncidentTable({
             key: 'actions',
             header: 'Actions',
             render: (_, row) => (
-                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    <Button 
-                        size="xs" 
-                        variant="ghost" 
-                        onClick={() => setViewing(row)}
-                        className="text-xs"
-                    >
-                        <Eye className="w-3.5 h-3.5 mr-1" />
-                        Details
-                    </Button>
-                </div>
+                <IncidentRowActionsDropdown
+                    row={row}
+                    pcrEntries={getIncidentPcrEntries(row)}
+                    preparedByName={preparedByName}
+                    onViewDetails={(selectedRow) => setViewing(selectedRow)}
+                    onLocate={(selectedRow) => setLocatingIncident(selectedRow)}
+                />
             ),
         },
     ];
@@ -982,6 +1036,29 @@ export default function IncidentTable({
                 onClose={() => setViewing(null)}
                 onAssignUnit={(inc) => setAssigningIncident(inc)}
                 incidentTypes={incidentTypes}
+            />
+
+            {/* Locate Incident Map & Details Modal */}
+            <IncidentLocateModal
+                incident={locatingIncident}
+                open={!!locatingIncident}
+                onClose={() => setLocatingIncident(null)}
+                barangayGeojson={barangayGeojson}
+                categoryLabel={
+                    locatingIncident
+                        ? resolveAuthoritativeCategory(
+                              getIncidentChiefComplaint(locatingIncident),
+                              locatingIncident.incident_type?.name ||
+                                  locatingIncident.incident_type?.incident_type_name ||
+                                  '',
+                          )
+                        : undefined
+                }
+                chiefComplaintLabel={
+                    locatingIncident
+                        ? getIncidentChiefComplaint(locatingIncident) || undefined
+                        : undefined
+                }
             />
 
             {/* Reject Modal */}

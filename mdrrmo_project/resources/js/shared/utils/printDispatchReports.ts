@@ -235,7 +235,7 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
             font-size: 13px;
             font-weight: 900;
             letter-spacing: 0.5px;
-            color: #b91c1c;
+            color: #000000;
             line-height: 1.15;
         }
         .header-text p {
@@ -700,7 +700,7 @@ export function printDispatchLogsSummaryReport(incidents: any[], filters: { sear
             margin: 2px 0 0 0;
             font-size: 13px;
             font-weight: 900;
-            color: #b91c1c;
+            color: #000000;
             line-height: 1.15;
         }
         .header-text p {

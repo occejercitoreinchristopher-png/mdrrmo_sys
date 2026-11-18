@@ -12,8 +12,12 @@ interface Marker {
     id?: string | number;
 }
 
-export function printPatientCareRecord(record: any): void {
-    if (!record) return;
+function buildPatientCareRecordParts(record: any): {
+    styles: string;
+    bodyHtml: string;
+    title: string;
+    filename: string;
+} {
 
     const patient = record.patient || {};
     const dispatch = record.dispatch || {};
@@ -263,15 +267,16 @@ export function printPatientCareRecord(record: any): void {
     const gcsMotor = Number(gcs.motor) || null;
     const gcsTotal = gcs.total || (gcsEye && gcsVerbal && gcsMotor ? gcsEye + gcsVerbal + gcsMotor : '');
 
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>PCR #${record.id} - ${patientFullName || 'Patient Care Record'}</title>
-    <style>
+    const title = `PCR #${record.id} - ${patientFullName || 'Patient Care Record'}`;
+    const styles = `
         @page {
             size: A4 portrait;
             margin: 6mm 8mm 6mm 8mm;
+        }
+
+        .pcr-record-break {
+            page-break-after: always;
+            break-after: page;
         }
 
         * {
@@ -614,10 +619,9 @@ export function printPatientCareRecord(record: any): void {
             display: block;
             margin-bottom: 2px;
         }
-    </style>
-</head>
-<body>
+    `;
 
+    const bodyHtml = `
 <div class="pcr-page">
     <!-- TOP HEADER -->
     <div class="header-wrap">
@@ -1069,9 +1073,7 @@ export function printPatientCareRecord(record: any): void {
         </div>
     </div>
 </div>
-
-</body>
-</html>`;
+`;
 
     // Build filename from patient name and date
     const patientName = (
@@ -1081,6 +1083,49 @@ export function printPatientCareRecord(record: any): void {
     ).replace(/\s+/g, '_');
     const dateStr = new Date().toISOString().slice(0, 10);
     const filename = `PCR_${patientName}_${dateStr}.pdf`;
+
+    return { styles, bodyHtml, title, filename };
+}
+
+export function printPatientCareRecord(record: any): void {
+    if (!record) return;
+    printMultiplePatientCareRecords([record]);
+}
+
+export function printMultiplePatientCareRecords(records: any[]): void {
+    const validRecords = (records || []).filter(Boolean);
+    if (validRecords.length === 0) return;
+
+    const parts = validRecords.map((rec) => buildPatientCareRecordParts(rec));
+    const styles = parts[0].styles;
+    const title =
+        parts.length === 1
+            ? parts[0].title
+            : `Patient Care Records (${parts.length} Patients)`;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename =
+        parts.length === 1
+            ? parts[0].filename
+            : `PCR_Batch_${parts.length}_Patients_${dateStr}.pdf`;
+
+    const combinedBody = parts
+        .map((part, idx) => {
+            const breakClass = idx < parts.length - 1 ? ' class="pcr-record-break"' : '';
+            return `<div${breakClass}>${part.bodyHtml}</div>`;
+        })
+        .join('\n');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>${title}</title>
+    <style>${styles}</style>
+</head>
+<body>
+${combinedBody}
+</body>
+</html>`;
 
     downloadHtmlAsPdf(html, filename);
 }

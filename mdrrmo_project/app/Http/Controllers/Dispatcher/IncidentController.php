@@ -29,12 +29,23 @@ class IncidentController extends Controller
         $query = Incident::with([
             'resident.residentProfile.barangay', 
             'incidentType', 
+            'verifiedBy',
+            'locationCode',
             'images', 
-            'dispatches.patientCareRecord',
-            'dispatches.patientCareRecords',
+            'dispatches.patientCareRecord.patient.barangay',
+            'dispatches.patientCareRecord.images',
+            'dispatches.patientCareRecords.patient.barangay',
+            'dispatches.patientCareRecords.images',
             'dispatches.ambulance',
             'dispatches.driver',
-            'dispatches.crew'
+            'dispatches.teamLeader',
+            'dispatches.emt',
+            'dispatches.dispatcher',
+            'dispatches.crew',
+            'dispatches.images',
+            'dispatchLogs' => function ($q) {
+                $q->latest()->with(['user', 'action']);
+            },
         ])->latest();
 
         $allHistoryIncidents = [];
@@ -162,12 +173,23 @@ class IncidentController extends Controller
         $query = Incident::with([
             'resident.residentProfile.barangay',
             'incidentType',
+            'verifiedBy',
+            'locationCode',
             'images',
-            'dispatches.patientCareRecord',
-            'dispatches.patientCareRecords',
+            'dispatches.patientCareRecord.patient.barangay',
+            'dispatches.patientCareRecord.images',
+            'dispatches.patientCareRecords.patient.barangay',
+            'dispatches.patientCareRecords.images',
             'dispatches.ambulance',
             'dispatches.driver',
+            'dispatches.teamLeader',
+            'dispatches.emt',
+            'dispatches.dispatcher',
             'dispatches.crew',
+            'dispatches.images',
+            'dispatchLogs' => function ($q) {
+                $q->latest()->with(['user', 'action']);
+            },
         ])
         ->where('incident_status', 'resolved')
         ->where('is_prank', false)
