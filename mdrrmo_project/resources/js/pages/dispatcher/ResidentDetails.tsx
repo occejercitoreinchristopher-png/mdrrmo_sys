@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Head, usePage } from '@inertiajs/react';
 import {
-    ArrowLeft, User as UserIcon, Mail, Phone, MapPin, Calendar, Shield, CheckCircle2, Clock, AlertTriangle, Eye, Copy, Check, Truck, Smartphone, UserCheck, PhoneCall, Home, FileText, Activity, ShieldAlert, ShieldCheck, Hash, Cake
+    ArrowLeft, ArrowUpDown, User as UserIcon, Mail, Phone, MapPin, Calendar, Shield, CheckCircle2, ChevronLeft, ChevronRight, Clock, AlertTriangle, Eye, Copy, Check, Truck, Smartphone, UserCheck, PhoneCall, Home, FileText, Activity, RotateCcw, Search, ShieldAlert, ShieldCheck, Hash, Cake, X
 } from 'lucide-react';
 import DispatcherLayout from '@/dispatcher/layouts/DispatcherLayout';
 import AdminLayout from '@/admin/layouts/AdminLayout';
@@ -187,6 +187,23 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
     const [resolvedLocations, setResolvedLocations] = useState<Record<number, string>>({});
     const [activeTab, setActiveTab] = useState<'overview' | 'incidents'>('overview');
 
+    // Incident History Search, Filter, Sort & Pagination state
+    const incidentsSectionRef = useRef<HTMLDivElement>(null);
+    const [incidentSearchInput, setIncidentSearchInput] = useState('');
+    const [incidentAppliedSearch, setIncidentAppliedSearch] = useState('');
+    const [incidentStatusFilter, setIncidentStatusFilter] = useState<'all' | 'resolved' | 'active' | 'cancelled'>('all');
+    const [incidentSortOrder, setIncidentSortOrder] = useState<'newest' | 'oldest'>('newest');
+    const [incidentPerPage, setIncidentPerPage] = useState<number>(5);
+    const [incidentPage, setIncidentPage] = useState<number>(1);
+
+    useEffect(() => {
+        setIncidentAppliedSearch(incidentSearchInput.trim());
+    }, [incidentSearchInput]);
+
+    useEffect(() => {
+        setIncidentPage(1);
+    }, [incidentAppliedSearch, incidentStatusFilter, incidentSortOrder, incidentPerPage, incidents.length]);
+
     const profile = resident.resident_profile;
     const isVerified = resident.is_verified ?? resident.verification_status === 'Verified';
     const rawGender = resident.gender || profile?.gender || null;
@@ -295,6 +312,107 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
     const handleCopy = (text: string, title: string) => {
         navigator.clipboard.writeText(text);
         toast.success(`Copied ${title} to clipboard.`);
+    };
+
+    const filteredIncidents = useMemo(() => {
+        const query = incidentAppliedSearch.toLowerCase();
+
+        const matched = incidents.filter((inc) => {
+            const status = (inc.incident_status || '').toLowerCase();
+            if (incidentStatusFilter === 'resolved' && status !== 'resolved') return false;
+            if (incidentStatusFilter === 'active' && !['pending', 'verified', 'assigned', 'responding'].includes(status)) return false;
+            if (incidentStatusFilter === 'cancelled' && !['cancelled', 'rejected', 'unfounded'].includes(status)) return false;
+
+            if (!query) return true;
+
+            const reportedDateStr = inc.reported_at
+                ? new Date(inc.reported_at).toLocaleString('en-PH', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                  })
+                : '';
+            const longDateStr = inc.reported_at
+                ? new Date(inc.reported_at).toLocaleDateString('en-PH', {
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric',
+                  })
+                : '';
+
+            const haystack = [
+                `#${inc.id}`,
+                String(inc.id),
+                inc.incident_type?.name,
+                inc.description,
+                inc.chief_complaint,
+                getIncidentLocation(inc),
+                inc.incident_status,
+                inc.report_source,
+                inc.priority,
+                inc.reported_at,
+                reportedDateStr,
+                longDateStr,
+            ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+
+            return haystack.includes(query);
+        });
+
+        return [...matched].sort((a, b) => {
+            const ta = a.reported_at ? new Date(a.reported_at).getTime() : 0;
+            const tb = b.reported_at ? new Date(b.reported_at).getTime() : 0;
+            const diff = tb - ta;
+            if (diff !== 0) return incidentSortOrder === 'newest' ? diff : -diff;
+            return incidentSortOrder === 'newest' ? b.id - a.id : a.id - b.id;
+        });
+    }, [incidents, incidentAppliedSearch, incidentStatusFilter, incidentSortOrder, resolvedLocations]);
+
+    const incidentTotalPages = Math.max(1, Math.ceil(filteredIncidents.length / incidentPerPage));
+    const safeIncidentPage = Math.min(incidentPage, incidentTotalPages);
+    const incidentStartIndex = (safeIncidentPage - 1) * incidentPerPage;
+    const paginatedIncidents = filteredIncidents.slice(incidentStartIndex, incidentStartIndex + incidentPerPage);
+
+    const incidentPageNumbers = useMemo(() => {
+        if (incidentTotalPages <= 7) {
+            return Array.from({ length: incidentTotalPages }, (_, idx) => idx + 1);
+        }
+        const pages: Array<number | 'ellipsis'> = [1];
+        const start = Math.max(2, safeIncidentPage - 1);
+        const end = Math.min(incidentTotalPages - 1, safeIncidentPage + 1);
+        if (start > 2) pages.push('ellipsis');
+        for (let p = start; p <= end; p++) pages.push(p);
+        if (end < incidentTotalPages - 1) pages.push('ellipsis');
+        pages.push(incidentTotalPages);
+        return pages;
+    }, [safeIncidentPage, incidentTotalPages]);
+
+    const hasActiveIncidentFilters =
+        Boolean(incidentAppliedSearch) || incidentStatusFilter !== 'all' || incidentSortOrder !== 'newest';
+
+    const handleIncidentSearchSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        setIncidentAppliedSearch(incidentSearchInput.trim());
+        setIncidentPage(1);
+    };
+
+    const handleResetIncidentFilters = () => {
+        setIncidentSearchInput('');
+        setIncidentAppliedSearch('');
+        setIncidentStatusFilter('all');
+        setIncidentSortOrder('newest');
+        setIncidentPage(1);
+    };
+
+    const handleIncidentPageChange = (nextPage: number) => {
+        const clamped = Math.max(1, Math.min(incidentTotalPages, nextPage));
+        if (clamped === safeIncidentPage) return;
+        setIncidentPage(clamped);
+        incidentsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
     const renderSourceBadge = (source?: string) => {
@@ -542,6 +660,29 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
                         {/* TAB 1: OVERVIEW */}
                         {activeTab === 'overview' && (
                             <div className="space-y-6">
+                                {!isVerified && missingFields.length > 0 && (
+                                    <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300 shadow-xs">
+                                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+                                        <div className="text-xs leading-relaxed space-y-1.5">
+                                            <p>
+                                                <span className="font-bold">Profile Pending Verification:</span>{' '}
+                                                This resident has not yet completed all required profile details in the mobile app.
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <span className="text-[11px] font-semibold opacity-80">Missing required:</span>
+                                                {missingFields.map((field) => (
+                                                    <span
+                                                        key={field}
+                                                        className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-500/30"
+                                                    >
+                                                        {field}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* MODULE 1: Personal Details */}
                                 <div className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-[#0c1220] border border-slate-200/90 dark:border-white/10 shadow-xs space-y-5">
                                     <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-white/10">
@@ -555,17 +696,6 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
                                         </div>
                                     </div>
 
-                                    {!isVerified && missingFields.length > 0 && (
-                                        <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300">
-                                            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
-                                            <div className="text-xs leading-relaxed">
-                                                <span className="font-bold">Profile Pending Completion:</span>{' '}
-                                                This resident has not yet completed their Personal Info in the mobile app. Missing:{' '}
-                                                <span className="font-semibold">{missingFields.join(', ')}</span>.
-                                            </div>
-                                        </div>
-                                    )}
-
                                     {/* 3-Column Names */}
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                                         <InfoFieldCard
@@ -576,7 +706,7 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
                                         />
                                         <InfoFieldCard
                                             icon={UserIcon}
-                                            label="Middle Name"
+                                            label="Middle Name (Optional)"
                                             value={resident?.middle_name}
                                             uppercaseValue
                                         />
@@ -661,8 +791,8 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
 
                         {/* TAB 2: INCIDENTS HISTORY */}
                         {activeTab === 'incidents' && (
-                            <div className="space-y-4">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                            <div ref={incidentsSectionRef} className="space-y-4 scroll-mt-6">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                     <div>
                                         <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                             <ShieldAlert className="w-5 h-5 text-[#F61509]" />
@@ -673,6 +803,139 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
                                         </p>
                                     </div>
                                 </div>
+
+                                {/* Search, Filter & Pagination Toolbar */}
+                                {incidents.length > 0 && (
+                                    <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#090e1a] shadow-sm p-3.5 sm:p-4 space-y-3">
+                                        <form onSubmit={handleIncidentSearchSubmit} className="flex flex-col sm:flex-row gap-2.5">
+                                            <div className="relative flex-1">
+                                                <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                                <input
+                                                    type="text"
+                                                    value={incidentSearchInput}
+                                                    onChange={(e) => setIncidentSearchInput(e.target.value)}
+                                                    placeholder="Search incident #, type, description, location, date, or status..."
+                                                    className="w-full pl-10 pr-9 py-2.5 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-white/[0.04] border border-slate-200/90 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#F61509]/30 focus:border-[#F61509]/60 transition-all"
+                                                />
+                                                {incidentSearchInput && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setIncidentSearchInput('');
+                                                            setIncidentAppliedSearch('');
+                                                        }}
+                                                        title="Clear search"
+                                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <button
+                                                type="submit"
+                                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#F61509] hover:bg-red-600 text-white font-semibold text-xs sm:text-sm shadow-sm shadow-red-600/20 transition-all cursor-pointer shrink-0"
+                                            >
+                                                <Search className="w-4 h-4" />
+                                                <span>Search</span>
+                                            </button>
+                                        </form>
+
+                                        {/* Status Filters, Sort & Page Size */}
+                                        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-100 dark:border-white/5">
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                {(
+                                                    [
+                                                        { id: 'all', label: 'All' },
+                                                        { id: 'resolved', label: 'Resolved' },
+                                                        { id: 'active', label: 'Active' },
+                                                        { id: 'cancelled', label: 'Cancelled / Rejected' },
+                                                    ] as const
+                                                ).map((opt) => (
+                                                    <button
+                                                        key={opt.id}
+                                                        type="button"
+                                                        onClick={() => setIncidentStatusFilter(opt.id)}
+                                                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer border ${
+                                                            incidentStatusFilter === opt.id
+                                                                ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-950 dark:border-white shadow-xs'
+                                                                : 'bg-slate-50 dark:bg-white/[0.03] text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/[0.08]'
+                                                        }`}
+                                                    >
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setIncidentSortOrder((prev) => (prev === 'newest' ? 'oldest' : 'newest'))
+                                                    }
+                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-50 dark:bg-white/[0.03] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/[0.08] transition-colors cursor-pointer"
+                                                    title="Toggle chronological order"
+                                                >
+                                                    <ArrowUpDown className="w-3.5 h-3.5 text-[#F61509]" />
+                                                    <span>{incidentSortOrder === 'newest' ? 'Newest First' : 'Oldest First'}</span>
+                                                </button>
+
+                                                <select
+                                                    value={incidentPerPage}
+                                                    onChange={(e) => setIncidentPerPage(Number(e.target.value))}
+                                                    aria-label="Incidents per page"
+                                                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-50 dark:bg-[#0f172a] text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-[#F61509]/30 cursor-pointer"
+                                                >
+                                                    <option value={5}>5 / page</option>
+                                                    <option value={10}>10 / page</option>
+                                                    <option value={20}>20 / page</option>
+                                                </select>
+
+                                                {hasActiveIncidentFilters && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleResetIncidentFilters}
+                                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/15 border border-rose-500/20 transition-colors cursor-pointer"
+                                                    >
+                                                        <RotateCcw className="w-3 h-3" />
+                                                        <span>Reset</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Live Count Summary */}
+                                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-1">
+                                            <span>
+                                                {filteredIncidents.length === 0 ? (
+                                                    'No matching incident reports'
+                                                ) : (
+                                                    <>
+                                                        Showing{' '}
+                                                        <span className="font-bold text-slate-900 dark:text-white">
+                                                            {incidentStartIndex + 1}–{Math.min(incidentStartIndex + incidentPerPage, filteredIncidents.length)}
+                                                        </span>{' '}
+                                                        of{' '}
+                                                        <span className="font-bold text-slate-900 dark:text-white">
+                                                            {filteredIncidents.length}
+                                                        </span>{' '}
+                                                        {filteredIncidents.length === 1 ? 'report' : 'reports'}
+                                                        {filteredIncidents.length !== incidents.length && (
+                                                            <span className="ml-1 text-slate-400 dark:text-slate-500">
+                                                                (filtered from {incidents.length} total)
+                                                            </span>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </span>
+                                            {incidentTotalPages > 1 && (
+                                                <span className="font-mono font-semibold text-slate-600 dark:text-slate-300">
+                                                    Page {safeIncidentPage} of {incidentTotalPages}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
 
                                 <Card padding={false} className="border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#090e1a] shadow-sm rounded-2xl overflow-hidden">
                                     <div className="overflow-x-auto">
@@ -701,9 +964,30 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
                                                             </div>
                                                         </td>
                                                     </tr>
+                                                ) : filteredIncidents.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400">
+                                                            <div className="flex flex-col items-center justify-center gap-2.5">
+                                                                <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 flex items-center justify-center text-slate-400">
+                                                                    <Search className="w-5 h-5" />
+                                                                </div>
+                                                                <p className="text-sm font-semibold text-slate-900 dark:text-white">No Matching Incident Reports</p>
+                                                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                                    Try searching with a different keyword, date, or clear your active filters.
+                                                                </p>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={handleResetIncidentFilters}
+                                                                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-950 transition-colors cursor-pointer mt-1"
+                                                                >
+                                                                    <RotateCcw className="w-3.5 h-3.5" />
+                                                                    <span>Clear Search &amp; Filters</span>
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
                                                 ) : (
-                                                    incidents.map((incident) => {
-                                                        const activeDispatch = incident.dispatches?.[0];
+                                                    paginatedIncidents.map((incident) => {
                                                         const reportedDate = incident.reported_at
                                                             ? new Date(incident.reported_at).toLocaleString('en-PH', {
                                                                 month: 'short',
@@ -785,6 +1069,71 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
                                         </table>
                                     </div>
                                 </Card>
+
+                                {/* Pagination Bar */}
+                                {incidentTotalPages > 1 && filteredIncidents.length > 0 && (
+                                    <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#090e1a] shadow-sm px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                                            Showing{' '}
+                                            <span className="font-bold text-slate-900 dark:text-white">
+                                                {incidentStartIndex + 1}–{Math.min(incidentStartIndex + incidentPerPage, filteredIncidents.length)}
+                                            </span>{' '}
+                                            of{' '}
+                                            <span className="font-bold text-slate-900 dark:text-white">
+                                                {filteredIncidents.length}
+                                            </span>{' '}
+                                            incident reports
+                                        </p>
+
+                                        <div className="flex items-center gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleIncidentPageChange(safeIncidentPage - 1)}
+                                                disabled={safeIncidentPage <= 1}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/[0.04] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                            >
+                                                <ChevronLeft className="w-3.5 h-3.5" />
+                                                <span className="hidden sm:inline">Prev</span>
+                                            </button>
+
+                                            <div className="flex items-center gap-1">
+                                                {incidentPageNumbers.map((page, idx) =>
+                                                    page === 'ellipsis' ? (
+                                                        <span
+                                                            key={`inc-ellipsis-${idx}`}
+                                                            className="px-2 py-1 text-xs text-slate-400 dark:text-slate-500 select-none"
+                                                        >
+                                                            …
+                                                        </span>
+                                                    ) : (
+                                                        <button
+                                                            key={page}
+                                                            type="button"
+                                                            onClick={() => handleIncidentPageChange(page)}
+                                                            className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                                                                page === safeIncidentPage
+                                                                    ? 'bg-[#F61509] text-white border-[#F61509] shadow-sm shadow-red-600/25'
+                                                                    : 'bg-slate-50 dark:bg-white/[0.03] text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10'
+                                                            }`}
+                                                        >
+                                                            {page}
+                                                        </button>
+                                                    )
+                                                )}
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => handleIncidentPageChange(safeIncidentPage + 1)}
+                                                disabled={safeIncidentPage >= incidentTotalPages}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-white/[0.04] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                            >
+                                                <span className="hidden sm:inline">Next</span>
+                                                <ChevronRight className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

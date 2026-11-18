@@ -20,7 +20,7 @@ const navigation = [
     {
         group: 'Overview',
         items: [
-            { label: 'Executive Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
+            { label: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
         ],
     },
     {
