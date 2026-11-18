@@ -324,9 +324,17 @@ class IncidentController extends Controller
         })->values();
 
         $total = $filtered->count();
-        $lastPage = max(1, (int) ceil($total / $perPage));
-        $currentPage = min($page, $lastPage);
-        $items = $filtered->forPage($currentPage, $perPage)->values();
+        $returnAll = $request->boolean('all');
+        if ($returnAll) {
+            $lastPage = 1;
+            $currentPage = 1;
+            $items = $filtered->values();
+            $perPage = max(1, $total);
+        } else {
+            $lastPage = max(1, (int) ceil($total / $perPage));
+            $currentPage = min($page, $lastPage);
+            $items = $filtered->forPage($currentPage, $perPage)->values();
+        }
 
         // Attach reporter_prank_count only for current page items
         $residentIds = $items->pluck('resident_id')->filter()->unique()->values();

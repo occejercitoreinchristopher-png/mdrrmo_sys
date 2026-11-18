@@ -189,6 +189,49 @@ function buildPatientCareRecordParts(record: any): {
     const isMale = gender === 'male';
     const isFemale = gender === 'female';
 
+    const computeAgeFromBirthdate = (dob?: string | null, refDate?: string | null): string => {
+        if (!dob) return '';
+        const birth = new Date(
+            typeof dob === 'string' && dob.includes('-') && !dob.includes('T')
+                ? dob.replace(/-/g, '/')
+                : dob,
+        );
+        if (isNaN(birth.getTime())) return '';
+        const ref = refDate
+            ? new Date(
+                  typeof refDate === 'string' && refDate.includes('-') && !refDate.includes('T')
+                      ? refDate.replace(/-/g, '/')
+                      : refDate,
+              )
+            : new Date();
+        const effectiveRef = isNaN(ref.getTime()) ? new Date() : ref;
+        let age = effectiveRef.getFullYear() - birth.getFullYear();
+        const monthDiff = effectiveRef.getMonth() - birth.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && effectiveRef.getDate() < birth.getDate())) {
+            age--;
+        }
+        return age >= 0 && age <= 130 ? String(age) : '';
+    };
+
+    const patientBirthdate =
+        patient.patient_birthdate ||
+        patient.birthdate ||
+        record.birthdate ||
+        patient.registered_user?.resident_profile?.birthdate ||
+        patient.registeredUser?.residentProfile?.birthdate ||
+        incident.resident?.resident_profile?.birthdate ||
+        incident.resident?.residentProfile?.birthdate ||
+        null;
+
+    const computedAge =
+        (patient.age !== null && patient.age !== undefined && String(patient.age).trim() !== ''
+            ? String(patient.age)
+            : '') ||
+        (record.age !== null && record.age !== undefined && String(record.age).trim() !== ''
+            ? String(record.age)
+            : '') ||
+        computeAgeFromBirthdate(patientBirthdate, record.record_date || record.created_at);
+
     const civilStatus = (patient.civil_status || record.civil_status || '').toLowerCase();
     const natureOfCall = (record.nature_of_call || incident.nature_of_call || '').toLowerCase();
     const chiefComplaint = record.chief_complaint || incident.chief_complaint || '';
@@ -598,26 +641,79 @@ function buildPatientCareRecordParts(record: any): {
             font-size: 8.5pt;
             margin-bottom: 2px;
         }
+        .witness-title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 8pt;
+            margin-top: 5px;
+            margin-bottom: 2px;
+            letter-spacing: 0.3px;
+        }
         .waiver-statement {
-            line-height: 1.3;
+            line-height: 1.35;
             text-align: justify;
-            margin-bottom: 4px;
+            margin-bottom: 3px;
+            padding-top: 20px;
+        }
+        .patient-sig-name-wrap {
+            position: relative;
+            display: inline-block;
+            min-width: 145px;
+            text-align: center;
+            border-bottom: 1px solid #000;
+            padding: 0 6px;
+            font-weight: bold;
+            vertical-align: baseline;
+        }
+        .patient-sig-overlay {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            max-height: 26px;
+            max-width: 135px;
+            object-fit: contain;
+            display: block;
+            margin-bottom: -2px;
+            pointer-events: none;
+        }
+        .patient-unable-overlay {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: 6.5pt;
+            font-weight: bold;
+            color: #b91c1c;
+            font-style: italic;
+            margin-bottom: 1px;
         }
         .waiver-bottom-cols {
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            margin-top: 4px;
+            margin-top: 2px;
+            gap: 12px;
         }
         .sig-col {
             width: 48%;
         }
+        .sig-line-holder {
+            position: relative;
+            border-bottom: 1px solid #000;
+            display: inline-flex;
+            justify-content: center;
+            align-items: flex-end;
+            flex: 1;
+            min-height: 24px;
+        }
         .sig-holder-img {
-            max-height: 28px;
-            max-width: 140px;
+            max-height: 26px;
+            max-width: 135px;
             object-fit: contain;
             display: block;
-            margin-bottom: 2px;
+            margin-bottom: -1px;
         }
     `;
 
@@ -665,7 +761,7 @@ function buildPatientCareRecordParts(record: any): {
             </td>
             <td style="width: 14%;">
                 <span class="field-name">Age:</span>
-                <span class="field-data">${patient.age ? patient.age : (record.age ? record.age : '___')}</span>
+                <span class="field-data">${computedAge || '___'}</span>
             </td>
             <td style="width: 10%;">
                 <span class="field-name">Male</span> ${box(isMale)}
@@ -675,7 +771,7 @@ function buildPatientCareRecordParts(record: any): {
             </td>
             <td colspan="2">
                 <span class="field-name">Caller #:</span>
-                <span class="field-data">${record.caller_no || incident.caller_phone_number || '_________________'}</span>
+                <span class="field-data">${record.caller_no || incident.caller_phone_number || incident.resident?.phone_number || record.contact_number || patient.contact_number || patient.phone_number || patient.registered_user?.phone_number || patient.registeredUser?.phone_number || '_________________'}</span>
             </td>
         </tr>
 
@@ -1028,46 +1124,50 @@ function buildPatientCareRecordParts(record: any): {
     <div class="waiver-wrapper">
         <div class="waiver-title">WAIVER</div>
         <div class="waiver-statement">
-            By signing this form, I <b style="text-decoration: underline; padding: 0 4px;">${patientFullName || '____________________________________'}</b> is releasing OPOL RESCUE TEAM of any liability and/or medical claim resulting from my decision to refuse care against medical advice.
-        </div>
-
-        <div class="waiver-bottom-cols">
-            <div class="sig-col">
-                <div style="min-height: 28px; display: flex; align-items: flex-end;">
-                    ${(() => {
+            By signing this form, I
+            <span class="patient-sig-name-wrap">
+                ${(() => {
             const effectivePatientSig = record.patient_signature || record.waiver_signature;
             const isPatientUnableToSign = record.patient_signature === 'UNABLE_TO_SIGN' || record.waiver_signature === 'UNABLE_TO_SIGN';
             if (!isPatientUnableToSign && effectivePatientSig && String(effectivePatientSig).startsWith('data:image')) {
-                return `<img src="${effectivePatientSig}" class="sig-holder-img" alt="Signature" />`;
+                return `<img src="${effectivePatientSig}" class="patient-sig-overlay" alt="Patient Signature" />`;
             }
             if (isPatientUnableToSign) {
-                return `<span style="font-size: 7.5pt; font-weight: bold; color: #b91c1c; font-style: italic; margin-bottom: 2px;">[ PATIENT UNABLE TO SIGN / UNCONSCIOUS ]</span>`;
+                return `<span class="patient-unable-overlay">[ PATIENT UNABLE TO SIGN / UNCONSCIOUS ]</span>`;
             }
             return '';
         })()}
+                ${patientFullName || '&nbsp;'}
+            </span>
+            is releasing OPOL RESCUE TEAM of any liability and/or medical claim resulting from my decision to refuse care against medical advice.
+        </div>
+
+        <div class="witness-title">WITNESS INFORMATION</div>
+
+        <div class="waiver-bottom-cols">
+            <div class="sig-col">
+                <div style="display: flex; align-items: flex-end; gap: 4px; margin-bottom: 3px;">
+                    <span class="field-name" style="white-space: nowrap;">SIGNATURE:</span>
+                    <span class="sig-line-holder">
+                        ${record.witness_signature && String(record.witness_signature).startsWith('data:image')
+                            ? `<img src="${record.witness_signature}" class="sig-holder-img" alt="Witness Signature" />`
+                            : ''}
+                    </span>
                 </div>
-                <div style="margin-bottom: 2px;">
-                    <span class="field-name">SIGNATURE:</span>
-                    <span style="border-bottom: 1px solid #000; display: inline-block; width: 140px;"></span>
-                </div>
-                <div>
-                    <span class="field-name">DATE:</span>
-                    <span style="border-bottom: 1px solid #000; display: inline-block; width: 175px; font-weight: bold; padding-left: 4px;">
+                <div style="display: flex; align-items: flex-end; gap: 4px;">
+                    <span class="field-name" style="white-space: nowrap;">DATE:</span>
+                    <span style="border-bottom: 1px solid #000; flex: 1; font-weight: bold; padding-left: 4px;">
                         ${formatMoDayYr(record.record_date || record.created_at)}
                     </span>
                 </div>
             </div>
 
             <div class="sig-col">
-                <span class="field-name" style="display: block; margin-bottom: 2px;">WITNESS INFORMATION</span>
-                <div style="margin-bottom: 2px;">
-                    <span class="field-name">NAME:</span>
-                    <span style="border-bottom: 1px solid #000; display: inline-block; width: 190px; font-weight: bold; padding-left: 4px;">
+                <div style="display: flex; align-items: flex-end; gap: 4px;">
+                    <span class="field-name" style="white-space: nowrap;">NAME:</span>
+                    <span style="border-bottom: 1px solid #000; flex: 1; font-weight: bold; padding-left: 4px;">
                         ${record.witness_name || ''}
                     </span>
-                </div>
-                <div style="min-height: 25px; display: flex; align-items: flex-end;">
-                    ${record.witness_signature ? `<img src="${record.witness_signature}" class="sig-holder-img" alt="Witness Signature" />` : ''}
                 </div>
             </div>
         </div>
@@ -1110,19 +1210,113 @@ export function printMultiplePatientCareRecords(records: any[]): void {
 
     const combinedBody = parts
         .map((part, idx) => {
-            const breakClass = idx < parts.length - 1 ? ' class="pcr-record-break"' : '';
-            return `<div${breakClass}>${part.bodyHtml}</div>`;
+            const breakClass = idx < parts.length - 1 ? ' pcr-record-break' : '';
+            return `<div class="pcr-preview-sheet${breakClass}">${part.bodyHtml}</div>`;
         })
         .join('\n');
+
+    const previewStyles = `
+        .pcr-preview-toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 9999;
+            background: #0f172a;
+            color: #ffffff;
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+            font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+        }
+        .pcr-preview-toolbar-title {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pcr-preview-toolbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .pcr-preview-btn {
+            border: none;
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: opacity 0.15s ease;
+        }
+        .pcr-preview-btn:hover {
+            opacity: 0.9;
+        }
+        .pcr-preview-btn-print {
+            background: #dc2626;
+            color: #ffffff;
+        }
+        .pcr-preview-btn-close {
+            background: #334155;
+            color: #e2e8f0;
+        }
+        @media screen {
+            body {
+                background: #e2e8f0 !important;
+                padding-bottom: 28px !important;
+            }
+            .pcr-preview-sheet {
+                width: 210mm;
+                max-width: calc(100vw - 24px);
+                margin: 18px auto 0 auto;
+                padding: 6mm 8mm;
+                background: #ffffff;
+                box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+                border-radius: 4px;
+            }
+        }
+        @media print {
+            .pcr-preview-toolbar {
+                display: none !important;
+            }
+            body {
+                background: #ffffff !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .pcr-preview-sheet {
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+            }
+        }
+    `;
 
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>${title}</title>
-    <style>${styles}</style>
+    <style>${styles}\n${previewStyles}</style>
 </head>
 <body>
+    <div class="pcr-preview-toolbar">
+        <div class="pcr-preview-toolbar-title">${title} &mdash; Print Preview</div>
+        <div class="pcr-preview-toolbar-actions">
+            <button type="button" class="pcr-preview-btn pcr-preview-btn-print" onclick="window.print()">&#128424; Print / Save as PDF</button>
+            <button type="button" class="pcr-preview-btn pcr-preview-btn-close" onclick="window.close()">Close</button>
+        </div>
+    </div>
 ${combinedBody}
 </body>
 </html>`;
@@ -1131,13 +1325,12 @@ ${combinedBody}
 }
 
 /**
- * Opens the browser's native Print Preview dialog for the PCR.
- * The user can verify the layout, then choose Print or Save as PDF.
- * This avoids the blocking "Save As" dialog from the old pdf.save() approach.
+ * Opens the PCR preview window first so the user can inspect the document,
+ * then click "Print / Save as PDF" to trigger Chrome's native Print dialog.
  */
 function downloadHtmlAsPdf(html: string, _filename: string): void {
     // Open a new popup window — does NOT block the main page
-    const printWindow = window.open('', '_blank', 'width=900,height=750');
+    const printWindow = window.open('', '_blank', 'width=960,height=820');
     if (!printWindow) {
         alert('Pop-up blocked! Please allow pop-ups for this site and try again.');
         return;
@@ -1146,14 +1339,5 @@ function downloadHtmlAsPdf(html: string, _filename: string): void {
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
-
-    // Wait for images/fonts to load, then trigger browser Print Preview
-    printWindow.onload = () => {
-        setTimeout(() => {
-            printWindow.focus();
-            printWindow.print();
-            // Auto-close the popup after user dismisses print dialog
-            printWindow.onafterprint = () => printWindow.close();
-        }, 600);
-    };
+    printWindow.focus();
 }

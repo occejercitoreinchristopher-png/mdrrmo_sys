@@ -10,6 +10,7 @@ import Card from '@/shared/components/Card';
 import Pagination from '@/shared/components/Pagination';
 import IncidentRowActionsDropdown from './IncidentRowPrintDropdown';
 import IncidentLocateModal from './IncidentLocateModal';
+import IncidentPinsMapModal from './IncidentPinsMapModal';
 import IncidentDetails from './IncidentDetails';
 import RejectModal from './RejectModal';
 import IncidentKanbanBoard from './IncidentKanbanBoard';
@@ -109,6 +110,7 @@ export default function IncidentTable({
     const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
     const [isAddIncidentModalOpen, setIsAddIncidentModalOpen] = useState(false);
     const [isMonthlyReportModalOpen, setIsMonthlyReportModalOpen] = useState(false);
+    const [isPinsMapModalOpen, setIsPinsMapModalOpen] = useState(false);
     const [customCategories, setCustomCategories] = useState<string[]>([]);
     const [customIncidents, setCustomIncidents] = useState<Record<string, string[]>>({});
     const [notificationMessage, setNotificationMessage] = useState<{
@@ -681,8 +683,17 @@ export default function IncidentTable({
                                     </button>
                                 )}
 
-                                {/* Print Report, + Chief Complaint and + Category Buttons */}
-                                <div className="flex items-center gap-2 shrink-0">
+                                {/* Map Pins, Print Report, + Chief Complaint and + Category Buttons */}
+                                <div className="flex items-center flex-wrap gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsPinsMapModalOpen(true)}
+                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 shadow-sm shadow-sky-600/25 border border-sky-500/30 transition-all cursor-pointer"
+                                        title="View & Print All Filtered Incident Location Pins on Map"
+                                    >
+                                        <MapPin className="w-3.5 h-3.5" />
+                                        <span>Map Pins</span>
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => setIsMonthlyReportModalOpen(true)}
@@ -1043,6 +1054,7 @@ export default function IncidentTable({
                 incident={locatingIncident}
                 open={!!locatingIncident}
                 onClose={() => setLocatingIncident(null)}
+                onOpenDetails={(inc) => setViewing(inc)}
                 barangayGeojson={barangayGeojson}
                 categoryLabel={
                     locatingIncident
@@ -1111,6 +1123,38 @@ export default function IncidentTable({
             <MonthlyReportPrintModal
                 isOpen={isMonthlyReportModalOpen}
                 onClose={() => setIsMonthlyReportModalOpen(false)}
+            />
+
+            {/* All Filtered Incident Pins Map & Printable Map Modal */}
+            <IncidentPinsMapModal
+                open={isPinsMapModalOpen}
+                onClose={() => setIsPinsMapModalOpen(false)}
+                filters={{
+                    category: selectedCategory,
+                    incident: selectedIncident,
+                    month: selectedMonth,
+                    monthLabel:
+                        MONTH_OPTIONS.find((m) => m.value === selectedMonth)?.label ||
+                        'All Months',
+                    time: selectedTime,
+                    timeLabel:
+                        TIME_OPTIONS.find((t) => t.value === selectedTime)?.label ||
+                        'All Times',
+                    barangay: selectedZone,
+                    search: searchQuery,
+                    customIncidents,
+                }}
+                barangayGeojson={barangayGeojson}
+                preparedByName={preparedByName}
+                resolveCategory={(row) =>
+                    resolveAuthoritativeCategory(
+                        getIncidentChiefComplaint(row),
+                        row?.incident_type?.name ||
+                            row?.incident_type?.incident_type_name ||
+                            '',
+                    )
+                }
+                resolveChiefComplaint={(row) => getIncidentChiefComplaint(row)}
             />
         </div>
     );

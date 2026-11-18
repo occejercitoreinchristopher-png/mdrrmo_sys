@@ -34,7 +34,7 @@ class Patient extends Model
         'identified_at' => 'datetime',
     ];
 
-    protected $appends = ['name', 'full_name', 'first_name', 'middle_name', 'last_name', 'birthdate', 'gender', 'address'];
+    protected $appends = ['name', 'full_name', 'first_name', 'middle_name', 'last_name', 'birthdate', 'age', 'gender', 'address'];
 
     public function getHomeAddressAttribute(): ?string
     {
@@ -83,6 +83,24 @@ class Patient extends Model
     public function getBirthdateAttribute(): ?string
     {
         return $this->attributes['patient_birthdate'] ?? null;
+    }
+
+    public function getAgeAttribute(): ?int
+    {
+        $dob = $this->attributes['patient_birthdate'] ?? null;
+        if (empty($dob) && $this->relationLoaded('registeredUser')) {
+            $dob = $this->registeredUser?->residentProfile?->birthdate ?? null;
+        }
+        if (empty($dob)) {
+            return null;
+        }
+        try {
+            $birth = \Carbon\Carbon::parse($dob);
+            $years = (int) $birth->diffInYears(now());
+            return ($years >= 0 && $years <= 130) ? $years : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     public function getGenderAttribute(): ?string

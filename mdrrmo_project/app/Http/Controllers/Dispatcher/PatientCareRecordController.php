@@ -12,7 +12,9 @@ class PatientCareRecordController extends Controller
     {
         $records = PatientCareRecord::with([
             'patient.barangay',
+            'patient.registeredUser',
             'dispatch.incident.incidentType',
+            'dispatch.incident.resident',
             'dispatch.ambulance',
             'dispatch.teamLeader',
             'dispatch.driver',
@@ -39,6 +41,7 @@ class PatientCareRecordController extends Controller
             'patient.barangay',
             'patient.registeredUser.residentProfile.barangay',
             'dispatch.incident.incidentType',
+            'dispatch.incident.resident',
             'dispatch.ambulance',
             'dispatch.teamLeader',
             'dispatch.driver',
