@@ -249,9 +249,9 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                 </div>
 
                 {/* Main Content Layout: 2 Columns on large screens */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                     {/* Left Column: Comprehensive Patient Information Profile */}
-                    <div className="lg:col-span-1 space-y-6">
+                    <div className="lg:col-span-1 lg:sticky lg:top-6 space-y-6">
                         <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#090e1a] shadow-sm overflow-hidden">
                             <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.03] flex items-center justify-between">
                                 <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
