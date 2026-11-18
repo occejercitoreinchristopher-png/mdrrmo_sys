@@ -14,6 +14,7 @@ class IncidentImage extends Model
         'captured_at' => 'datetime',
         'image_latitude' => 'float',
         'image_longitude' => 'float',
+        'is_grayscale' => 'boolean',
     ];
 
     public function getLatitudeAttribute(): ?float

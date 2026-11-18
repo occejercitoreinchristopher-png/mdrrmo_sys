@@ -115,6 +115,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::get('/reports', [ReportController::class, 'index'])->name('reports');
     Route::get('/reports/monthly-summary', [\App\Http\Controllers\Admin\ReportController::class, 'monthlySummary'])->name('reports.monthly-summary');
     Route::get('/accident-heatmap', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'index'])->name('accident-heatmap');
+    Route::post('/accident-heatmap/manual-pins', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'storeManualPin'])->name('accident-heatmap.manual-pins.store');
+    Route::delete('/accident-heatmap/manual-pins/{manualPin}', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'destroyManualPin'])->name('accident-heatmap.manual-pins.destroy');
+    Route::patch('/accident-heatmap/manual-pin-images/{manualPinImage}/grayscale', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'toggleManualPinImageGrayscale'])->name('accident-heatmap.manual-pin-images.toggle-grayscale');
+    Route::patch('/incident-images/{incidentImage}/grayscale', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'toggleImageGrayscale'])->name('incident-images.toggle-grayscale');
 
     // Dispatch Logs (Admin)
     Route::get('/dispatch-logs/api/fetch', [\App\Http\Controllers\Admin\DispatchLogController::class, 'fetchLogs'])->name('admin.dispatch-logs.fetch');
@@ -127,6 +131,10 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
     Route::get('/', fn () => redirect()->route('dispatcher.dashboard'));
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/accident-heatmap', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'index'])->name('accident-heatmap');
+    Route::post('/accident-heatmap/manual-pins', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'storeManualPin'])->name('accident-heatmap.manual-pins.store');
+    Route::delete('/accident-heatmap/manual-pins/{manualPin}', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'destroyManualPin'])->name('accident-heatmap.manual-pins.destroy');
+    Route::patch('/accident-heatmap/manual-pin-images/{manualPinImage}/grayscale', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'toggleManualPinImageGrayscale'])->name('accident-heatmap.manual-pin-images.toggle-grayscale');
+    Route::patch('/incident-images/{incidentImage}/grayscale', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'toggleImageGrayscale'])->name('incident-images.toggle-grayscale');
 
     // Incidents
     Route::get('/incidents/map', [IncidentController::class, 'map'])->name('incidents.map');

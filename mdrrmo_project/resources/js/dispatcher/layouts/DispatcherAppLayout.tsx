@@ -52,7 +52,7 @@ export default function DispatcherAppLayout({ children, title = 'Dispatcher', Si
                     {Navbar && <Navbar collapsed={collapsed} onToggle={toggleSidebar} />}
 
                     {/* Page Content */}
-                    <main className="flex-1 overflow-auto p-3 md:p-4 lg:p-5 z-10 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10 flex flex-col">
+                    <main className="flex-1 overflow-auto p-3 md:p-4 lg:p-5 relative scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10 flex flex-col">
                         {children}
                     </main>
                 </div>

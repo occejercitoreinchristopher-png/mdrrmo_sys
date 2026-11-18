@@ -147,53 +147,363 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
 
     const currentDateFormatted = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
 
-    // HTML for Single Incident Report
-    // Setting @page { size: portrait; margin: 0; } and title to empty removes browser header & localhost footer!
+    const escapeHtml = (val: any): string =>
+        String(val ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+    // Collect ALL incident photo evidence (Resident + Responder dispatch/PCR photos), deduplicated
+    const rawPhotoPool: any[] = [];
+    if (Array.isArray(incident.images)) {
+        rawPhotoPool.push(...incident.images);
+    }
+    dispatches.forEach((d: any) => {
+        if (Array.isArray(d.images)) {
+            rawPhotoPool.push(...d.images);
+        }
+        const pcrList = d.patient_care_records || d.patientCareRecords || [];
+        if (Array.isArray(pcrList)) {
+            pcrList.forEach((pcr: any) => {
+                if (Array.isArray(pcr?.images)) rawPhotoPool.push(...pcr.images);
+            });
+        }
+        const singlePcr = d.patient_care_record || d.patientCareRecord;
+        if (Array.isArray(singlePcr?.images)) {
+            rawPhotoPool.push(...singlePcr.images);
+        }
+    });
+
+    const seenPhotoKeys = new Set<string>();
+    const evidencePhotos: Array<{
+        id: number | string;
+        url: string;
+        isResponder: boolean;
+        sourceLabel: string;
+        capturedAt: string;
+        isGrayscale: boolean;
+    }> = [];
+
+    rawPhotoPool.forEach((img: any, idx: number) => {
+        if (!img) return;
+        const rawPath = img.image_path || '';
+        const url = img.image_url || img.url || (rawPath ? `/storage/${String(rawPath).replace(/^\/+/, '')}` : '');
+        if (!url) return;
+
+        const dedupeKey = img.id ? `id_${img.id}` : (rawPath ? `path_${rawPath}` : `url_${url}`);
+        if (seenPhotoKeys.has(dedupeKey)) return;
+        seenPhotoKeys.add(dedupeKey);
+
+        const rawSource = String(img.source || '').toLowerCase();
+        const uploaderRole = String(img.user?.role || '').toLowerCase();
+        const isResponder =
+            rawSource.includes('responder') ||
+            Boolean(img.dispatch_id) ||
+            Boolean(img.patient_care_record_id) ||
+            uploaderRole === 'responder';
+
+        const capturedAt =
+            img.formatted_captured_at ||
+            (img.captured_at
+                ? new Date(img.captured_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+                : (img.created_at
+                    ? new Date(img.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+                    : ''));
+
+        evidencePhotos.push({
+            id: img.id ?? `photo-${idx}`,
+            url,
+            isResponder,
+            sourceLabel: isResponder ? 'Responder Photo' : 'Resident Photo',
+            capturedAt,
+            isGrayscale: Boolean(img.is_grayscale),
+        });
+    });
+
+    const hasPhotos = evidencePhotos.length > 0;
+    const totalPagesInitial = hasPhotos ? 2 : 1;
+
+    // HTML for Single Incident Report (2-Step Print Preview: Page 1 Report + Optional Separate Page 2 Photo Evidence with Per-Photo B&W Toggle)
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>&nbsp;</title>
+    <title>Incident Report ${escapeHtml(refNumber)} — Print Preview</title>
     <style>
         @page {
             size: A4 portrait;
             margin: 0;
-        }
-        @media print {
-            html, body {
-                width: 210mm;
-                height: 297mm;
-                margin: 0 !important;
-                padding: 0 !important;
-                overflow: hidden !important;
-                page-break-after: avoid !important;
-                page-break-before: avoid !important;
-            }
-            .page-container {
-                padding: 8mm 12mm !important;
-                box-sizing: border-box !important;
-                height: 100% !important;
-                max-height: 295mm !important;
-                overflow: hidden !important;
-            }
         }
         * {
             box-sizing: border-box;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
         }
-        body {
+        html, body {
+            margin: 0;
+            padding: 0;
             font-family: Arial, Helvetica, sans-serif;
             font-size: 9.5px;
             color: #1e293b;
             line-height: 1.25;
-            margin: 0;
-            padding: 8mm 12mm;
-            background: #fff;
+            background: #e2e8f0;
+        }
+
+        /* Sticky Print Preview Toolbar (hidden when printing) */
+        .preview-toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+        }
+        .toolbar-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .toolbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .toggle-photos-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 6px 11px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            font-size: 12px;
+            font-weight: 600;
+            color: #f1f5f9;
+            cursor: pointer;
+            user-select: none;
+        }
+        .toggle-photos-label input {
+            width: 14px;
+            height: 14px;
+            accent-color: #F61509;
+            cursor: pointer;
+        }
+        .btn-print {
+            background: #F61509;
+            color: #ffffff;
+            border: none;
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-print:hover { background: #dc2626; }
+        .btn-close {
+            background: #334155;
+            color: #f1f5f9;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            padding: 7px 13px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-close:hover { background: #475569; }
+
+        /* Preview Stage */
+        .preview-stage {
+            padding: 18px 16px 32px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
         }
         .page-container {
+            width: 210mm;
+            min-height: 297mm;
+            background: #ffffff;
+            padding: 9mm 12mm;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+        }
+        .photo-evidence-sheet {
+            page-break-before: always;
+            break-before: page;
+        }
+        .photo-evidence-sheet.is-hidden {
+            display: none !important;
+        }
+
+        /* Photo Evidence Grid on Page 2 */
+        .evidence-meta-strip {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 4px;
+        }
+        .photo-grid.single-photo {
+            grid-template-columns: 1fr;
+            max-width: 155mm;
+            margin-left: auto;
+            margin-right: auto;
+            width: 100%;
+        }
+        .photo-card {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #f8fafc;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+        .photo-frame {
+            position: relative;
+            background: #0f172a;
+            height: 68mm;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .photo-grid.single-photo .photo-frame {
+            height: 120mm;
+        }
+        .photo-frame img {
             width: 100%;
             height: 100%;
+            object-fit: contain;
+            display: block;
+            transition: filter 0.18s ease;
+        }
+        .photo-frame img.is-grayscale {
+            -webkit-filter: grayscale(100%) !important;
+            filter: grayscale(100%) !important;
+        }
+        .photo-source-pill {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 8px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: #ffffff;
+        }
+        .photo-source-pill.resident { background: #059669; }
+        .photo-source-pill.responder { background: #0284c7; }
+
+        .btn-bw-toggle {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-size: 9.5px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            background: rgba(15, 23, 42, 0.85);
+            color: #ffffff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        }
+        .btn-bw-toggle:hover {
+            background: #1e293b;
+        }
+        .btn-bw-toggle.active-bw {
+            background: #ffffff;
+            color: #0f172a;
+            border-color: #ffffff;
+        }
+        .photo-caption {
+            padding: 5px 8px;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            background: #ffffff;
+            font-size: 8.5px;
+            color: #334155;
+        }
+        .photo-caption strong {
+            color: #0f172a;
+        }
+        .bw-tag {
+            display: none;
+            font-size: 7.5px;
+            font-weight: 800;
+            padding: 1px 5px;
+            border-radius: 3px;
+            background: #e2e8f0;
+            color: #334155;
+            border: 1px solid #cbd5e1;
+            margin-left: 4px;
+        }
+        .bw-tag.visible {
+            display: inline-block;
+        }
+
+        @media print {
+            html, body {
+                background: #ffffff !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .preview-stage {
+                padding: 0 !important;
+                gap: 0 !important;
+                display: block !important;
+            }
+            .page-container {
+                width: 210mm !important;
+                min-height: 295mm !important;
+                padding: 8mm 12mm !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                box-sizing: border-box !important;
+            }
+            .photo-evidence-sheet {
+                page-break-before: always !important;
+                break-before: page !important;
+            }
+            .photo-evidence-sheet.is-hidden {
+                display: none !important;
+            }
+            .photo-frame img.is-grayscale {
+                -webkit-filter: grayscale(100%) !important;
+                filter: grayscale(100%) !important;
+            }
         }
         
         /* Dual-Logo Header */
@@ -379,6 +689,29 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
     </style>
 </head>
 <body>
+    <!-- Sticky Print Preview Toolbar (Hidden when Printing) -->
+    <div class="preview-toolbar no-print">
+        <div class="toolbar-title">
+            <span>Incident Report ${escapeHtml(refNumber)} &mdash; Print Preview</span>
+        </div>
+        <div class="toolbar-actions">
+            ${hasPhotos ? `
+                <label class="toggle-photos-label" title="Uncheck to print Page 1 (Report Only) without Photo Evidence">
+                    <input type="checkbox" id="includePhotosCheckbox" checked onchange="togglePhotoEvidencePage(this.checked)" />
+                    <span>Include Photo Evidence (Page 2 &bull; ${evidencePhotos.length} photo${evidencePhotos.length > 1 ? 's' : ''})</span>
+                </label>
+            ` : ''}
+            <button type="button" class="btn-print" onclick="window.print()">
+                Print / Save as PDF
+            </button>
+            <button type="button" class="btn-close" onclick="window.close()">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <div class="preview-stage">
+    <!-- PAGE 1: OFFICIAL INCIDENT REPORT (TEXT & DETAILS ONLY) -->
     <div class="page-container">
         <!-- Dual-Logo Header -->
         <div class="header">
@@ -568,23 +901,126 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
             </div>
         </div>
 
-        <div class="footer-note">
-            Official computer-generated audit report produced by MDRRMO Emergency Operations System on ${currentDateFormatted}. Page 1 of 1
+        <div class="footer-note" style="margin-top: auto;">
+            Official computer-generated audit report produced by MDRRMO Emergency Operations System on ${currentDateFormatted}. <span id="page1Counter">Page 1 of ${totalPagesInitial}</span>
         </div>
     </div>
 
+    ${hasPhotos ? `
+    <!-- PAGE 2: SEPARATE INCIDENT PHOTO EVIDENCE SHEET -->
+    <div class="page-container photo-evidence-sheet" id="photoEvidenceSheet">
+        <!-- Dual-Logo Header -->
+        <div class="header">
+            <img src="/images/opol-seal.png" class="header-logo" alt="Opol Seal" onerror="this.style.opacity='0'" />
+            <div class="header-text">
+                <h3>Republic of the Philippines &bull; Province of Misamis Oriental</h3>
+                <h2>MUNICIPALITY OF OPOL</h2>
+                <h1>MUNICIPAL DISASTER RISK REDUCTION AND MANAGEMENT OFFICE</h1>
+                <p>Emergency Operations &amp; Dispatch Monitoring Center</p>
+            </div>
+            <img src="/images/opol-logo.png" class="header-logo" alt="MDRRMO Rescue" onerror="this.style.opacity='0'" />
+        </div>
+
+        <!-- Title Bar -->
+        <div class="doc-title-bar">
+            <span>INCIDENT PHOTO EVIDENCE ATTACHMENT (${evidencePhotos.length} PHOTO${evidencePhotos.length > 1 ? 'S' : ''})</span>
+            <span>REF: ${escapeHtml(refNumber)}</span>
+        </div>
+
+        <!-- Compact Incident Reference Strip -->
+        <div class="evidence-meta-strip">
+            <div class="data-card">
+                <div class="field-label">Incident Type</div>
+                <div class="field-value">${escapeHtml(incidentType)}</div>
+            </div>
+            <div class="data-card">
+                <div class="field-label">Location / Barangay</div>
+                <div class="field-value">${escapeHtml(address)} (Brgy. ${escapeHtml(barangay)})</div>
+            </div>
+            <div class="data-card">
+                <div class="field-label">Date &amp; Time Reported</div>
+                <div class="field-value">${escapeHtml(reportedDate)}</div>
+            </div>
+        </div>
+
+        <div class="section-title">Attached Incident &amp; Scene Photographs</div>
+
+        <div class="photo-grid ${evidencePhotos.length === 1 ? 'single-photo' : ''}">
+            ${evidencePhotos.map((photo, idx) => `
+                <div class="photo-card">
+                    <div class="photo-frame">
+                        <img
+                            id="evidence-img-${idx}"
+                            src="${escapeHtml(photo.url)}"
+                            alt="Photo Evidence #${idx + 1}"
+                            class="${photo.isGrayscale ? 'is-grayscale' : ''}"
+                        />
+                        <span class="photo-source-pill ${photo.isResponder ? 'responder' : 'resident'}">
+                            ${escapeHtml(photo.sourceLabel)}
+                        </span>
+                        <button
+                            type="button"
+                            id="bw-btn-${idx}"
+                            class="btn-bw-toggle no-print ${photo.isGrayscale ? 'active-bw' : ''}"
+                            onclick="togglePhotoBW(${idx})"
+                            title="Toggle Black & White for this photo only"
+                        >
+                            ${photo.isGrayscale ? 'Switch to Color' : 'Black & White'}
+                        </button>
+                    </div>
+                    <div class="photo-caption">
+                        <div>
+                            <strong>Photo #${idx + 1}</strong> &mdash; ${escapeHtml(photo.sourceLabel)}
+                            <span id="bw-tag-${idx}" class="bw-tag ${photo.isGrayscale ? 'visible' : ''}">B&amp;W</span>
+                        </div>
+                        <span style="color:#64748b;">${escapeHtml(photo.capturedAt || reportedDate)}</span>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+
+        <div class="footer-note" style="margin-top: auto;">
+            Official photo evidence attachment for Incident ${escapeHtml(refNumber)} produced by MDRRMO Emergency Operations System on ${currentDateFormatted}. Page 2 of 2
+        </div>
+    </div>
+    ` : ''}
+    </div>
+
     <script>
-        window.onload = function() {
-            setTimeout(function() {
-                window.focus();
-                window.print();
-            }, 300);
-        };
+        function togglePhotoEvidencePage(show) {
+            var sheet = document.getElementById('photoEvidenceSheet');
+            var counter = document.getElementById('page1Counter');
+            if (sheet) {
+                if (show) {
+                    sheet.classList.remove('is-hidden');
+                } else {
+                    sheet.classList.add('is-hidden');
+                }
+            }
+            if (counter) {
+                counter.textContent = show ? 'Page 1 of 2' : 'Page 1 of 1';
+            }
+        }
+
+        function togglePhotoBW(idx) {
+            var img = document.getElementById('evidence-img-' + idx);
+            var btn = document.getElementById('bw-btn-' + idx);
+            var tag = document.getElementById('bw-tag-' + idx);
+            if (!img) return;
+            var isNowBw = img.classList.toggle('is-grayscale');
+            if (btn) {
+                btn.classList.toggle('active-bw', isNowBw);
+                btn.textContent = isNowBw ? 'Switch to Color' : 'Black & White';
+            }
+            if (tag) {
+                tag.classList.toggle('visible', isNowBw);
+            }
+        }
     </script>
 </body>
 </html>`;
 
-    const printWindow = window.open('', '_blank', 'width=900,height=750');
+    const printWindow = window.open('', '_blank', 'width=980,height=820');
     if (!printWindow) {
         alert('Pop-up blocked! Please allow pop-ups for this site and try again.');
         return;
@@ -592,13 +1028,7 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
-    printWindow.onload = () => {
-        setTimeout(() => {
-            printWindow.focus();
-            printWindow.print();
-            printWindow.onafterprint = () => printWindow.close();
-        }, 400);
-    };
+    printWindow.focus();
 }
 
 export function printDispatchLogsSummaryReport(incidents: any[], filters: { search?: string; status?: string; date?: string; preparedBy?: string } = {}): void {

@@ -51,7 +51,7 @@ export default function AdminAppLayout({ children, title = 'Admin Portal', Sideb
                 <div className="flex-1 flex flex-col min-w-0 relative">
                     {Navbar && <Navbar collapsed={collapsed} onToggle={toggleSidebar} />}
 
-                    <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 z-10 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10">
+                    <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 relative scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10">
                         <div className="max-w-7xl mx-auto space-y-6">
                             {children}
                         </div>
