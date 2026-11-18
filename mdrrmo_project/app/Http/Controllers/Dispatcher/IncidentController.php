@@ -103,11 +103,30 @@ class IncidentController extends Controller
             ->with('responderProfile')
             ->get();
 
+        $dbChiefComplaintsByCategory = [];
+        $allChiefComplaints = EmergencyComplaints::ALL;
+        try {
+            $dbComplaints = \App\Models\EmergencyComplaint::all();
+            foreach ($dbComplaints as $dbC) {
+                $cat = trim((string) $dbC->category);
+                $name = trim((string) $dbC->complaint_name);
+                if ($name !== '') {
+                    $allChiefComplaints[] = $name;
+                    if ($cat !== '') {
+                        $dbChiefComplaintsByCategory[$cat][] = $name;
+                    }
+                }
+            }
+            $allChiefComplaints = array_values(array_unique($allChiefComplaints));
+        } catch (\Throwable $e) {
+        }
+
         return Inertia::render('dispatcher/Incidents', [
             'incidents' => $incidents->items(),
             'allHistoryIncidents' => $allHistoryIncidents,
             'incidentTypes' => IncidentType::all(),
-            'chiefComplaints' => EmergencyComplaints::ALL,
+            'chiefComplaints' => $allChiefComplaints,
+            'dbChiefComplaintsByCategory' => $dbChiefComplaintsByCategory,
             'opolBarangays' => Incident::OPOL_BARANGAYS,
             'barangayGeojson' => $barangayGeojson,
             'statusFilter' => $status,

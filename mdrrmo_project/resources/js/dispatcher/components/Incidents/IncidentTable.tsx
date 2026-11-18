@@ -11,6 +11,7 @@ import Pagination from '@/shared/components/Pagination';
 import IncidentRowActionsDropdown from './IncidentRowPrintDropdown';
 import IncidentLocateModal from './IncidentLocateModal';
 import IncidentPinsMapModal from './IncidentPinsMapModal';
+import ChiefComplaintCombobox from './ChiefComplaintCombobox';
 import IncidentDetails from './IncidentDetails';
 import RejectModal from './RejectModal';
 import IncidentKanbanBoard from './IncidentKanbanBoard';
@@ -69,6 +70,7 @@ export default function IncidentTable({
     statusFilter = 'active',
     incidentTypes = [],
     chiefComplaints = [],
+    dbChiefComplaintsByCategory = {},
     pcrChiefComplaints = [],
     opolBarangays = [],
     barangayGeojson = null,
@@ -81,6 +83,7 @@ export default function IncidentTable({
     statusFilter?: string;
     incidentTypes?: any[];
     chiefComplaints?: string[];
+    dbChiefComplaintsByCategory?: Record<string, string[]>;
     pcrChiefComplaints?: string[];
     opolBarangays?: string[];
     barangayGeojson?: any;
@@ -189,27 +192,39 @@ export default function IncidentTable({
         return Array.from(new Set([...MAIN_CATEGORIES, ...customCategories]));
     }, [customCategories]);
 
-    // Available Incidents / Specific Complaints (2. Incident) dynamically filtered by selected Category + custom incidents
+    // Available Incidents / Specific Complaints (2. Incident) dynamically filtered by selected Category + DB + custom incidents
     const availableIncidents = useMemo(() => {
         if (!selectedCategory || selectedCategory === 'all') {
             const allCustom = Object.values(customIncidents).flat();
-            return Array.from(new Set([...ALL_INCIDENT_TYPES, ...allCustom])).sort();
+            const allDbByCat = Object.values(dbChiefComplaintsByCategory || {}).flat();
+            return Array.from(
+                new Set([
+                    ...ALL_INCIDENT_TYPES,
+                    ...(Array.isArray(chiefComplaints) ? chiefComplaints : []),
+                    ...allDbByCat,
+                    ...allCustom,
+                ].filter((item) => typeof item === 'string' && item.trim().length > 0)),
+            ).sort((a, b) => a.localeCompare(b));
         }
 
         // Base complaints if it's one of the 5 official categories
         const base = INCIDENT_TYPES_BY_CATEGORY[selectedCategory as any] || [];
 
-        // Find custom incidents matching this category (case-insensitive lookup)
+        // Find DB & custom incidents matching this category (case-insensitive lookup)
         const targetNorm = selectedCategory.trim().toLowerCase();
-        let customForCat: string[] = [];
-        for (const [catKey, incList] of Object.entries(customIncidents)) {
-            if (catKey.trim().toLowerCase() === targetNorm && Array.isArray(incList)) {
-                customForCat = [...customForCat, ...incList];
+        let extraForCat: string[] = [];
+        for (const sourceMap of [dbChiefComplaintsByCategory || {}, customIncidents]) {
+            for (const [catKey, incList] of Object.entries(sourceMap)) {
+                if (catKey.trim().toLowerCase() === targetNorm && Array.isArray(incList)) {
+                    extraForCat = [...extraForCat, ...incList];
+                }
             }
         }
 
-        return Array.from(new Set([...base, ...customForCat])).sort();
-    }, [selectedCategory, customIncidents]);
+        return Array.from(
+            new Set([...base, ...extraForCat].filter((item) => typeof item === 'string' && item.trim().length > 0)),
+        ).sort((a, b) => a.localeCompare(b));
+    }, [selectedCategory, customIncidents, chiefComplaints, dbChiefComplaintsByCategory]);
 
     // Handle cascading category change
     const handleCategoryChange = (cat: string) => {
@@ -775,26 +790,18 @@ export default function IncidentTable({
                                     </div>
                                 </div>
 
-                                {/* 2. Chief Complaint */}
+                                {/* 2. Chief Complaint (Searchable Combobox) */}
                                 <div>
                                     <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                                         Chief Complaint
                                     </label>
-                                    <div className="relative">
-                                        <select
-                                            value={selectedIncident}
-                                            onChange={(e) => handleIncidentChange(e.target.value)}
-                                            className="w-full text-xs py-2 pl-3 pr-8 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer appearance-none shadow-2xs truncate font-medium"
-                                        >
-                                            <option value="all">All Chief Complaints</option>
-                                            {availableIncidents.map((incName) => (
-                                                <option key={incName} value={incName} className="capitalize text-xs">
-                                                    {incName}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                    </div>
+                                    <ChiefComplaintCombobox
+                                        value={selectedIncident}
+                                        onChange={handleIncidentChange}
+                                        options={availableIncidents}
+                                        placeholder="Type to search chief complaint..."
+                                        allLabel="All Chief Complaints"
+                                    />
                                 </div>
 
                                 {/* 3. Month */}

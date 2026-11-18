@@ -8,6 +8,7 @@ export default function IncidentsPage({
     statusFilter, 
     incidentTypes, 
     chiefComplaints,
+    dbChiefComplaintsByCategory = {},
     pcrChiefComplaints = [],
     opolBarangays = [],
     barangayGeojson = null,
@@ -23,6 +24,7 @@ export default function IncidentsPage({
                 statusFilter={statusFilter} 
                 incidentTypes={incidentTypes ?? []}
                 chiefComplaints={chiefComplaints ?? []}
+                dbChiefComplaintsByCategory={dbChiefComplaintsByCategory ?? {}}
                 pcrChiefComplaints={pcrChiefComplaints}
                 opolBarangays={opolBarangays}
                 barangayGeojson={barangayGeojson}
