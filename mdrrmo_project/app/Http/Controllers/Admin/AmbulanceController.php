@@ -15,8 +15,22 @@ class AmbulanceController extends Controller
     {
         $ambulances = Ambulance::latest()->paginate(10)->withQueryString();
 
+        // Automatically compute the next sequential ambulance callsign (e.g. AMB-04)
+        $existingCodes = Ambulance::withTrashed()->pluck('ambulance_code');
+        $maxNum = 0;
+        foreach ($existingCodes as $code) {
+            if (preg_match('/AMB-?(\d+)/i', $code, $matches)) {
+                $num = (int) $matches[1];
+                if ($num > $maxNum) {
+                    $maxNum = $num;
+                }
+            }
+        }
+        $nextAmbulanceCode = sprintf('AMB-%02d', $maxNum + 1);
+
         return Inertia::render('admin/Ambulances', [
             'ambulances' => $ambulances->items(),
+            'nextAmbulanceCode' => $nextAmbulanceCode,
             'pagination' => [
                 'currentPage' => $ambulances->currentPage(),
                 'lastPage' => $ambulances->lastPage(),
@@ -28,6 +42,20 @@ class AmbulanceController extends Controller
 
     public function store(Request $request)
     {
+        if (empty($request->ambulance_code)) {
+            $existingCodes = Ambulance::withTrashed()->pluck('ambulance_code');
+            $maxNum = 0;
+            foreach ($existingCodes as $code) {
+                if (preg_match('/AMB-?(\d+)/i', $code, $matches)) {
+                    $num = (int) $matches[1];
+                    if ($num > $maxNum) {
+                        $maxNum = $num;
+                    }
+                }
+            }
+            $request->merge(['ambulance_code' => sprintf('AMB-%02d', $maxNum + 1)]);
+        }
+
         $validated = $request->validate([
             'ambulance_code' => ['required', 'string', 'max:255', Rule::unique('ambulances')->whereNull('deleted_at')],
             'plate_number' => ['required', 'string', 'max:255', Rule::unique('ambulances')->whereNull('deleted_at')],

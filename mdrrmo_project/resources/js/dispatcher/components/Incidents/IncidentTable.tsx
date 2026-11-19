@@ -1,6 +1,27 @@
 import { useState, useEffect, useMemo } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { AlertTriangle, X, PhoneCall, MapPin, Activity, RotateCcw, ChevronDown, Search, Plus, CheckCircle2, HeartPulse, Printer, Loader2 } from 'lucide-react';
+import { 
+    AlertTriangle, 
+    X, 
+    PhoneCall, 
+    MapPin, 
+    Activity, 
+    RotateCcw, 
+    ChevronDown, 
+    Search, 
+    Plus, 
+    CheckCircle2, 
+    HeartPulse, 
+    Printer, 
+    Loader2,
+    Calendar,
+    Clock,
+    Flame,
+    ShieldAlert,
+    Layers,
+    FolderArchive,
+    Sparkles
+} from 'lucide-react';
 import { toast } from 'sonner';
 import DataTable from '@/shared/components/DataTable';
 import StatusBadge from '@/shared/components/StatusBadge';
@@ -486,6 +507,70 @@ export default function IncidentTable({
         setRecordsPage(1);
     };
 
+    // Historical Archives Telemetry summary
+    const archiveStats = useMemo(() => {
+        const list = archiveDataset || [];
+        const total = recordsOverallTotal || list.length;
+        
+        let medicalCount = 0;
+        let traumaCount = 0;
+        let fireCount = 0;
+        const barangayCounts: Record<string, number> = {};
+
+        list.forEach((item: any) => {
+            const rawCat = (item.incident_type?.name || item.incident_type?.incident_type_name || '').toLowerCase();
+            const b = typeof item.barangay === 'object' 
+                ? item.barangay?.barangay_name || item.barangay?.name || '' 
+                : item.barangay || '';
+            
+            if (rawCat.includes('medical') || rawCat.includes('health')) medicalCount++;
+            else if (rawCat.includes('trauma') || rawCat.includes('vehicular') || rawCat.includes('accident') || rawCat.includes('injury')) traumaCount++;
+            else if (rawCat.includes('fire') || rawCat.includes('rescue') || rawCat.includes('disaster')) fireCount++;
+            else medicalCount++; // fallback
+
+            if (b) {
+                barangayCounts[b] = (barangayCounts[b] || 0) + 1;
+            }
+        });
+
+        let topBarangay = '—';
+        let topCount = 0;
+        Object.entries(barangayCounts).forEach(([b, count]) => {
+            if (count > topCount) {
+                topCount = count;
+                topBarangay = b;
+            }
+        });
+
+        return {
+            total,
+            medicalCount,
+            traumaCount,
+            fireCount,
+            topBarangay: topBarangay !== '—' ? `Brgy. ${topBarangay} (${topCount})` : 'All 14 Barangays',
+        };
+    }, [archiveDataset, recordsOverallTotal]);
+
+    const handlePresetSelect = (preset: 'all' | 'medical' | 'trauma' | 'fire' | 'this_month') => {
+        if (preset === 'all') {
+            handleResetFilters();
+            return;
+        }
+        if (preset === 'medical') {
+            setSelectedCategories(['Medical Emergency']);
+            setSelectedIncidents([]);
+        } else if (preset === 'trauma') {
+            setSelectedCategories(['Trauma Emergency']);
+            setSelectedIncidents([]);
+        } else if (preset === 'fire') {
+            setSelectedCategories(['Fire & Disaster']);
+            setSelectedIncidents([]);
+        } else if (preset === 'this_month') {
+            const curMonth = new Date().getMonth().toString();
+            setSelectedMonths([curMonth]);
+        }
+    };
+
     // Columns for History / Archive Table
     const archiveColumns = [
         {
@@ -510,11 +595,13 @@ export default function IncidentTable({
                 if (!v) return '—';
                 const date = new Date(v);
                 return (
-                    <div className="flex flex-col whitespace-nowrap">
-                        <span className="font-semibold text-slate-900 dark:text-slate-200 text-xs">
+                    <div className="flex flex-col whitespace-nowrap space-y-0.5">
+                        <span className="font-bold text-slate-900 dark:text-slate-200 text-xs flex items-center gap-1.5">
+                            <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
                             {date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
-                        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                            <Clock className="w-3 h-3 text-slate-400 shrink-0" />
                             {date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true })}
                         </span>
                     </div>
@@ -524,19 +611,25 @@ export default function IncidentTable({
         {
             key: 'place_of_incident',
             header: 'Place & Barangay',
-            render: (_, row) => (
-                <div className="flex flex-col max-w-sm">
-                    <span className="font-medium text-slate-900 dark:text-white text-xs line-clamp-1">
-                        {row.place_of_incident || row.incident_address || (typeof row.location === 'object' ? row.location?.location_name || row.location?.name : row.location) || 'Location Unavailable'}
-                    </span>
-                    {(typeof row.barangay === 'object' ? row.barangay?.barangay_name || row.barangay?.name : row.barangay) && (
-                        <div className="flex items-center gap-1 mt-0.5 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
-                            <MapPin className="w-3 h-3 flex-shrink-0" />
-                            <span>Brgy. {(typeof row.barangay === 'object' ? row.barangay?.barangay_name || row.barangay?.name : row.barangay)}</span>
-                        </div>
-                    )}
-                </div>
-            ),
+            render: (_, row) => {
+                const rawPlace = row.place_of_incident || row.incident_address || (typeof row.location === 'object' ? row.location?.location_name || row.location?.name : row.location) || 'Location Unavailable';
+                const cleanPlace = rawPlace.replace(/,?\s*Opol,?\s*Misamis\s*Oriental/gi, '').trim() || rawPlace;
+                const bgyName = typeof row.barangay === 'object' ? row.barangay?.barangay_name || row.barangay?.name : row.barangay;
+
+                return (
+                    <div className="flex flex-col max-w-sm">
+                        <span className="font-bold text-slate-900 dark:text-white text-xs line-clamp-1" title={rawPlace}>
+                            {cleanPlace}
+                        </span>
+                        {bgyName && (
+                            <div className="flex items-center gap-1 mt-0.5 text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                                <MapPin className="w-3 h-3 flex-shrink-0" />
+                                <span>Brgy. {bgyName}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            },
         },
         {
             key: 'incident_type',
@@ -544,14 +637,27 @@ export default function IncidentTable({
             render: (v, row) => {
                 const complaint = getIncidentChiefComplaint(row);
                 const rawTypeName = row.incident_type?.name || row.incident_type?.incident_type_name || '';
-                // Clinical priority: responder's on-scene PCR chief complaint overrides initial citizen panic selections
                 const name = resolveAuthoritativeCategory(complaint, rawTypeName);
                 if (!name) {
                     return <span className="text-slate-400 text-xs italic">Unclassified</span>;
                 }
+                const isFire = name.toLowerCase().includes('fire');
+                const isTrauma = name.toLowerCase().includes('trauma') || name.toLowerCase().includes('accident');
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-500/20">
-                        <Activity className="w-3 h-3 text-indigo-500 shrink-0" />
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                        isFire
+                            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                            : isTrauma
+                            ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                            : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30'
+                    }`}>
+                        {isFire ? (
+                            <Flame className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        ) : isTrauma ? (
+                            <ShieldAlert className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                        ) : (
+                            <Activity className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                        )}
                         <span>{name}</span>
                     </span>
                 );
@@ -633,23 +739,117 @@ export default function IncidentTable({
                 <IncidentKanbanBoard 
                     incidents={incidents} 
                     viewing={viewing} 
-                    setViewing={setViewing} 
+                    setViewing={setViewing}
+                    onAssign={(inc) => setAssigningIncident(inc)}
+                    onLocate={(inc) => setLocatingIncident(inc)}
                 />
             )}
 
             {/* Incident Archive Synchronized Workspace (History Flow) */}
             {statusFilter === 'history' && (
                 <div className="w-full space-y-4">
+                    {/* Top Historical Telemetry Ribbon (4 Metric Cards) */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        {/* Card 1: Total Incidents */}
+                        <div 
+                            onClick={() => handlePresetSelect('all')}
+                            className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 shadow-xs flex items-center justify-between cursor-pointer hover:border-slate-300 dark:hover:border-white/20 transition-all"
+                        >
+                            <div className="space-y-0.5">
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                    Total Archived
+                                </div>
+                                <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
+                                    {archiveStats.total}
+                                </div>
+                                <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                                    MDRRMO CAD Vault
+                                </div>
+                            </div>
+                            <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 flex items-center justify-center text-slate-600 dark:text-slate-400">
+                                <FolderArchive className="w-4 h-4" />
+                            </div>
+                        </div>
+
+                        {/* Card 2: Medical Responses */}
+                        <div 
+                            onClick={() => handlePresetSelect('medical')}
+                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                                selectedCategories.includes('Medical Emergency')
+                                    ? 'bg-indigo-500/10 border-indigo-500/40 shadow-md ring-1 ring-indigo-500/30'
+                                    : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-white/10 hover:border-indigo-500/40'
+                            }`}
+                        >
+                            <div className="space-y-0.5">
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                    Medical Calls
+                                </div>
+                                <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
+                                    {archiveStats.medicalCount}
+                                </div>
+                                <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                                    Health & Clinical cases
+                                </div>
+                            </div>
+                            <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+                                <Activity className="w-4 h-4" />
+                            </div>
+                        </div>
+
+                        {/* Card 3: Trauma & Rescue */}
+                        <div 
+                            onClick={() => handlePresetSelect('trauma')}
+                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                                selectedCategories.includes('Trauma Emergency') || selectedCategories.includes('Fire & Disaster')
+                                    ? 'bg-rose-500/10 border-rose-500/40 shadow-md ring-1 ring-rose-500/30'
+                                    : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-white/10 hover:border-rose-500/40'
+                            }`}
+                        >
+                            <div className="space-y-0.5">
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                                    Trauma & Rescue
+                                </div>
+                                <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
+                                    {archiveStats.traumaCount + archiveStats.fireCount}
+                                </div>
+                                <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                                    Accidents & Fire incidents
+                                </div>
+                            </div>
+                            <div className="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center">
+                                <ShieldAlert className="w-4 h-4" />
+                            </div>
+                        </div>
+
+                        {/* Card 4: Top Affected Sector */}
+                        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 shadow-xs flex items-center justify-between">
+                            <div className="space-y-0.5 max-w-[170px]">
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                                    Top Hotspot
+                                </div>
+                                <div className="text-lg font-black text-slate-900 dark:text-white truncate">
+                                    {archiveStats.topBarangay}
+                                </div>
+                                <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                                    Highest response volume
+                                </div>
+                            </div>
+                            <div className="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center shrink-0">
+                                <MapPin className="w-4 h-4" />
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Synchronized DataTable Card */}
                     <Card padding={false} className="bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-sm overflow-hidden">
                         
-                        {/* Card Header with Title, Count, Search Bar, Reset, and Add Buttons */}
+                        {/* Card Header with Title, Count, Search Bar, Reset, and Grouped Buttons */}
                         <div className="p-4 border-b border-slate-200/80 dark:border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                             <div className="flex items-center gap-2.5">
-                                <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                                <h4 className="font-black text-sm text-slate-900 dark:text-white tracking-tight">
                                     Archived Incident Records
                                 </h4>
-                                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5">
+                                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5 font-mono">
                                     <span>{recordsTotal} of {recordsOverallTotal}</span>
                                     {isRecordsFetching && (
                                         <Loader2 className="w-3 h-3 animate-spin text-rose-500" />
@@ -697,46 +897,115 @@ export default function IncidentTable({
                                     </button>
                                 )}
 
-                                {/* Map Pins, Print Report, + Chief Complaint and + Category Buttons */}
+                                {/* Action Buttons: Grouped Operational & Taxonomy Tools */}
                                 <div className="flex items-center flex-wrap gap-2 shrink-0">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsPinsMapModalOpen(true)}
-                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 shadow-sm shadow-sky-600/25 border border-sky-500/30 transition-all cursor-pointer"
-                                        title="View & Print All Filtered Incident Location Pins on Map"
-                                    >
-                                        <MapPin className="w-3.5 h-3.5" />
-                                        <span>Map Pins</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsMonthlyReportModalOpen(true)}
-                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-500 active:bg-red-700 shadow-sm shadow-red-600/25 border border-red-500/30 transition-all cursor-pointer"
-                                        title="Print Official MDRRMO Monthly Responses & Patient Complaints Report"
-                                    >
-                                        <Printer className="w-3.5 h-3.5" />
-                                        <span>Print Report</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsAddIncidentModalOpen(true)}
-                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 shadow-sm shadow-indigo-600/25 border border-indigo-500/30 transition-all cursor-pointer"
-                                        title="Add Chief Complaint"
-                                    >
-                                        <Plus className="w-3.5 h-3.5" />
-                                        <span>Chief Complaint</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsAddCategoryModalOpen(true)}
-                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 active:from-rose-700 active:to-orange-700 shadow-sm shadow-rose-600/25 border border-rose-500/30 transition-all cursor-pointer"
-                                        title="Add Incident Category"
-                                    >
-                                        <Plus className="w-3.5 h-3.5" />
-                                        <span>Category</span>
-                                    </button>
+                                    {/* GIS & Export Tools */}
+                                    <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-white/10 rounded-xl">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsPinsMapModalOpen(true)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-sky-700 dark:text-sky-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition-all cursor-pointer"
+                                            title="View & Print All Filtered Incident Location Pins on Map"
+                                        >
+                                            <MapPin className="w-3.5 h-3.5 text-sky-500" />
+                                            <span>Map Pins</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsMonthlyReportModalOpen(true)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-red-700 dark:text-red-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition-all cursor-pointer"
+                                            title="Print Official MDRRMO Monthly Responses & Patient Complaints Report"
+                                        >
+                                            <Printer className="w-3.5 h-3.5 text-red-500" />
+                                            <span>Print Report</span>
+                                        </button>
+                                    </div>
+
+                                    {/* Taxonomy Management */}
+                                    <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-white/10 rounded-xl">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAddIncidentModalOpen(true)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition-all cursor-pointer"
+                                            title="Add Chief Complaint"
+                                        >
+                                            <Plus className="w-3.5 h-3.5 text-indigo-500" />
+                                            <span>Chief Complaint</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAddCategoryModalOpen(true)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-rose-700 dark:text-rose-300 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition-all cursor-pointer"
+                                            title="Add Incident Category"
+                                        >
+                                            <Plus className="w-3.5 h-3.5 text-rose-500" />
+                                            <span>Category</span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Quick Presets Ribbon */}
+                        <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-200/60 dark:border-white/5 flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1 shrink-0 flex items-center gap-1">
+                                <Sparkles className="w-3 h-3 text-rose-500" /> Quick:
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => handlePresetSelect('all')}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                                    !hasActiveFilters
+                                        ? 'bg-red-600 text-white shadow-xs font-bold'
+                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5'
+                                }`}
+                            >
+                                All Records
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handlePresetSelect('medical')}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                                    selectedCategories.includes('Medical Emergency') && selectedCategories.length === 1
+                                        ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5'
+                                }`}
+                            >
+                                ⚡ Medical Emergencies
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handlePresetSelect('trauma')}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                                    selectedCategories.includes('Trauma Emergency') && selectedCategories.length === 1
+                                        ? 'bg-rose-600 text-white shadow-xs font-bold'
+                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5'
+                                }`}
+                            >
+                                🚨 Trauma & Vehicular
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handlePresetSelect('fire')}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                                    selectedCategories.includes('Fire & Disaster') && selectedCategories.length === 1
+                                        ? 'bg-amber-600 text-white shadow-xs font-bold'
+                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5'
+                                }`}
+                            >
+                                🔥 Fire & Disaster
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handlePresetSelect('this_month')}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                                    selectedMonths.includes(new Date().getMonth().toString()) && selectedMonths.length === 1
+                                        ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5'
+                                }`}
+                            >
+                                📅 This Month
+                            </button>
                         </div>
 
                         {/* Confirmation Notification Banner */}
@@ -769,7 +1038,8 @@ export default function IncidentTable({
                                 
                                 {/* 1. Category (Multi-Select) */}
                                 <div>
-                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                        <Layers className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                                         Category
                                     </label>
                                     <MultiSelectFilterCombobox
@@ -787,7 +1057,8 @@ export default function IncidentTable({
 
                                 {/* 2. Chief Complaint (Multi-Select Searchable Combobox) */}
                                 <div>
-                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                        <HeartPulse className="w-3.5 h-3.5 text-rose-500 shrink-0" />
                                         Chief Complaint
                                     </label>
                                     <MultiSelectFilterCombobox
@@ -805,7 +1076,8 @@ export default function IncidentTable({
 
                                 {/* 3. Month (Multi-Select) */}
                                 <div>
-                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                        <Calendar className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                                         Month
                                     </label>
                                     <MultiSelectFilterCombobox
@@ -820,7 +1092,8 @@ export default function IncidentTable({
 
                                 {/* 4. Time (Multi-Select) */}
                                 <div>
-                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                        <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                                         Time
                                     </label>
                                     <MultiSelectFilterCombobox
@@ -834,7 +1107,8 @@ export default function IncidentTable({
 
                                 {/* 5. Barangay (Multi-Select) */}
                                 <div>
-                                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                                        <MapPin className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
                                         Barangay
                                     </label>
                                     <MultiSelectFilterCombobox

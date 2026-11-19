@@ -1,14 +1,29 @@
 import { useState, useMemo } from 'react';
 import { router } from '@inertiajs/react';
-import { Plus, Pencil, Trash2, Ambulance as AmbulanceIcon, CheckCircle2, Truck, Wrench } from 'lucide-react';
-import DataTable, { type Column } from '@/shared/components/DataTable';
+import {
+    Plus,
+    Pencil,
+    Trash2,
+    Ambulance as AmbulanceIcon,
+    CheckCircle2,
+    Truck,
+    Wrench,
+    Building2,
+    Eye,
+    LayoutGrid,
+    List,
+    Search,
+    Shield,
+    Activity,
+    ChevronDown,
+    Sparkles,
+} from 'lucide-react';
 import AmbulanceStatusBadge from './AmbulanceStatusBadge';
-import Button from '@/shared/components/Button';
-import PageHeader from '@/shared/components/PageHeader';
-import Card from '@/shared/components/Card';
-import SearchInput from '@/shared/components/SearchInput';
-import Drawer from '@/shared/components/Drawer';
+import AmbulanceDetailsModal from './AmbulanceDetailsModal';
+import AmbulanceCard from './AmbulanceCard';
 import AmbulanceForm, { type Ambulance } from './AmbulanceForm';
+import Button from '@/shared/components/Button';
+import Drawer from '@/shared/components/Drawer';
 import ConfirmDialog from '@/shared/components/ConfirmDialog';
 import Pagination from '@/shared/components/Pagination';
 import { clsx } from 'clsx';
@@ -17,33 +32,39 @@ import { toPascalCase } from '@/shared/utils/utils';
 interface AmbulanceTableProps {
     ambulances?: Ambulance[];
     pagination?: any;
+    nextAmbulanceCode?: string;
 }
 
-export default function AmbulanceTable({ ambulances = [], pagination = null }: AmbulanceTableProps) {
+export default function AmbulanceTable({
+    ambulances = [],
+    pagination = null,
+    nextAmbulanceCode,
+}: AmbulanceTableProps) {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [editing, setEditing] = useState<Ambulance | null>(null);
+    const [viewingAmbulance, setViewingAmbulance] = useState<Ambulance | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Ambulance | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
-    // Filter by search and status tab
-    const filtered = useMemo(() => {
-        return ambulances.filter((a) => {
-            const q = search.toLowerCase();
-            const matchSearch =
-                !q ||
-                a.plate_number?.toLowerCase().includes(q) ||
-                a.vehicle_name?.toLowerCase().includes(q) ||
-                a.ambulance_code?.toLowerCase().includes(q);
-
-            const matchStatus = statusFilter === 'all' || a.status === statusFilter;
-            return matchSearch && matchStatus;
+    // Compute next available ambulance callsign automatically as fallback
+    const generatedNextCode = useMemo(() => {
+        if (nextAmbulanceCode) return nextAmbulanceCode;
+        let maxNum = 0;
+        (ambulances || []).forEach((a) => {
+            const match = a.ambulance_code?.match(/AMB-?(\d+)/i);
+            if (match) {
+                const num = parseInt(match[1], 10);
+                if (num > maxNum) maxNum = num;
+            }
         });
-    }, [ambulances, search, statusFilter]);
+        return `AMB-${String(maxNum + 1).padStart(2, '0')}`;
+    }, [ambulances, nextAmbulanceCode]);
 
-    // Fleet Counts
+    // Fleet Counts & Readiness Rate
     const counts = useMemo(() => {
         return {
             total: ambulances.length,
@@ -53,15 +74,47 @@ export default function AmbulanceTable({ ambulances = [], pagination = null }: A
         };
     }, [ambulances]);
 
-    const openCreate = () => { setEditing(null); setDrawerOpen(true); };
-    const openEdit = (a: Ambulance) => { setEditing(a); setDrawerOpen(true); };
+    const readinessPercentage = useMemo(() => {
+        if (!counts.total) return 0;
+        return Math.round((counts.available / counts.total) * 100);
+    }, [counts]);
+
+    // Filter by search and status tab
+    const filtered = useMemo(() => {
+        return ambulances.filter((a) => {
+            const q = search.trim().toLowerCase();
+            const matchSearch =
+                !q ||
+                a.plate_number?.toLowerCase().includes(q) ||
+                a.vehicle_name?.toLowerCase().includes(q) ||
+                a.ambulance_code?.toLowerCase().includes(q) ||
+                a.vehicle_type?.toLowerCase().includes(q);
+
+            const matchStatus = statusFilter === 'all' || a.status === statusFilter;
+            return matchSearch && matchStatus;
+        });
+    }, [ambulances, search, statusFilter]);
+
+    const openCreate = () => {
+        setEditing(null);
+        setDrawerOpen(true);
+    };
+
+    const openEdit = (a: Ambulance) => {
+        setEditing(a);
+        setDrawerOpen(true);
+    };
 
     const handleSubmit = (form: any) => {
         setSubmitting(true);
         const url = editing ? `/admin/ambulances/${editing.id}` : '/admin/ambulances';
         const method = editing ? 'patch' : 'post';
         router[method](url, form, {
-            onSuccess: () => { setDrawerOpen(false); setSubmitting(false); },
+            preserveScroll: true,
+            onSuccess: () => {
+                setDrawerOpen(false);
+                setSubmitting(false);
+            },
             onError: () => setSubmitting(false),
         });
     };
@@ -70,147 +123,244 @@ export default function AmbulanceTable({ ambulances = [], pagination = null }: A
         if (!deleteTarget) return;
         setDeleting(true);
         router.delete(`/admin/ambulances/${deleteTarget.id}`, {
-            onSuccess: () => { setDeleteTarget(null); setDeleting(false); },
+            preserveScroll: true,
+            onSuccess: () => {
+                setDeleteTarget(null);
+                setDeleting(false);
+            },
             onError: () => setDeleting(false),
         });
     };
 
-    const columns: Column<Ambulance>[] = [
-        {
-            key: 'ambulance_code',
-            header: 'Unit Code',
-            sortable: true,
-            render: (v) => (
-                <span className="font-mono font-bold text-slate-900 dark:text-white px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/10 text-xs">
-                    {v || 'UNIT'}
-                </span>
-            ),
-        },
-        {
-            key: 'plate_number',
-            header: 'Plate Number',
-            sortable: true,
-            render: (v) => (
-                <span className="font-mono font-semibold text-slate-700 dark:text-slate-300 text-xs">
-                    {v}
-                </span>
-            ),
-        },
-        {
-            key: 'vehicle_name',
-            header: 'Vehicle Model',
-            sortable: true,
-            render: (v) => (
-                <span className="font-medium text-slate-900 dark:text-white capitalize">
-                    {toPascalCase(v) || '—'}
-                </span>
-            ),
-        },
-        {
-            key: 'vehicle_type',
-            header: 'Fleet Category',
-            render: (v) => (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 capitalize">
-                    {toPascalCase(v) || 'Standard'}
-                </span>
-            ),
-        },
-        {
-            key: 'status',
-            header: 'Deployment Status',
-            sortable: true,
-            render: (v) => <AmbulanceStatusBadge status={v} />,
-        },
-        {
-            key: 'actions',
-            header: 'Manage',
-            render: (_, row) => (
-                <div className="flex items-center gap-1.5">
-                    <Button
-                        size="xs"
-                        variant="secondary"
-                        onClick={(e) => { e.stopPropagation(); openEdit(row); }}
-                        className="hover:bg-slate-200 dark:hover:bg-white/15"
-                    >
-                        <Pencil className="w-3 h-3" />
-                        <span>Edit</span>
-                    </Button>
-                    <Button
-                        size="xs"
-                        variant="danger"
-                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}
-                    >
-                        <Trash2 className="w-3 h-3" />
-                    </Button>
-                </div>
-            ),
-        },
-    ];
+    // 1-Click Fast Status Switcher
+    const handleQuickStatusChange = (amb: Ambulance, newStatus: string) => {
+        if (amb.status === newStatus) return;
+        router.patch(
+            `/admin/ambulances/${amb.id}`,
+            {
+                ambulance_code: amb.ambulance_code,
+                plate_number: amb.plate_number,
+                vehicle_name: amb.vehicle_name,
+                vehicle_type: amb.vehicle_type,
+                status: newStatus,
+            },
+            {
+                preserveScroll: true,
+                preserveState: true,
+            }
+        );
+    };
 
     return (
         <div className="space-y-6">
-            <PageHeader
-                title="Ambulance Fleet"
-                subtitle="Manage emergency medical vehicles, technical readiness, and dispatch status."
-                actions={
+            {/* COMMAND & CONTROL HEADER */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200/80 dark:border-white/10">
+                <div>
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-[10px] font-mono uppercase tracking-wider font-extrabold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                            MDRRMO FLEET COMMAND
+                        </span>
+                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                            {readinessPercentage}% Readiness Rate
+                        </span>
+                    </div>
+                    <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                        Ambulance Fleet
+                    </h1>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                        Manage emergency medical vehicles, technical readiness, and dispatch status.
+                    </p>
+                </div>
+
+                <div className="flex items-center gap-2.5 self-start md:self-auto">
+                    {/* View Switcher: Table vs Cards */}
+                    <div className="inline-flex p-1 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 text-xs">
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('table')}
+                            className={clsx(
+                                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer',
+                                viewMode === 'table'
+                                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                            )}
+                            title="Compact Table View"
+                        >
+                            <List className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Table</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('grid')}
+                            className={clsx(
+                                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer',
+                                viewMode === 'grid'
+                                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                            )}
+                            title="Grid Card View"
+                        >
+                            <LayoutGrid className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Fleet Grid</span>
+                        </button>
+                    </div>
+
+                    {/* Add Ambulance Button */}
                     <button
+                        type="button"
                         onClick={openCreate}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-semibold text-xs sm:text-sm shadow-sm hover:bg-slate-800 dark:hover:bg-slate-100 transition-all cursor-pointer active:scale-95"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 shadow-md shadow-red-600/25 active:scale-95 transition-all cursor-pointer"
                     >
                         <Plus className="w-4 h-4" />
                         <span>Add Ambulance</span>
                     </button>
-                }
-            />
+                </div>
+            </div>
 
-            {/* Fleet Statistics KPI Strip */}
+            {/* INTERACTIVE FLEET KPI STRIP */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 shadow-sm flex items-center gap-3.5">
-                    <div className="w-10 h-10 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center shrink-0">
-                        <AmbulanceIcon className="w-5 h-5" />
+                {/* 1. TOTAL FLEET */}
+                <div
+                    onClick={() => setStatusFilter('all')}
+                    className={clsx(
+                        'p-4 rounded-2xl bg-white dark:bg-slate-900/90 border transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between gap-3',
+                        statusFilter === 'all'
+                            ? 'border-indigo-500/80 ring-2 ring-indigo-500/20'
+                            : 'border-slate-200/80 dark:border-white/10 hover:border-slate-300'
+                    )}
+                >
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-400">
+                            Total Fleet
+                        </span>
+                        <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-800 dark:text-white flex items-center justify-center shrink-0">
+                            <AmbulanceIcon className="w-4 h-4" />
+                        </div>
                     </div>
                     <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total Fleet</p>
-                        <p className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">{counts.total}</p>
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
+                                {counts.total}
+                            </span>
+                            <span className="text-xs text-slate-500 font-medium">units registered</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                            {counts.available} available for immediate dispatch
+                        </p>
                     </div>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 shadow-sm flex items-center gap-3.5">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                        <CheckCircle2 className="w-5 h-5" />
+                {/* 2. AVAILABLE */}
+                <div
+                    onClick={() => setStatusFilter(statusFilter === 'available' ? 'all' : 'available')}
+                    className={clsx(
+                        'p-4 rounded-2xl bg-white dark:bg-slate-900/90 border transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between gap-3',
+                        statusFilter === 'available'
+                            ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-950/20 ring-2 ring-emerald-500/20'
+                            : 'border-slate-200/80 dark:border-white/10 hover:border-emerald-500/50'
+                    )}
+                >
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            Available
+                        </span>
+                        <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                            <CheckCircle2 className="w-4 h-4" />
+                        </div>
                     </div>
                     <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Available</p>
-                        <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{counts.available}</p>
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums tracking-tight">
+                                {counts.available}
+                            </span>
+                            <span className="text-xs text-emerald-600/80 dark:text-emerald-400/80 font-bold">
+                                In Service
+                            </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                            Ready for instant deployment
+                        </p>
                     </div>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 shadow-sm flex items-center gap-3.5">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                        <Truck className="w-5 h-5" />
+                {/* 3. DISPATCHED */}
+                <div
+                    onClick={() => setStatusFilter(statusFilter === 'dispatched' ? 'all' : 'dispatched')}
+                    className={clsx(
+                        'p-4 rounded-2xl bg-white dark:bg-slate-900/90 border transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between gap-3',
+                        statusFilter === 'dispatched'
+                            ? 'border-blue-500 bg-blue-500/5 dark:bg-blue-950/20 ring-2 ring-blue-500/20'
+                            : 'border-slate-200/80 dark:border-white/10 hover:border-blue-500/50'
+                    )}
+                >
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400">
+                            Dispatched
+                        </span>
+                        <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                            <Truck className="w-4 h-4" />
+                        </div>
                     </div>
                     <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Dispatched</p>
-                        <p className="text-xl font-bold text-blue-600 dark:text-blue-400 tabular-nums">{counts.dispatched}</p>
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-2xl sm:text-3xl font-black text-blue-600 dark:text-blue-400 tabular-nums tracking-tight">
+                                {counts.dispatched}
+                            </span>
+                            <span className="text-xs text-blue-600/80 dark:text-blue-400/80 font-bold">
+                                En Route
+                            </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                            Active emergency field runs
+                        </p>
                     </div>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 shadow-sm flex items-center gap-3.5">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                        <Wrench className="w-5 h-5" />
+                {/* 4. MAINTENANCE */}
+                <div
+                    onClick={() => setStatusFilter(statusFilter === 'maintenance' ? 'all' : 'maintenance')}
+                    className={clsx(
+                        'p-4 rounded-2xl bg-white dark:bg-slate-900/90 border transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between gap-3',
+                        statusFilter === 'maintenance'
+                            ? 'border-amber-500 bg-amber-500/5 dark:bg-amber-950/20 ring-2 ring-amber-500/20'
+                            : 'border-slate-200/80 dark:border-white/10 hover:border-amber-500/50'
+                    )}
+                >
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                            Maintenance
+                        </span>
+                        <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                            <Wrench className="w-4 h-4" />
+                        </div>
                     </div>
                     <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Maintenance</p>
-                        <p className="text-xl font-bold text-amber-600 dark:text-amber-400 tabular-nums">{counts.maintenance}</p>
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400 tabular-nums tracking-tight">
+                                {counts.maintenance}
+                            </span>
+                            <span className="text-xs text-amber-600/80 dark:text-amber-400/80 font-bold">
+                                Service Bay
+                            </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                            Under repair or inspection
+                        </p>
                     </div>
                 </div>
             </div>
 
-            {/* Main Table Card */}
-            <Card padding={false} className="overflow-hidden">
-                <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    {/* Status Filter Tabs */}
-                    <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-white/5 self-start overflow-x-auto max-w-full">
+            {/* MAIN CONTENT CARD */}
+            <div className="rounded-3xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-white/10 shadow-sm overflow-hidden">
+                {/* TOOLBAR: Filter Tabs & Search */}
+                <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    {/* Status Tabs */}
+                    <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-white/5 overflow-x-auto max-w-full scrollbar-none">
                         {[
                             { id: 'all', label: 'All Fleet', count: counts.total },
                             { id: 'available', label: 'Available', count: counts.available },
@@ -219,80 +369,340 @@ export default function AmbulanceTable({ ambulances = [], pagination = null }: A
                         ].map((tab) => (
                             <button
                                 key={tab.id}
+                                type="button"
                                 onClick={() => setStatusFilter(tab.id)}
                                 className={clsx(
-                                    'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 flex items-center gap-2 whitespace-nowrap cursor-pointer',
+                                    'px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all duration-200 flex items-center gap-2 whitespace-nowrap cursor-pointer',
                                     statusFilter === tab.id
-                                        ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white'
-                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white',
+                                        ? 'bg-white text-slate-900 dark:bg-slate-800 dark:text-white shadow-xs'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                 )}
                             >
                                 <span>{tab.label}</span>
-                                <span className={clsx(
-                                    'px-1.5 py-0.2 rounded-full text-[10px]',
-                                    statusFilter === tab.id
-                                        ? 'bg-slate-100 dark:bg-white/10 text-slate-900 dark:text-white font-bold'
-                                        : 'bg-slate-200/60 dark:bg-white/5 text-slate-500 dark:text-slate-400',
-                                )}>
+                                <span
+                                    className={clsx(
+                                        'px-1.5 py-0.2 rounded-full text-[10px] font-mono',
+                                        statusFilter === tab.id
+                                            ? 'bg-slate-100 dark:bg-white/10 text-slate-900 dark:text-white font-bold'
+                                            : 'bg-slate-200/60 dark:bg-white/5 text-slate-500 dark:text-slate-400'
+                                    )}
+                                >
                                     {tab.count}
                                 </span>
                             </button>
                         ))}
                     </div>
 
-                    <div className="flex items-center gap-3 w-full md:w-auto">
-                        <SearchInput
-                            placeholder="Search by code, plate, model..."
-                            onChange={setSearch}
-                            className="w-full md:w-72"
-                        />
-                        <p className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    {/* Search Bar */}
+                    <div className="flex items-center gap-3 w-full lg:w-auto">
+                        <div className="relative flex-1 lg:w-80">
+                            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <input
+                                type="text"
+                                placeholder="Search by code, plate, model, category..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="w-full pl-9.5 pr-4 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-xs"
+                            />
+                            {search && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearch('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-medium">
                             {filtered.length} found
-                        </p>
+                        </span>
                     </div>
                 </div>
 
-                <div className="p-4 sm:p-5">
-                    <DataTable
-                        columns={columns}
-                        data={filtered}
-                        keyField="id"
-                        emptyTitle="No ambulances found"
-                        emptyDescription="Try adjusting your search criteria or filter tab."
-                        emptyIcon={AmbulanceIcon}
-                    />
+                {/* CONTENT AREA: Table View or Grid View */}
+                {viewMode === 'table' ? (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-slate-200/80 dark:border-white/10 bg-slate-50/60 dark:bg-slate-950/40 text-[11px] uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400">
+                                    <th className="px-5 py-3.5">Unit Code</th>
+                                    <th className="px-4 py-3.5">Plate Number</th>
+                                    <th className="px-4 py-3.5">Vehicle Model & Callsign</th>
+                                    <th className="px-4 py-3.5">Fleet Category</th>
+                                    <th className="px-4 py-3.5">Deployment Status</th>
+                                    <th className="px-5 py-3.5 text-right">Manage</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-xs">
+                                {filtered.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="py-12 text-center">
+                                            <div className="max-w-xs mx-auto space-y-2">
+                                                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-400 mx-auto flex items-center justify-center">
+                                                    <AmbulanceIcon className="w-6 h-6" />
+                                                </div>
+                                                <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                                                    No ambulances found
+                                                </p>
+                                                <p className="text-xs text-slate-400">
+                                                    Try adjusting your search criteria or filter tab.
+                                                </p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    filtered.map((amb) => {
+                                        const isStation =
+                                            amb.ambulance_code?.toUpperCase().includes('STATION') ||
+                                            amb.ambulance_code?.toUpperCase().includes('WALK-IN') ||
+                                            amb.vehicle_type?.toLowerCase().includes('station');
 
-                    {pagination && (
+                                        return (
+                                            <tr
+                                                key={amb.id}
+                                                className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group cursor-pointer"
+                                                onClick={() => setViewingAmbulance(amb)}
+                                            >
+                                                {/* Unit Code */}
+                                                <td className="px-5 py-4 whitespace-nowrap">
+                                                    <div className="flex items-center gap-3">
+                                                        <div
+                                                            className={clsx(
+                                                                'w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border shadow-xs',
+                                                                isStation
+                                                                    ? 'bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/30'
+                                                                    : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                                                            )}
+                                                        >
+                                                            {isStation ? (
+                                                                <Building2 className="w-4 h-4" />
+                                                            ) : (
+                                                                <AmbulanceIcon className="w-4 h-4" />
+                                                            )}
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-mono font-black text-slate-900 dark:text-white tracking-wide text-xs">
+                                                                {amb.ambulance_code}
+                                                            </span>
+                                                            {isStation && (
+                                                                <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
+                                                                    Base Clinic
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+
+                                                {/* Plate Number */}
+                                                <td className="px-4 py-4 whitespace-nowrap">
+                                                    <span className="inline-block px-2.5 py-1 rounded-md bg-[#0b1329] text-white font-mono font-bold text-xs tracking-widest border border-slate-700 shadow-xs">
+                                                        {amb.plate_number}
+                                                    </span>
+                                                </td>
+
+                                                {/* Vehicle Model */}
+                                                <td className="px-4 py-4">
+                                                    <div className="font-semibold text-slate-900 dark:text-white text-xs sm:text-sm">
+                                                        {toPascalCase(amb.vehicle_name)}
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-400">
+                                                        {isStation
+                                                            ? 'Walk-In Patient Care & Triage Station'
+                                                            : 'Emergency Response Unit'}
+                                                    </p>
+                                                </td>
+
+                                                {/* Fleet Category */}
+                                                <td className="px-4 py-4 whitespace-nowrap">
+                                                    <span
+                                                        className={clsx(
+                                                            'inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border',
+                                                            amb.vehicle_type?.toLowerCase().includes('advanced') ||
+                                                                amb.vehicle_type?.toLowerCase().includes('als')
+                                                                ? 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30'
+                                                                : amb.vehicle_type?.toLowerCase().includes('station')
+                                                                ? 'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30'
+                                                                : 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30'
+                                                        )}
+                                                    >
+                                                        {toPascalCase(amb.vehicle_type) || 'Type 1 Ambulance'}
+                                                    </span>
+                                                </td>
+
+                                                {/* Deployment Status & Fast Toggle */}
+                                                <td
+                                                    className="px-4 py-4 whitespace-nowrap"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <AmbulanceStatusBadge status={amb.status} />
+
+                                                        {/* Quick Switch Button (Available <-> Maintenance) */}
+                                                        {amb.status !== 'dispatched' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    handleQuickStatusChange(
+                                                                        amb,
+                                                                        amb.status === 'available'
+                                                                            ? 'maintenance'
+                                                                            : 'available'
+                                                                    )
+                                                                }
+                                                                title={`Switch to ${
+                                                                    amb.status === 'available'
+                                                                        ? 'Maintenance'
+                                                                        : 'Available'
+                                                                }`}
+                                                                className="px-2 py-0.5 rounded text-[10px] font-bold text-slate-400 hover:text-slate-800 dark:hover:text-white bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 transition-all cursor-pointer"
+                                                            >
+                                                                {amb.status === 'available'
+                                                                    ? 'Set Service'
+                                                                    : 'Set Ready'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+
+                                                {/* Manage Actions */}
+                                                <td
+                                                    className="px-5 py-4 whitespace-nowrap text-right"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setViewingAmbulance(amb)}
+                                                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                                                            title="View Specifications"
+                                                        >
+                                                            <Eye className="w-4 h-4" />
+                                                        </button>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openEdit(amb)}
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-800 dark:text-white transition-all cursor-pointer"
+                                                        >
+                                                            <Pencil className="w-3 h-3" />
+                                                            <span>Edit</span>
+                                                        </button>
+
+                                                        {!isStation && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setDeleteTarget(amb)}
+                                                                className="p-1.5 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                                                title="Delete Ambulance"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    /* GRID VIEW */
+                    <div className="p-4 sm:p-5">
+                        {filtered.length === 0 ? (
+                            <div className="py-12 text-center">
+                                <div className="max-w-xs mx-auto space-y-2">
+                                    <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-400 mx-auto flex items-center justify-center">
+                                        <AmbulanceIcon className="w-6 h-6" />
+                                    </div>
+                                    <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                                        No ambulances found
+                                    </p>
+                                    <p className="text-xs text-slate-400">
+                                        Try adjusting your search criteria or filter tab.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                {filtered.map((amb) => (
+                                    <AmbulanceCard
+                                        key={amb.id}
+                                        ambulance={amb}
+                                        onEdit={openEdit}
+                                        onDelete={setDeleteTarget}
+                                        onView={setViewingAmbulance}
+                                        onQuickStatus={handleQuickStatusChange}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* PAGINATION */}
+                {pagination && pagination.total > (pagination.perPage || 10) && (
+                    <div className="p-4 border-t border-slate-200/80 dark:border-white/10">
                         <Pagination
                             {...pagination}
                             onPageChange={(page) =>
-                                router.get('/admin/ambulances', { page }, { preserveState: true, preserveScroll: true })
+                                router.get(
+                                    '/admin/ambulances',
+                                    { page },
+                                    { preserveState: true, preserveScroll: true }
+                                )
                             }
                         />
-                    )}
-                </div>
-            </Card>
+                    </div>
+                )}
+            </div>
 
+            {/* EDIT / CREATE DRAWER */}
             <Drawer
                 open={drawerOpen}
                 onClose={() => setDrawerOpen(false)}
                 title={editing ? 'Edit Ambulance Details' : 'Register New Ambulance'}
+                description={
+                    editing
+                        ? 'Update vehicle identifiers, callsign, and deployment status.'
+                        : 'Register a new emergency response vehicle or clinic into the CAD fleet.'
+                }
+                width="w-full max-w-xl"
             >
                 <AmbulanceForm
                     ambulance={editing}
+                    defaultCode={generatedNextCode}
                     onSubmit={handleSubmit}
                     onCancel={() => setDrawerOpen(false)}
                     loading={submitting}
                 />
             </Drawer>
 
+            {/* QUICK VEHICLE DOSSIER SPECIFICATIONS MODAL */}
+            <AmbulanceDetailsModal
+                open={!!viewingAmbulance}
+                ambulance={viewingAmbulance}
+                onClose={() => setViewingAmbulance(null)}
+                onEdit={openEdit}
+                onQuickStatus={handleQuickStatusChange}
+            />
+
+            {/* DELETE CONFIRM DIALOG */}
             <ConfirmDialog
                 open={!!deleteTarget}
                 onClose={() => setDeleteTarget(null)}
                 onConfirm={handleDelete}
                 loading={deleting}
                 title="Decommission Ambulance"
-                description={deleteTarget ? `Are you sure you want to delete ambulance ${deleteTarget.ambulance_code || deleteTarget.plate_number}? This action cannot be reversed.` : ''}
+                description={
+                    deleteTarget
+                        ? `Are you sure you want to delete ambulance ${
+                              deleteTarget.ambulance_code || deleteTarget.plate_number
+                          }? This action cannot be reversed.`
+                        : ''
+                }
                 confirmLabel="Delete"
             />
         </div>

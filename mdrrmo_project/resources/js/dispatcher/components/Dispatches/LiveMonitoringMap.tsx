@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Map, { Marker, Source, Layer, type MapRef } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Truck, MapPin, AlertTriangle, Navigation, RotateCw, X, Radio, CheckCircle } from 'lucide-react';
+import { 
+    Truck, MapPin, AlertTriangle, Navigation, RotateCw, X, Radio, CheckCircle, 
+    Shield, Layers, Compass, Maximize2, AlertCircle, Building2, Eye
+} from 'lucide-react';
 import { useAppearance } from '@/shared/contexts/ThemeContext';
 
 export interface RouteTelemetry {
@@ -29,12 +32,23 @@ interface LiveMonitoringMapProps {
     liveLocations?: Record<string | number, LiveLocation>;
     onRouteTelemetryChange?: (dispatchId: number | string, telemetry: RouteTelemetry) => void;
     onSelectDispatch?: (dispatch: any) => void;
+    verifiedIncidents?: any[];
+    onAssignIncident?: (incident: any) => void;
+    focusedTarget?: { longitude: number; latitude: number; zoom?: number; key?: string | number } | null;
+    ambulances?: any[];
 }
 
+export const MDRRMO_HQ_COORDINATES = {
+    latitude: 8.521370,
+    longitude: 124.572465,
+    name: 'Opol MDRRMO Base HQ',
+    address: 'Poblacion, Opol, Misamis Oriental'
+};
+
 const DEFAULT_MAP_CENTER = {
-    longitude: 124.577, // Opol/Misamis Oriental center
-    latitude: 8.520,
-    zoom: 12
+    longitude: 124.572465, // Opol MDRRMO Base HQ (8.521370, 124.572465)
+    latitude: 8.521370,
+    zoom: 13.8
 };
 
 /**
@@ -226,14 +240,60 @@ export default function LiveMonitoringMap({
     selectedDispatch = null,
     liveLocations = {},
     onRouteTelemetryChange,
-    onSelectDispatch
+    onSelectDispatch,
+    verifiedIncidents = [],
+    onAssignIncident,
+    focusedTarget = null,
+    ambulances = []
 }: LiveMonitoringMapProps) {
     const { theme } = useAppearance();
     const mapRef = useRef<MapRef>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const [mapLoaded, setMapLoaded] = useState(false);
     const [routeGeojson, setRouteGeojson] = useState<any | null>(null);
     const [isOffRoute, setIsOffRoute] = useState(false);
     const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+    const [mapStyleType, setMapStyleType] = useState<'tactical' | 'satellite' | 'streets'>('tactical');
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    // Dynamic map style resolution
+    const getMapStyleUrl = () => {
+        if (mapStyleType === 'satellite') return "mapbox://styles/mapbox/satellite-streets-v12";
+        if (mapStyleType === 'streets') return "mapbox://styles/mapbox/streets-v12";
+        return theme === 'dark' ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/light-v11";
+    };
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            containerRef.current?.requestFullscreen().catch(() => {});
+            setIsFullscreen(true);
+        } else {
+            document.exitFullscreen().catch(() => {});
+            setIsFullscreen(false);
+        }
+    };
+
+    useEffect(() => {
+        const handleFsChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFsChange);
+        return () => document.removeEventListener('fullscreenchange', handleFsChange);
+    }, []);
+
+    // Smooth FlyTo when user clicks "Locate" from sidebar
+    useEffect(() => {
+        if (focusedTarget && mapRef.current) {
+            mapRef.current.flyTo({
+                center: [focusedTarget.longitude, focusedTarget.latitude],
+                zoom: focusedTarget.zoom || 15.5,
+                duration: 1500,
+                essential: true,
+                curve: 1.42,
+                speed: 1.2
+            });
+        }
+    }, [focusedTarget]);
 
     // Active mission tracking is ONLY active when dispatcher explicitly selects a responder/dispatch
     const activeDispatch = selectedDispatch ?? null;
@@ -611,7 +671,7 @@ export default function LiveMonitoringMap({
     };
 
     return (
-        <div className="w-full h-full overflow-hidden bg-slate-900 relative">
+        <div ref={containerRef} className="w-full h-full overflow-hidden bg-slate-900 relative">
             <style>{`
                 .mapboxgl-ctrl-logo { display: none !important; }
                 .mapboxgl-ctrl-attrib { display: none !important; }
@@ -628,7 +688,7 @@ export default function LiveMonitoringMap({
                             animateToDispatch(activeDispatch);
                         }
                     }}
-                    mapStyle={theme === 'dark' ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/light-v11"}
+                    mapStyle={getMapStyleUrl()}
                     attributionControl={false}
                     onClick={(e) => {
                         // Clicking empty map background clears selection and returns to default fleet view
@@ -679,6 +739,101 @@ export default function LiveMonitoringMap({
                             />
                         </Source>
                     )}
+
+                    {/* 🏛️ OPOL MDRRMO CENTRAL COMMAND STATION HQ PIN */}
+                    <Marker
+                        longitude={MDRRMO_HQ_COORDINATES.longitude}
+                        latitude={MDRRMO_HQ_COORDINATES.latitude}
+                        anchor="center"
+                    >
+                        <div 
+                            className="flex flex-col items-center group cursor-pointer select-none"
+                            title={`Opol MDRRMO Base Command Center HQ\nCoordinates: ${MDRRMO_HQ_COORDINATES.latitude}, ${MDRRMO_HQ_COORDINATES.longitude}`}
+                        >
+                            <div className="px-2.5 py-0.5 rounded-full text-white font-bold text-[9px] shadow-xl tracking-wider mb-1 flex items-center gap-1.5 border border-cyan-400/50 bg-slate-900/95 backdrop-blur-md">
+                                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                                <span>MDRRMO BASE HQ</span>
+                            </div>
+                            <div className="relative flex items-center justify-center">
+                                <span className="animate-ping absolute inline-flex h-9 w-9 rounded-full bg-cyan-400/30" />
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-700 border-2 border-white shadow-xl flex items-center justify-center transform group-hover:scale-115 transition-transform">
+                                    <Shield className="w-4 h-4 text-white" />
+                                </div>
+                            </div>
+                        </div>
+                    </Marker>
+
+                    {/* 🚨 PENDING INCIDENT PINS (Awaiting Dispatch) */}
+                    {verifiedIncidents.map((incident) => {
+                        const incLat = parseFloat(incident.incident_latitude);
+                        const incLon = parseFloat(incident.incident_longitude);
+                        if (isNaN(incLat) || isNaN(incLon) || incLat === 0 || incLon === 0) return null;
+
+                        const isFocused = focusedTarget?.key === incident.id;
+
+                        return (
+                            <Marker
+                                key={`verified-inc-${incident.id}`}
+                                longitude={incLon}
+                                latitude={incLat}
+                                anchor="bottom"
+                                onClick={(e) => {
+                                    e.originalEvent?.preventDefault();
+                                    e.originalEvent?.stopPropagation();
+                                    if (onAssignIncident) onAssignIncident(incident);
+                                }}
+                            >
+                                <div className="flex flex-col items-center group cursor-pointer select-none">
+                                    <div className={`px-2.5 py-0.5 rounded-full text-white font-bold text-[10px] shadow-xl uppercase tracking-wider mb-1 flex items-center gap-1.5 border transition-all ${
+                                        isFocused 
+                                            ? 'bg-amber-500 border-white ring-2 ring-amber-400 scale-110 shadow-amber-500/50' 
+                                            : 'border-amber-400/60 bg-gradient-to-r from-amber-600 to-orange-600 backdrop-blur-md'
+                                    }`}>
+                                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                                        <span>NEEDS CREW #{incident.id}</span>
+                                    </div>
+
+                                    <div className="relative flex items-center justify-center">
+                                        <svg 
+                                            width="36" 
+                                            height="46" 
+                                            viewBox="0 0 36 46" 
+                                            fill="none" 
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            className="filter drop-shadow-[0_10px_18px_rgba(245,158,11,0.6)] transform hover:scale-115 transition-transform"
+                                        >
+                                            <defs>
+                                                <linearGradient id={`pending-pin-${incident.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                                                    <stop offset="0%" stopColor="#fde047" />
+                                                    <stop offset="40%" stopColor="#f59e0b" />
+                                                    <stop offset="100%" stopColor="#b45309" />
+                                                </linearGradient>
+                                                <radialGradient id={`pending-ground-${incident.id}`} cx="50%" cy="50%" r="50%">
+                                                    <stop offset="0%" stopColor="rgba(0,0,0,0.65)" />
+                                                    <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+                                                </radialGradient>
+                                            </defs>
+                                            <ellipse cx="18" cy="44" rx="8" ry="2" fill={`url(#pending-ground-${incident.id})`} />
+                                            <path 
+                                                d="M18 2C10.5 2 4.5 8 4.5 15.5C4.5 25.5 18 42 18 42C18 42 31.5 25.5 31.5 15.5C31.5 8 25.5 2 18 2Z" 
+                                                fill={`url(#pending-pin-${incident.id})`} 
+                                                stroke="#FFFFFF" 
+                                                strokeWidth="1.8" 
+                                                strokeLinejoin="round"
+                                            />
+                                            <path 
+                                                d="M18 4C11.8 4 6.8 9 6.8 15.2C6.8 17.5 7.5 19.5 8.6 21.4C9.4 16.3 13.2 12.4 18 12.4C22.8 12.4 26.6 16.3 27.4 21.4C28.5 19.5 29.2 17.5 29.2 15.2C29.2 9 24.2 4 18 4Z" 
+                                                fill="white" 
+                                                fillOpacity="0.45" 
+                                            />
+                                            <circle cx="18" cy="15.5" r="6" fill="#FFFFFF" filter="drop-shadow(0 1px 2px rgba(0,0,0,0.35))" />
+                                            <circle cx="18" cy="15.5" r="3.2" fill="#d97706" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </Marker>
+                        );
+                    })}
 
                     {/* Render active responder markers (all live responders) & incident marker (only if selected) */}
                     {dispatches.map(dispatch => {
@@ -880,6 +1035,95 @@ export default function LiveMonitoringMap({
                 </div>
             )}
 
+            {/* Floating Map Layer & Navigation Controls (Top Right) */}
+            <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 pointer-events-auto">
+                {/* Map Style Switcher Segmented Control */}
+                <div className="bg-white/95 dark:bg-[#090e1a]/95 backdrop-blur-xl p-1 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-xl flex items-center gap-1">
+                    <button
+                        type="button"
+                        onClick={() => setMapStyleType('tactical')}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                            mapStyleType === 'tactical'
+                                ? 'bg-red-600 text-white shadow-sm'
+                                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10'
+                        }`}
+                        title="Dark Tactical Mode"
+                    >
+                        🌙 Tactical
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setMapStyleType('satellite')}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                            mapStyleType === 'satellite'
+                                ? 'bg-red-600 text-white shadow-sm'
+                                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10'
+                        }`}
+                        title="Satellite Imagery with Terrain & Roads"
+                    >
+                        🛰️ Satellite
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setMapStyleType('streets')}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                            mapStyleType === 'streets'
+                                ? 'bg-red-600 text-white shadow-sm'
+                                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10'
+                        }`}
+                        title="Road Streets Map"
+                    >
+                        🗺️ Streets
+                    </button>
+                </div>
+
+                {/* Camera Zoom, Center & Fullscreen Controls */}
+                <div className="bg-white/95 dark:bg-[#090e1a]/95 backdrop-blur-xl p-1 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-xl flex flex-col gap-1 items-center self-end">
+                    <button
+                        type="button"
+                        onClick={() => mapRef.current?.zoomIn({ duration: 300 })}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors font-bold text-base cursor-pointer"
+                        title="Zoom In"
+                    >
+                        +
+                    </button>
+                    <div className="w-5 h-[1px] bg-slate-200 dark:bg-white/10" />
+                    <button
+                        type="button"
+                        onClick={() => mapRef.current?.zoomOut({ duration: 300 })}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors font-bold text-base cursor-pointer"
+                        title="Zoom Out"
+                    >
+                        -
+                    </button>
+                    <div className="w-5 h-[1px] bg-slate-200 dark:bg-white/10" />
+                    <button
+                        type="button"
+                        onClick={() => {
+                            mapRef.current?.flyTo({
+                                center: [DEFAULT_MAP_CENTER.longitude, DEFAULT_MAP_CENTER.latitude],
+                                zoom: DEFAULT_MAP_CENTER.zoom,
+                                duration: 1200,
+                                essential: true
+                            });
+                        }}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        title="Center on Opol LGU"
+                    >
+                        <Compass className="w-4 h-4 text-red-500" />
+                    </button>
+                    <div className="w-5 h-[1px] bg-slate-200 dark:bg-white/10" />
+                    <button
+                        type="button"
+                        onClick={toggleFullscreen}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Map"}
+                    >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                    </button>
+                </div>
+            </div>
+
             {/* Floating Top Map HUD (Active Mission Telemetry & Actions OR Fleet Overview) */}
             {activeDispatch ? (
                 <div className="absolute top-4 left-4 z-10 flex items-center gap-2 pointer-events-auto">
@@ -948,12 +1192,19 @@ export default function LiveMonitoringMap({
                     </button>
                 </div>
             ) : (
-                <div className="absolute top-4 left-4 z-10 flex items-center gap-2 pointer-events-auto">
+                <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-2 pointer-events-auto">
                     <div className="flex items-center gap-2 bg-white/95 dark:bg-[#090e1a]/95 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-lg text-xs">
                         <Radio className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 animate-pulse" />
                         <span className="font-bold text-slate-900 dark:text-white">Live Responders Fleet</span>
-                        <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">({dispatches.length} active units)</span>
+                        <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">({dispatches.length} active runs)</span>
                     </div>
+
+                    {verifiedIncidents.length > 0 && (
+                        <div className="flex items-center gap-1.5 bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 backdrop-blur-xl px-3 py-1.5 rounded-xl shadow-lg text-xs font-bold animate-pulse">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            <span>{verifiedIncidents.length} Pending Triage Pin{verifiedIncidents.length > 1 ? 's' : ''} on Map</span>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

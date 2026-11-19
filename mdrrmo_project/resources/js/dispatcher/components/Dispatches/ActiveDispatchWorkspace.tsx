@@ -1,6 +1,12 @@
-import { useState, useEffect, useCallback, useContext, useRef } from 'react';
+import { useState, useEffect, useCallback, useContext, useRef, useMemo } from 'react';
 import { router } from '@inertiajs/react';
-import { AlertCircle, MapPin, Truck, User as UserIcon, Clock, Search, ShieldAlert, Activity, Stethoscope, FileText, ChevronDown, Maximize2, X, CheckCircle, XCircle, Compass, Navigation, AlertTriangle, ExternalLink } from 'lucide-react';
+import { 
+    AlertCircle, MapPin, Truck, User as UserIcon, Clock, Search, ShieldAlert, 
+    Activity, Stethoscope, FileText, ChevronDown, Maximize2, X, CheckCircle, 
+    XCircle, Compass, Navigation, AlertTriangle, ExternalLink, Radio, Shield, 
+    Flame, Car, Phone, Eye, Sparkles, Filter, Check, HeartPulse, Send, Building2,
+    CheckCircle2
+} from 'lucide-react';
 import { AlarmContext } from '../../contexts/AlarmContext';
 import StatusBadge from '@/shared/components/StatusBadge';
 import PageHeader from '@/shared/components/PageHeader';
@@ -25,6 +31,8 @@ export default function ActiveDispatchWorkspace({
     selectedIncidentId?: string | number | null;
 }) {
     const [search, setSearch] = useState('');
+    const [viewFilter, setViewFilter] = useState<'all' | 'pending' | 'dispatched' | 'fleet'>('all');
+    const [focusedTarget, setFocusedTarget] = useState<{ longitude: number; latitude: number; zoom?: number; key?: string | number } | null>(null);
     const [selectedDispatch, setSelectedDispatch] = useState<any | null>(null);
     const [activeTab, setActiveTab] = useState('incident');
     const [isExpanded, setIsExpanded] = useState(false);
@@ -266,6 +274,58 @@ export default function ActiveDispatchWorkspace({
         }
     };
 
+    const activeAmbulances = useMemo(() => {
+        return (ambulances || []).filter(a => a.plate_number !== 'WALK-IN' && a.vehicle_type !== 'Station');
+    }, [ambulances]);
+
+    const readyAmbulances = useMemo(() => {
+        return activeAmbulances.filter(a => a.status === 'available');
+    }, [activeAmbulances]);
+
+    const dispatchedAmbulances = useMemo(() => {
+        return activeAmbulances.filter(a => a.status === 'dispatched');
+    }, [activeAmbulances]);
+
+    const maintenanceAmbulances = useMemo(() => {
+        return activeAmbulances.filter(a => a.status === 'maintenance');
+    }, [activeAmbulances]);
+
+    const filteredVerified = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return verifiedIncidents;
+        return verifiedIncidents.filter((inc) => {
+            const type = inc.incident_type?.name?.toLowerCase() || '';
+            const loc = (typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay)?.toLowerCase() || '';
+            const desc = (inc.place_of_incident || inc.incident_address || '')?.toLowerCase();
+            const resident = `${inc.resident?.first_name || ''} ${inc.resident?.last_name || ''}`.toLowerCase();
+            return type.includes(q) || loc.includes(q) || desc.includes(q) || resident.includes(q) || String(inc.id).includes(q);
+        });
+    }, [verifiedIncidents, search]);
+
+    const getCategoryMeta = (category?: string, chiefComplaint?: string) => {
+        const norm = (category || chiefComplaint || '').toLowerCase();
+        if (norm.includes('fire')) return { icon: Flame, color: 'text-amber-500 bg-amber-500/10 border-amber-500/30', label: 'Fire & Rescue' };
+        if (norm.includes('vehic') || norm.includes('trauma') || norm.includes('accident') || norm.includes('collision')) {
+            return { icon: Car, color: 'text-rose-500 bg-rose-500/10 border-rose-500/30', label: 'Trauma & Rescue' };
+        }
+        if (norm.includes('cardiac') || norm.includes('arrest') || norm.includes('stroke') || norm.includes('chest')) {
+            return { icon: HeartPulse, color: 'text-red-500 bg-red-500/10 border-red-500/30', label: 'Cardiac Emergency' };
+        }
+        return { icon: Stethoscope, color: 'text-blue-500 bg-blue-500/10 border-blue-500/30', label: 'Medical Emergency' };
+    };
+
+    const formatTimeElapsed = (dateStr?: string) => {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        const diffSecs = Math.max(0, Math.floor((currentTime - date.getTime()) / 1000));
+        if (diffSecs < 60) return 'Just now';
+        const mins = Math.floor(diffSecs / 60);
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h ${mins % 60}m ago`;
+        return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+    };
+
     const filtered = dispatches.filter((d) => {
         const q = search.toLowerCase();
         return (
@@ -332,373 +392,678 @@ export default function ActiveDispatchWorkspace({
     })() : [];
 
     return (
-        <div className="h-full flex-1 flex flex-col min-h-0 max-w-[1800px] mx-auto w-full overflow-hidden">
+        <div className="h-full flex-1 flex flex-col min-h-0 max-w-[1850px] mx-auto w-full overflow-hidden">
+            {/* EXECUTIVE COMMAND TELEMETRY RIBBON */}
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 shrink-0 mb-3.5">
+                {/* 1. Active Responses */}
+                <div 
+                    onClick={() => setViewFilter('dispatched')}
+                    className={`p-3 rounded-2xl border backdrop-blur-xl shadow-xs flex items-center gap-3 transition-all cursor-pointer ${
+                        viewFilter === 'dispatched'
+                            ? 'bg-red-500/10 border-red-500/40 ring-1 ring-red-500/30'
+                            : 'bg-white/90 dark:bg-[#090e1a]/90 hover:bg-slate-50 dark:hover:bg-white/[0.04] border-slate-200/80 dark:border-white/10'
+                    }`}
+                >
+                    <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-600 dark:text-red-400 shrink-0">
+                        <Radio className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div className="min-w-0">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Active Runs</div>
+                        <div className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
+                            {dispatches.length} <span className="text-xs font-normal text-slate-400">Missions</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 2. Pending Assignment */}
+                <div 
+                    onClick={() => setViewFilter('pending')}
+                    className={`p-3 rounded-2xl border backdrop-blur-xl shadow-xs flex items-center gap-3 transition-all cursor-pointer ${
+                        viewFilter === 'pending'
+                            ? 'bg-amber-500/15 border-amber-500/40 ring-1 ring-amber-500/30'
+                            : (filteredVerified.length > 0 
+                                ? 'bg-amber-50/90 dark:bg-amber-950/20 border-amber-300 dark:border-amber-500/40' 
+                                : 'bg-white/90 dark:bg-[#090e1a]/90 hover:bg-slate-50 dark:hover:bg-white/[0.04] border-slate-200/80 dark:border-white/10')
+                    }`}
+                >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        filteredVerified.length > 0 
+                            ? 'bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 animate-pulse' 
+                            : 'bg-slate-100 dark:bg-white/5 text-slate-400'
+                    }`}>
+                        <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pending Triage</div>
+                        <div className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
+                            {filteredVerified.length} <span className="text-xs font-normal text-slate-400">Calls</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. Ready Fleet */}
+                <div 
+                    onClick={() => setViewFilter('fleet')}
+                    className={`p-3 rounded-2xl border backdrop-blur-xl shadow-xs flex items-center gap-3 transition-all cursor-pointer ${
+                        viewFilter === 'fleet'
+                            ? 'bg-emerald-500/10 border-emerald-500/40 ring-1 ring-emerald-500/30'
+                            : 'bg-white/90 dark:bg-[#090e1a]/90 hover:bg-slate-50 dark:hover:bg-white/[0.04] border-slate-200/80 dark:border-white/10'
+                    }`}
+                >
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                        <Truck className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ambulance Fleet</div>
+                        <div className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
+                            {readyAmbulances.length} <span className="text-xs font-normal text-slate-400">/ {activeAmbulances.length} Ready</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4. Active Crew */}
+                <div className="bg-white/90 dark:bg-[#090e1a]/90 backdrop-blur-xl p-3 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-xs flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                        <UserIcon className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Crew Roster</div>
+                        <div className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
+                            {responders.length} <span className="text-xs font-normal text-slate-400">Staff</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 5. CAD Telemetry Link */}
+                <div className="bg-white/90 dark:bg-[#090e1a]/90 backdrop-blur-xl p-3 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-xs flex items-center gap-3 col-span-2 md:col-span-1">
+                    <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-600 dark:text-cyan-400 shrink-0">
+                        <Building2 className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Command Base</div>
+                        <div className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5 mt-0.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            <span>Opol Station HQ</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {/* Main Workspace Area */}
-            <div className="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-5 min-h-0 h-full">
+            <div className="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-4 min-h-0 h-full">
                 
-                {/* LEFT COLUMN: Dispatch List (3/12 width) */}
-                <div className="xl:col-span-3 flex flex-col h-full bg-white/90 dark:bg-[#090e1a]/90 rounded-2xl border border-slate-200/80 dark:border-white/10 backdrop-blur-2xl shadow-sm dark:shadow-2xl overflow-hidden relative z-10 transition-colors duration-300">
-                    {/* Header & Search */}
-                    <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] shrink-0">
-                        <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-3">
-                            <span className="relative flex h-2.5 w-2.5">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F61509] opacity-75" />
-                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#F61509]" />
+                {/* LEFT COLUMN: Queue & Dispatch List (4/12 width on xl) */}
+                <div className="xl:col-span-4 flex flex-col h-full bg-white/90 dark:bg-[#090e1a]/90 rounded-2xl border border-slate-200/80 dark:border-white/10 backdrop-blur-2xl shadow-sm dark:shadow-2xl overflow-hidden relative z-10 transition-colors duration-300">
+                    
+                    {/* Header, Search & Filter Tabs */}
+                    <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] shrink-0 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <span className="relative flex h-2.5 w-2.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F61509] opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#F61509]" />
+                                </span>
+                                Operations Queue
+                            </h2>
+                            <span className="bg-red-600 text-white text-[11px] font-bold py-0.5 px-2.5 rounded-full shadow-xs">
+                                {dispatches.length + filteredVerified.length} Total Active
                             </span>
-                            Active Responses
-                            <span className="ml-auto bg-[#F61509]/10 text-[#F61509] text-xs font-bold py-0.5 px-2.5 rounded-full border border-[#F61509]/20">
-                                {dispatches.length} Live
-                            </span>
-                        </h2>
+                        </div>
+
+                        {/* Search Bar */}
                         <div className="relative">
                             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
                             <input 
                                 type="text"
-                                placeholder="Search unit or location..."
+                                placeholder="Search callsign, plate, barangay, complaint..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                className="w-full bg-white dark:bg-[#070b14]/70 border border-slate-200/80 dark:border-white/10 shadow-sm dark:shadow-none rounded-xl pl-9 pr-4 py-2 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F61509]/30 focus:border-[#F61509] transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                                className="w-full bg-white dark:bg-[#070b14]/70 border border-slate-200/80 dark:border-white/10 shadow-xs rounded-xl pl-9 pr-8 py-2 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F61509]/30 focus:border-[#F61509] transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
                             />
+                            {search && (
+                                <button
+                                    onClick={() => setSearch('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white p-0.5 rounded cursor-pointer"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Filter Segmented Control */}
+                        <div className="flex items-center gap-1 bg-slate-100/90 dark:bg-white/[0.04] p-1 rounded-xl border border-slate-200/60 dark:border-white/5 overflow-x-auto hide-scrollbar">
+                            <button
+                                type="button"
+                                onClick={() => setViewFilter('all')}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer ${
+                                    viewFilter === 'all'
+                                        ? 'bg-red-600 text-white shadow-xs'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                            >
+                                All ({filteredVerified.length + filtered.length})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setViewFilter('pending')}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                                    viewFilter === 'pending'
+                                        ? 'bg-amber-600 text-white shadow-xs'
+                                        : 'text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300'
+                                }`}
+                            >
+                                <AlertCircle className="w-3 h-3" />
+                                <span>Needs Crew ({filteredVerified.length})</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setViewFilter('dispatched')}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                                    viewFilter === 'dispatched'
+                                        ? 'bg-red-600 text-white shadow-xs'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                            >
+                                <Truck className="w-3 h-3" />
+                                <span>Active Runs ({filtered.length})</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setViewFilter('fleet')}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                                    viewFilter === 'fleet'
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300'
+                                }`}
+                            >
+                                <Shield className="w-3 h-3" />
+                                <span>Fleet ({readyAmbulances.length})</span>
+                            </button>
                         </div>
                     </div>
 
-                    {/* Cards List */}
+                    {/* Cards Scrollable List */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
                         
-                        {/* Pending Assignments Section */}
-                        {verifiedIncidents.length > 0 && (
-                            <div className="space-y-3 mb-6">
-                                <h3 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
-                                    <AlertCircle className="w-3.5 h-3.5" /> Pending Assignment ({verifiedIncidents.length})
-                                </h3>
-                                {verifiedIncidents.map(incident => {
+                        {/* 🚨 PENDING ASSIGNMENTS SECTION (NEEDS CREW) */}
+                        {(viewFilter === 'all' || viewFilter === 'pending') && filteredVerified.length > 0 && (
+                            <div className="space-y-3 mb-5">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-[11px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-1.5">
+                                        <AlertCircle className="w-3.5 h-3.5" /> Pending Assignment ({filteredVerified.length})
+                                    </h3>
+                                    <span className="text-[10px] text-amber-500/80 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                                        Action Required
+                                    </span>
+                                </div>
+
+                                {filteredVerified.map((incident) => {
                                     const isAlarming = activeAlarm && activeAlarm.id === incident.id;
+                                    const categoryMeta = getCategoryMeta(incident.incident_type?.name, incident.description);
+                                    const CategoryIcon = categoryMeta.icon;
+                                    const barangayName = typeof incident.barangay === 'object' 
+                                        ? incident.barangay?.barangay_name || incident.barangay?.name 
+                                        : incident.barangay;
+                                    const elapsed = formatTimeElapsed(incident.created_at);
+
                                     return (
                                         <div 
                                             key={`vi-${incident.id}`} 
                                             onClick={isAlarming ? acknowledgeAlarm : undefined}
-                                            className={`rounded-xl p-4 transition-all duration-300 ${
+                                            className={`rounded-2xl p-4 transition-all duration-300 relative overflow-hidden group ${
                                                 isAlarming 
-                                                    ? 'bg-red-50 dark:bg-red-900/30 border-2 border-red-500 animate-pulse cursor-pointer shadow-lg shadow-red-500/30'
-                                                    : 'bg-white dark:bg-slate-800/80 border border-amber-200 dark:border-amber-500/30 shadow-sm dark:shadow-lg'
+                                                    ? 'bg-red-500/15 border-2 border-red-500 animate-pulse cursor-pointer shadow-lg shadow-red-500/30'
+                                                    : 'bg-white dark:bg-slate-900/90 hover:bg-slate-50 dark:hover:bg-slate-900 border border-amber-300 dark:border-amber-500/30 shadow-xs hover:shadow-md'
                                             }`}
                                         >
-                                            <div className="flex items-start justify-between mb-2">
-                                                <span className={`font-mono text-sm font-semibold ${isAlarming ? 'text-red-700 dark:text-red-300' : 'text-slate-700 dark:text-slate-300'}`}>
-                                                    #{incident.id}
-                                                </span>
-                                                <StatusBadge status={incident.incident_status} />
+                                            {/* Top status bar accent */}
+                                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500" />
+
+                                            {/* Meta Row: ID, Category Chip, Priority & Elapsed */}
+                                            <div className="flex items-center justify-between gap-1.5 mb-2 pt-1">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-white/10 px-2 py-0.5 rounded-md border border-slate-200 dark:border-white/10">
+                                                        #{incident.id}
+                                                    </span>
+                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${categoryMeta.color}`}>
+                                                        <CategoryIcon className="w-3 h-3" />
+                                                        <span>{categoryMeta.label}</span>
+                                                    </span>
+                                                    {incident.priority && (
+                                                        <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${getPriorityColor(incident.priority)}`}>
+                                                            {incident.priority}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {elapsed && (
+                                                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1 shrink-0">
+                                                        <Clock className="w-3 h-3 text-slate-400" />
+                                                        {elapsed}
+                                                    </span>
+                                                )}
                                             </div>
-                                            <h3 className={`${isAlarming ? 'text-red-900 dark:text-red-100 font-bold' : 'text-slate-900 dark:text-white font-medium'} text-sm mb-1`}>
-                                                {incident.incident_type?.name}
+
+                                            {/* Chief Complaint / Title */}
+                                            <h3 className="text-slate-900 dark:text-white font-bold text-sm mb-1.5 leading-snug line-clamp-2">
+                                                {incident.incident_type?.name || 'Emergency Incident'}
                                             </h3>
-                                            <div className={`text-xs flex items-start gap-1.5 mb-3 ${isAlarming ? 'text-red-700/80 dark:text-red-300/80' : 'text-slate-500 dark:text-slate-400'}`}>
-                                                <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-                                                <span className="line-clamp-2">
-                                                    {incident.place_of_incident 
-                                                        || incident.incident_address 
-                                                        || (incident.location_code ? `Marker: ${typeof incident.location_code === 'object' ? incident.location_code?.location_code || incident.location_code?.code : incident.location_code}` : null) 
-                                                        || (typeof incident.location === 'object' ? incident.location?.location_name || incident.location?.name : incident.location)
-                                                        || incident.description 
-                                                        || 'Location unavailable'}
-                                                </span>
+
+                                            {/* Location Badge */}
+                                            <div className="text-xs text-slate-600 dark:text-slate-300 flex items-start gap-1.5 mb-2 bg-slate-50 dark:bg-white/[0.03] p-2 rounded-xl border border-slate-200/60 dark:border-white/5">
+                                                <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
+                                                <div className="min-w-0">
+                                                    {barangayName && (
+                                                        <span className="font-bold text-slate-900 dark:text-white block truncate">
+                                                            Brgy. {barangayName}
+                                                        </span>
+                                                    )}
+                                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                                                        {incident.place_of_incident || incident.incident_address || 'Opol, Misamis Oriental'}
+                                                    </span>
+                                                </div>
                                             </div>
-                                            <Button 
-                                                size="sm" 
-                                                variant="primary" 
-                                                className={`w-full text-white border-none ${
-                                                    isAlarming 
-                                                        ? 'bg-red-600 hover:bg-red-700' 
-                                                        : 'bg-amber-600 hover:bg-amber-500'
-                                                }`}
-                                                onClick={() => {
-                                                    if (isAlarming) acknowledgeAlarm();
-                                                    setAssigningIncident(incident);
-                                                }}
-                                            >
-                                                Assign Crew
-                                            </Button>
+
+                                            {/* Reporter Info (if available) */}
+                                            {incident.resident && (
+                                                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-3 px-1">
+                                                    <span className="truncate">Caller: <span className="font-semibold text-slate-700 dark:text-slate-300">{incident.resident.first_name} {incident.resident.last_name}</span></span>
+                                                    {incident.resident.phone_number && (
+                                                        <span className="font-mono text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 shrink-0">
+                                                            <Phone className="w-3 h-3" /> {incident.resident.phone_number}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Action Buttons: Locate on Map & Assign Crew */}
+                                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 dark:border-white/5">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const lat = parseFloat(incident.incident_latitude);
+                                                        const lng = parseFloat(incident.incident_longitude);
+                                                        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                                                            setFocusedTarget({ latitude: lat, longitude: lng, zoom: 16, key: incident.id });
+                                                        }
+                                                    }}
+                                                    className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-200/80 dark:border-white/10"
+                                                    title="Focus camera on incident location"
+                                                >
+                                                    <MapPin className="w-3.5 h-3.5 text-amber-500" />
+                                                    <span>Locate</span>
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (isAlarming) acknowledgeAlarm();
+                                                        setAssigningIncident(incident);
+                                                    }}
+                                                    className="py-2 px-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-red-600/30 active:scale-95 cursor-pointer"
+                                                >
+                                                    <Truck className="w-3.5 h-3.5" />
+                                                    <span>Assign Crew</span>
+                                                </button>
+                                            </div>
                                         </div>
                                     );
                                 })}
                             </div>
                         )}
 
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-widest">
-                                Active Dispatches
-                            </h3>
-                            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                                {filtered.length} active
-                            </span>
-                        </div>
-                        {!selectedDispatch && (
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-snug">
-                                Select any responder below or on the map to display their live route, incident pin, and ETA.
-                            </p>
-                        )}
-
-                        {/* Selected Dispatch Live Mission Tracker in Sidebar */}
-                        {selectedDispatch && (
-                            <div className="bg-white dark:bg-[#070b14] rounded-2xl border border-[#F61509]/30 dark:border-[#F61509]/30 p-4 space-y-3.5 shadow-md dark:shadow-2xl relative overflow-hidden ring-1 ring-[#F61509]/20 transition-colors duration-300">
-                                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#F61509] via-orange-500 to-amber-500" />
-                                
-                                {/* Header with Close and Connection Status */}
-                                <div className="flex items-start justify-between gap-2 pt-1">
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-1.5">
-                                            <span className="font-mono text-xs font-bold text-[#F61509] bg-[#F61509]/10 px-2 py-0.5 rounded-md border border-[#F61509]/20">
-                                                MISSION #{selectedDispatch.id}
-                                            </span>
-                                            <StatusBadge status={selectedDispatch.dispatch_status} />
-                                        </div>
-                                        <div className="text-sm font-bold text-slate-900 dark:text-white truncate max-w-[200px]">
-                                            {selectedDispatch.incident?.incident_type?.name}
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={() => setSelectedDispatch(null)}
-                                        className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                                        title="Deselect Mission"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
+                        {/* 🚑 ACTIVE DISPATCHES LIST */}
+                        {(viewFilter === 'all' || viewFilter === 'dispatched') && (
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                                        <Truck className="w-3.5 h-3.5 text-blue-500" /> Active Dispatches ({filtered.length})
+                                    </h3>
+                                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                        {filtered.length} active
+                                    </span>
                                 </div>
 
-                                {/* Live GPS Link Status */}
-                                <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100 dark:border-white/5">
-                                    <span className="text-slate-500 dark:text-slate-400 text-[10px] uppercase tracking-wider font-bold">GPS Telemetry</span>
-                                    {(() => {
-                                        const conn = getConnectionStatus(selectedDispatch);
-                                        return (
-                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1.5 ${conn.color}`}>
-                                                {conn.isLive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                                                {conn.label}
-                                            </span>
-                                        );
-                                    })()}
-                                </div>
+                                {!selectedDispatch && filtered.length > 0 && (
+                                    <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-snug">
+                                        Select any responder below or on the map to display their live route, incident pin, and ETA.
+                                    </p>
+                                )}
 
-                                {/* Offline Safeguard Warning Banner */}
-                                {(() => {
-                                    const conn = getConnectionStatus(selectedDispatch);
-                                    if (conn.isOffline && conn.status === 'offline') {
-                                        const mins = Math.floor(conn.elapsedSeconds / 60);
-                                        return (
-                                            <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 space-y-1 text-xs">
-                                                <div className="flex items-center gap-1.5 text-rose-500 font-bold text-[11px] uppercase tracking-wider">
-                                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                                    <span>Responder Offline ({mins}m)</span>
+                                {/* Selected Dispatch Live Mission Tracker in Sidebar */}
+                                {selectedDispatch && (
+                                    <div className="bg-white dark:bg-[#070b14] rounded-2xl border border-[#F61509]/30 dark:border-[#F61509]/30 p-4 space-y-3.5 shadow-md dark:shadow-2xl relative overflow-hidden ring-1 ring-[#F61509]/20 transition-colors duration-300">
+                                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#F61509] via-orange-500 to-amber-500" />
+                                        
+                                        {/* Header with Close and Connection Status */}
+                                        <div className="flex items-start justify-between gap-2 pt-1">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1.5">
+                                                    <span className="font-mono text-xs font-bold text-[#F61509] bg-[#F61509]/10 px-2 py-0.5 rounded-md border border-[#F61509]/20">
+                                                        MISSION #{selectedDispatch.id}
+                                                    </span>
+                                                    <StatusBadge status={selectedDispatch.dispatch_status} />
                                                 </div>
-                                                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
-                                                    Network lost. GPS coordinates shown are the last known fix. The responder has cached this mission locally and is operating in offline mode. Automated reassignment is blocked.
-                                                </p>
+                                                <div className="text-sm font-bold text-slate-900 dark:text-white truncate max-w-[200px]">
+                                                    {selectedDispatch.incident?.incident_type?.name}
+                                                </div>
                                             </div>
-                                        );
-                                    }
-                                    return null;
-                                })()}
+                                            <button 
+                                                onClick={() => setSelectedDispatch(null)}
+                                                className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                                                title="Deselect Mission"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
 
-                                {/* Q1: Where is the incident? */}
-                                <div className="bg-slate-50/80 dark:bg-white/[0.03] rounded-xl p-3 border border-slate-200/80 dark:border-white/10 space-y-1.5">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#F61509] flex items-center gap-1">
-                                            <MapPin className="w-3.5 h-3.5 text-[#F61509]" /> 1. Incident Location
-                                        </span>
-                                        {selectedDispatch.incident?.priority && (
-                                            <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${getPriorityColor(selectedDispatch.incident.priority)}`}>
-                                                {selectedDispatch.incident.priority}
-                                            </span>
+                                        {/* Live GPS Link Status */}
+                                        <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100 dark:border-white/5">
+                                            <span className="text-slate-500 dark:text-slate-400 text-[10px] uppercase tracking-wider font-bold">GPS Telemetry</span>
+                                            {(() => {
+                                                const conn = getConnectionStatus(selectedDispatch);
+                                                return (
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1.5 ${conn.color}`}>
+                                                        {conn.isLive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                                                        {conn.label}
+                                                    </span>
+                                                );
+                                            })()}
+                                        </div>
+
+                                        {/* Offline Safeguard Warning Banner */}
+                                        {(() => {
+                                            const conn = getConnectionStatus(selectedDispatch);
+                                            if (conn.isOffline && conn.status === 'offline') {
+                                                const mins = Math.floor(conn.elapsedSeconds / 60);
+                                                return (
+                                                    <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 space-y-1 text-xs">
+                                                        <div className="flex items-center gap-1.5 text-rose-500 font-bold text-[11px] uppercase tracking-wider">
+                                                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                                            <span>Responder Offline ({mins}m)</span>
+                                                        </div>
+                                                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                                                            Network lost. GPS coordinates shown are the last known fix. The responder has cached this mission locally and is operating in offline mode. Automated reassignment is blocked.
+                                                        </p>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
+
+                                        {/* Q1: Where is the incident? */}
+                                        <div className="bg-slate-50/80 dark:bg-white/[0.03] rounded-xl p-3 border border-slate-200/80 dark:border-white/10 space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-[#F61509] flex items-center gap-1">
+                                                    <MapPin className="w-3.5 h-3.5 text-[#F61509]" /> 1. Incident Location
+                                                </span>
+                                                {selectedDispatch.incident?.priority && (
+                                                    <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${getPriorityColor(selectedDispatch.incident.priority)}`}>
+                                                        {selectedDispatch.incident.priority}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-slate-900 dark:text-slate-200 font-semibold line-clamp-2">
+                                                {(typeof selectedDispatch.incident?.barangay === 'object' ? selectedDispatch.incident?.barangay?.barangay_name || selectedDispatch.incident?.barangay?.name : selectedDispatch.incident?.barangay) || selectedDispatch.incident?.place_of_incident || 'Reported Location'}
+                                            </div>
+                                            <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                                GPS: {parseFloat(selectedDispatch.incident?.incident_latitude)?.toFixed(5) || '--'}, {parseFloat(selectedDispatch.incident?.incident_longitude)?.toFixed(5) || '--'}
+                                            </div>
+                                        </div>
+
+                                        {/* Q2: Where is the responder now? */}
+                                        <div className="bg-slate-50/80 dark:bg-white/[0.03] rounded-xl p-3 border border-slate-200/80 dark:border-white/10 space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                                    <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> 2. Responder Location
+                                                </span>
+                                                <span className="text-[10px] font-mono font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-white/10 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-white/10">
+                                                    {selectedDispatch.ambulance?.plate_number}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs text-slate-800 dark:text-slate-200 font-medium flex items-center gap-1.5">
+                                                <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                <span className="truncate">
+                                                    {selectedDispatch.driver ? `${selectedDispatch.driver.first_name} ${selectedDispatch.driver.last_name}` : (selectedDispatch.emt ? `${selectedDispatch.emt.first_name} ${selectedDispatch.emt.last_name} (EMT)` : 'Assigned Crew')}
+                                                </span>
+                                            </div>
+                                            {(() => {
+                                                let loc = liveLocations[selectedDispatch.id] || liveLocations[selectedDispatch.ambulance_id];
+                                                if ((!loc || !loc.latitude) && selectedDispatch.last_latitude && selectedDispatch.last_longitude) {
+                                                    loc = {
+                                                        latitude: parseFloat(selectedDispatch.last_latitude),
+                                                        longitude: parseFloat(selectedDispatch.last_longitude),
+                                                        heading: selectedDispatch.last_heading ? parseFloat(selectedDispatch.last_heading) : null,
+                                                    };
+                                                }
+                                                if (loc && loc.latitude && loc.longitude) {
+                                                    return (
+                                                        <div className="text-[10px] font-mono text-emerald-400 flex items-center gap-2">
+                                                            <span>GPS: {loc.latitude.toFixed(5)}, {loc.longitude.toFixed(5)}</span>
+                                                            {loc.heading ? <span>• {Math.round(loc.heading)}°</span> : null}
+                                                        </div>
+                                                    );
+                                                }
+                                                return (
+                                                    <div className="text-[10px] text-slate-500 italic">
+                                                        Awaiting responder device GPS link...
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+
+                                        {/* Q3 & Q4: Route & How close are they (Distance & ETA)? */}
+                                        {selectedDispatch.dispatch_status === 'arrived_on_scene' ? (
+                                            <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 rounded-xl p-3 space-y-1.5">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> Mission Status
+                                                    </span>
+                                                    <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10">
+                                                        Arrived
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs text-emerald-900 dark:text-slate-200 font-medium">
+                                                    Responder is currently on scene at the incident.
+                                                </div>
+                                                <div className="text-[10px] text-emerald-600 dark:text-emerald-400/80 flex items-center gap-1 pt-0.5 font-medium">
+                                                    <CheckCircle className="w-3 h-3" /> Navigation completed
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-slate-50/80 dark:bg-white/[0.03] rounded-xl p-3 border border-slate-200/80 dark:border-white/10 space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                                        <Navigation className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Route & Proximity
+                                                    </span>
+                                                    {routeTelemetry[selectedDispatch.id]?.isOffRoute && (
+                                                        <span className="text-[9px] text-amber-700 dark:text-amber-300 font-bold bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-0.5">
+                                                            <AlertTriangle className="w-2.5 h-2.5" /> Off-Route
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2 pt-1">
+                                                    <div className="bg-white dark:bg-white/[0.04] p-2.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-xs">
+                                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Est. Arrival</div>
+                                                        <div className="text-sm font-bold font-mono text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5 truncate">
+                                                            <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                                            <span>{routeTelemetry[selectedDispatch.id]?.formattedEta || 'Calculating...'}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-white dark:bg-white/[0.04] p-2.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-xs">
+                                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Road Distance</div>
+                                                        <div className="text-sm font-bold font-mono text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5 truncate">
+                                                            <Compass className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                                                            <span>{routeTelemetry[selectedDispatch.id]?.formattedDistance || '--'}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
-                                    <div className="text-xs text-slate-900 dark:text-slate-200 font-semibold line-clamp-2">
-                                        {(typeof selectedDispatch.incident?.barangay === 'object' ? selectedDispatch.incident?.barangay?.barangay_name || selectedDispatch.incident?.barangay?.name : selectedDispatch.incident?.barangay) || selectedDispatch.incident?.place_of_incident || 'Reported Location'}
-                                    </div>
-                                    <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                                        GPS: {parseFloat(selectedDispatch.incident?.incident_latitude)?.toFixed(5) || '--'}, {parseFloat(selectedDispatch.incident?.incident_longitude)?.toFixed(5) || '--'}
-                                    </div>
-                                </div>
+                                )}
 
-                                {/* Q2: Where is the responder now? */}
-                                <div className="bg-slate-50/80 dark:bg-white/[0.03] rounded-xl p-3 border border-slate-200/80 dark:border-white/10 space-y-1.5">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                                            <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> 2. Responder Location
-                                        </span>
-                                        <span className="text-[10px] font-mono font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-white/10 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-white/10">
-                                            {selectedDispatch.ambulance?.plate_number}
-                                        </span>
-                                    </div>
-                                    <div className="text-xs text-slate-800 dark:text-slate-200 font-medium flex items-center gap-1.5">
-                                        <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                        <span className="truncate">
-                                            {selectedDispatch.driver ? `${selectedDispatch.driver.first_name} ${selectedDispatch.driver.last_name}` : (selectedDispatch.emt ? `${selectedDispatch.emt.first_name} ${selectedDispatch.emt.last_name} (EMT)` : 'Assigned Crew')}
-                                        </span>
-                                    </div>
-                                    {(() => {
-                                        let loc = liveLocations[selectedDispatch.id] || liveLocations[selectedDispatch.ambulance_id];
-                                        if ((!loc || !loc.latitude) && selectedDispatch.last_latitude && selectedDispatch.last_longitude) {
-                                            loc = {
-                                                latitude: parseFloat(selectedDispatch.last_latitude),
-                                                longitude: parseFloat(selectedDispatch.last_longitude),
-                                                heading: selectedDispatch.last_heading ? parseFloat(selectedDispatch.last_heading) : null,
-                                            };
-                                        }
-                                        if (loc && loc.latitude && loc.longitude) {
-                                            return (
-                                                <div className="text-[10px] font-mono text-emerald-400 flex items-center gap-2">
-                                                    <span>GPS: {loc.latitude.toFixed(5)}, {loc.longitude.toFixed(5)}</span>
-                                                    {loc.heading ? <span>• {Math.round(loc.heading)}°</span> : null}
+                                {filtered.map((dispatch) => {
+                                    const isSelected = selectedDispatch?.id === dispatch.id;
+                                    const incident = dispatch.incident;
+                                    const etaStr = routeTelemetry[dispatch.id]?.formattedEta;
+                                    
+                                    return (
+                                        <div 
+                                            key={dispatch.id}
+                                            onClick={() => handleSelectDispatch(dispatch)}
+                                            className={`group cursor-pointer relative overflow-hidden rounded-xl border transition-all duration-200 ${
+                                                isSelected 
+                                                    ? 'bg-slate-50 dark:bg-white/[0.06] border-[#F61509] shadow-sm ring-1 ring-[#F61509]/30 scale-[1.01] z-10' 
+                                                    : 'bg-white dark:bg-white/[0.02] border-slate-200/80 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 hover:bg-slate-50/70 dark:hover:bg-white/[0.04]'
+                                            }`}
+                                        >
+                                            {/* Highlight Accent */}
+                                            {isSelected && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#F61509]" />}
+
+                                            <div className="p-4 pl-5">
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                                            #{dispatch.id}
+                                                        </span>
+                                                        {(() => {
+                                                            const itemConn = getConnectionStatus(dispatch);
+                                                            return (
+                                                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${itemConn.color}`}>
+                                                                    {itemConn.isLive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                                                                    {itemConn.status === 'stale' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                                                                    {itemConn.isOffline && <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
+                                                                    <span>{itemConn.status === 'online' ? 'Live' : (itemConn.status === 'stale' ? 'Stale' : 'Offline')}</span>
+                                                                </span>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                    <StatusBadge status={dispatch.dispatch_status} />
                                                 </div>
-                                            );
-                                        }
-                                        return (
-                                            <div className="text-[10px] text-slate-500 italic">
-                                                Awaiting responder device GPS link...
+
+                                                <div className="mb-3">
+                                                    <h3 className="text-slate-900 dark:text-white text-sm font-medium flex items-center gap-2 line-clamp-1">
+                                                        <AlertCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                        {incident?.incident_type?.name}
+                                                    </h3>
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400 flex items-start gap-1.5 mt-1">
+                                                        <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
+                                                        <span className="line-clamp-1">{(typeof incident?.barangay === 'object' ? incident.barangay?.barangay_name || incident.barangay?.name : incident?.barangay)}</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/5">
+                                                    <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-white/5 px-2 py-1 rounded-md border border-slate-200/60 dark:border-white/5">
+                                                        <Truck className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                                                        <span className="text-xs font-mono font-medium text-slate-700 dark:text-slate-300">{dispatch.ambulance?.plate_number}</span>
+                                                    </div>
+                                                    {dispatch.dispatch_status === 'arrived_on_scene' ? (
+                                                        <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                                            <CheckCircle className="w-3 h-3" />
+                                                            <span className="text-[10px] font-bold tracking-wider uppercase">
+                                                                 On Scene
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                                            <Clock className="w-3 h-3" />
+                                                            <span className="text-[10px] font-bold tracking-wider uppercase">
+                                                                {etaStr ? `ETA ${etaStr}` : 'ETA Live'}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-                                        );
-                                    })()}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* 🛡️ AMBULANCE FLEET READINESS BAY (when fleet tab is selected or when 0 active dispatches) */}
+                        {(viewFilter === 'fleet' || (filtered.length === 0 && viewFilter !== 'pending')) && (
+                            <div className="space-y-3 pt-2">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                                        <Truck className="w-3.5 h-3.5 text-emerald-500" /> Ambulance Fleet Readiness ({activeAmbulances.length})
+                                    </h3>
+                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                        {readyAmbulances.length} Ready
+                                    </span>
                                 </div>
 
-                                {/* Q3 & Q4: Route & How close are they (Distance & ETA)? */}
-                                {selectedDispatch.dispatch_status === 'arrived_on_scene' ? (
-                                    <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 rounded-xl p-3 space-y-1.5">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                                                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> Mission Status
-                                            </span>
-                                            <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10">
-                                                Arrived
-                                            </span>
-                                        </div>
-                                        <div className="text-xs text-emerald-900 dark:text-slate-200 font-medium">
-                                            Responder is currently on scene at the incident.
-                                        </div>
-                                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400/80 flex items-center gap-1 pt-0.5 font-medium">
-                                            <CheckCircle className="w-3 h-3" /> Navigation completed
-                                        </div>
+                                {activeAmbulances.length === 0 ? (
+                                    <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-white/10 text-center text-xs text-slate-400">
+                                        No registered emergency ambulances in fleet.
                                     </div>
                                 ) : (
-                                    <div className="bg-slate-50/80 dark:bg-white/[0.03] rounded-xl p-3 border border-slate-200/80 dark:border-white/10 space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                                                <Navigation className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Route & Proximity
-                                            </span>
-                                            {routeTelemetry[selectedDispatch.id]?.isOffRoute && (
-                                                <span className="text-[9px] text-amber-700 dark:text-amber-300 font-bold bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-0.5">
-                                                    <AlertTriangle className="w-2.5 h-2.5" /> Off-Route
-                                                </span>
-                                            )}
-                                        </div>
+                                    <div className="space-y-2.5">
+                                        {activeAmbulances.map(amb => {
+                                            const isAvailable = amb.status === 'available';
+                                            const isDispatched = amb.status === 'dispatched';
+                                            return (
+                                                <div 
+                                                    key={`amb-bay-${amb.id}`}
+                                                    className={`p-3.5 rounded-xl border transition-all ${
+                                                        isAvailable 
+                                                            ? 'bg-white dark:bg-white/[0.02] border-emerald-500/30 shadow-xs' 
+                                                            : (isDispatched
+                                                                ? 'bg-blue-500/[0.03] border-blue-500/30'
+                                                                : 'bg-slate-50 dark:bg-white/[0.01] border-slate-200 dark:border-white/5 opacity-70')
+                                                    }`}
+                                                >
+                                                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-mono text-xs font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-white/10 px-2 py-0.5 rounded-md border border-slate-200 dark:border-white/10">
+                                                                {amb.ambulance_code || `AMB-0${amb.id}`}
+                                                            </span>
+                                                            <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                                                                {amb.plate_number}
+                                                            </span>
+                                                        </div>
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
+                                                            isAvailable 
+                                                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' 
+                                                                : (isDispatched
+                                                                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30')
+                                                        }`}>
+                                                            <span className={`w-1.5 h-1.5 rounded-full ${isAvailable ? 'bg-emerald-400 animate-pulse' : (isDispatched ? 'bg-blue-400' : 'bg-amber-400')}`} />
+                                                            {isAvailable ? 'Available • Standby' : (isDispatched ? 'Dispatched • En Route' : 'Maintenance')}
+                                                        </span>
+                                                    </div>
 
-                                        <div className="grid grid-cols-2 gap-2 pt-1">
-                                            <div className="bg-white dark:bg-white/[0.04] p-2.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-xs">
-                                                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Est. Arrival</div>
-                                                <div className="text-sm font-bold font-mono text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5 truncate">
-                                                    <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                                                    <span>{routeTelemetry[selectedDispatch.id]?.formattedEta || 'Calculating...'}</span>
+                                                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                                                        {amb.vehicle_name || 'Emergency Medical Transport'}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                        {amb.vehicle_type || 'Type 1 Ambulance'}
+                                                    </div>
+
+                                                    {/* Quick Dispatch Action if available and there is pending triage */}
+                                                    {isAvailable && filteredVerified.length > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setAssigningIncident(filteredVerified[0])}
+                                                            className="mt-2.5 w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                                                        >
+                                                            <Sparkles className="w-3.5 h-3.5" />
+                                                            <span>Assign to Call #{filteredVerified[0].id}</span>
+                                                        </button>
+                                                    )}
                                                 </div>
-                                            </div>
-                                            <div className="bg-white dark:bg-white/[0.04] p-2.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-xs">
-                                                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Road Distance</div>
-                                                <div className="text-sm font-bold font-mono text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5 truncate">
-                                                    <Compass className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                                                    <span>{routeTelemetry[selectedDispatch.id]?.formattedDistance || '--'}</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
                         )}
-                        
-                        {filtered.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
-                                <ShieldAlert className="w-12 h-12 mb-3 opacity-20" />
-                                <p className="text-sm">No active dispatches.</p>
-                            </div>
-                        ) : (
-                            filtered.map((dispatch) => {
-                                const isSelected = selectedDispatch?.id === dispatch.id;
-                                const incident = dispatch.incident;
-                                const etaStr = routeTelemetry[dispatch.id]?.formattedEta;
-                                
-                                return (
-                                    <div 
-                                        key={dispatch.id}
-                                        onClick={() => handleSelectDispatch(dispatch)}
-                                        className={`group cursor-pointer relative overflow-hidden rounded-xl border transition-all duration-200 ${
-                                            isSelected 
-                                                ? 'bg-slate-50 dark:bg-white/[0.06] border-[#F61509] shadow-sm ring-1 ring-[#F61509]/30 scale-[1.01] z-10' 
-                                                : 'bg-white dark:bg-white/[0.02] border-slate-200/80 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 hover:bg-slate-50/70 dark:hover:bg-white/[0.04]'
-                                        }`}
-                                    >
-                                        {/* Highlight Accent */}
-                                        {isSelected && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#F61509]" />}
-
-                                        <div className="p-4 pl-5">
-                                            <div className="flex items-start justify-between mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono text-sm font-semibold text-slate-700 dark:text-slate-300">
-                                                        #{dispatch.id}
-                                                    </span>
-                                                    {(() => {
-                                                        const itemConn = getConnectionStatus(dispatch);
-                                                        return (
-                                                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${itemConn.color}`}>
-                                                                {itemConn.isLive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                                                                {itemConn.status === 'stale' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
-                                                                {itemConn.isOffline && <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
-                                                                <span>{itemConn.status === 'online' ? 'Live' : (itemConn.status === 'stale' ? 'Stale' : 'Offline')}</span>
-                                                            </span>
-                                                        );
-                                                    })()}
-                                                </div>
-                                                <StatusBadge status={dispatch.dispatch_status} />
-                                            </div>
-
-                                            <div className="mb-3">
-                                                <h3 className="text-slate-900 dark:text-white text-sm font-medium flex items-center gap-2 line-clamp-1">
-                                                    <AlertCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                    {incident?.incident_type?.name}
-                                                </h3>
-                                                <div className="text-xs text-slate-500 dark:text-slate-400 flex items-start gap-1.5 mt-1">
-                                                    <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
-                                                    <span className="line-clamp-1">{(typeof incident?.barangay === 'object' ? incident.barangay?.barangay_name || incident.barangay?.name : incident?.barangay)}</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/5">
-                                                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-white/5 px-2 py-1 rounded-md border border-slate-200/60 dark:border-white/5">
-                                                    <Truck className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                                                    <span className="text-xs font-mono font-medium text-slate-700 dark:text-slate-300">{dispatch.ambulance?.plate_number}</span>
-                                                </div>
-                                                {dispatch.dispatch_status === 'arrived_on_scene' ? (
-                                                    <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                                                        <CheckCircle className="w-3 h-3" />
-                                                        <span className="text-[10px] font-bold tracking-wider uppercase">
-                                                             On Scene
-                                                        </span>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                                                        <Clock className="w-3 h-3" />
-                                                        <span className="text-[10px] font-bold tracking-wider uppercase">
-                                                            {etaStr ? `ETA ${etaStr}` : 'ETA Live'}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        )}
                     </div>
                 </div>
 
-                {/* RIGHT COLUMN: Full-Height Live Map (9/12 width) */}
-                <div className="xl:col-span-9 flex flex-col h-full relative rounded-2xl overflow-hidden shadow-sm dark:shadow-2xl border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-[#070b14] z-0 transition-colors duration-300">
+                {/* RIGHT COLUMN: Full-Height Live Map (8/12 width on xl) */}
+                <div className="xl:col-span-8 flex flex-col h-full relative rounded-2xl overflow-hidden shadow-sm dark:shadow-2xl border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-[#070b14] z-0 transition-colors duration-300">
                     
                     {/* The Map itself takes up the entire container */}
                     <div className="absolute inset-0">
@@ -708,6 +1073,10 @@ export default function ActiveDispatchWorkspace({
                             liveLocations={liveLocations}
                             onRouteTelemetryChange={handleRouteTelemetryChange}
                             onSelectDispatch={handleSelectDispatch}
+                            verifiedIncidents={filteredVerified}
+                            onAssignIncident={setAssigningIncident}
+                            focusedTarget={focusedTarget}
+                            ambulances={ambulances}
                         />
                     </div>
 

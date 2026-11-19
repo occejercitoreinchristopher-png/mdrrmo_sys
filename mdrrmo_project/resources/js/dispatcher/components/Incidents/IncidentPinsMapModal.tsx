@@ -120,9 +120,9 @@ export default function IncidentPinsMapModal({
     const [mapLoaded, setMapLoaded] = useState(false);
 
     const [viewState, setViewState] = useState({
-        longitude: 124.577,
-        latitude: 8.52,
-        zoom: 12.2,
+        longitude: 124.572465, // Opol MDRRMO Base HQ
+        latitude: 8.521370,
+        zoom: 12.8,
     });
 
     const categoriesKey = filters.categories.join('\x1f');
@@ -285,8 +285,8 @@ export default function IncidentPinsMapModal({
 
         if (plottedIncidents.length === 0) {
             map.flyTo({
-                center: [124.577, 8.52],
-                zoom: 12.2,
+                center: [124.572465, 8.521370],
+                zoom: 12.8,
                 duration: 700,
                 essential: true,
             });

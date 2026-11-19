@@ -29,9 +29,9 @@ export default function IncidentHistoryMap({
     const mapRef = useRef<MapRef>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [viewState, setViewState] = useState({
-        longitude: 124.577, // near opol region
-        latitude: 8.520,
-        zoom: 12.2
+        longitude: 124.572465, // Opol MDRRMO Base HQ (8.521370, 124.572465)
+        latitude: 8.521370,
+        zoom: 13
     });
     const [popupInfo, setPopupInfo] = useState<any>(null);
 

@@ -68,8 +68,8 @@ export default function IncidentLocateModal({
     }, [incident]);
 
     const [viewState, setViewState] = useState({
-        longitude: 124.577,
-        latitude: 8.52,
+        longitude: 124.572465, // Opol MDRRMO Base HQ
+        latitude: 8.521370,
         zoom: 15.5,
     });
 
