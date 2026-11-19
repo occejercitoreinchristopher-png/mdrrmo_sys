@@ -917,11 +917,11 @@ class IncidentController extends Controller
             '63'.$last10,
         ]);
 
-        // 1. Check if caller matches a registered resident
-        $resident = User::where('role', 'resident')
-            ->with(['residentProfile.barangay'])
-            ->where(function ($q) use ($phoneVariants) {
-                $q->whereIn('phone_number', $phoneVariants);
+        // 1. Check if caller matches any registered user (resident, staff, responder)
+        $resident = User::with(['residentProfile.barangay'])
+            ->where(function ($q) use ($phoneVariants, $last10) {
+                $q->whereIn('phone_number', $phoneVariants)
+                    ->orWhere('phone_number', 'LIKE', "%{$last10}");
             })
             ->first();
 
@@ -967,16 +967,53 @@ class IncidentController extends Controller
             }
         }
 
+        // 4. Check if resident recently triggered hotline call with live GPS from mobile app (within 2 hours)
+        $recentHotlineGps = null;
+        if ($resident) {
+            $recentHotlineGps = Cache::get("hotline_call_user_{$resident->id}");
+        }
+        if (! $recentHotlineGps && ! empty($last10)) {
+            $recentHotlineGps = Cache::get("hotline_call_phone_{$last10}")
+                ?? Cache::get("hotline_call_phone_0{$last10}")
+                ?? Cache::get("hotline_call_phone_+63{$last10}");
+        }
+        if (! $recentHotlineGps) {
+            $latestCall = Cache::get('latest_hotline_call');
+            if ($latestCall && isset($latestCall['called_at'])) {
+                $calledCarbon = \Carbon\Carbon::parse($latestCall['called_at']);
+                if ($calledCarbon->diffInMinutes(now()) <= 20) {
+                    if (! empty($latestCall['phone_number'])) {
+                        $cDigits = preg_replace('/\D+/', '', $latestCall['phone_number']);
+                        if (str_ends_with($cDigits, $last10)) {
+                            $recentHotlineGps = $latestCall;
+                        }
+                    } else {
+                        $recentHotlineGps = $latestCall;
+                    }
+                }
+            }
+        }
+
+        if ($recentHotlineGps && isset($recentHotlineGps['called_at'])) {
+            $calledTime = \Carbon\Carbon::parse($recentHotlineGps['called_at']);
+            $recentHotlineGps['time_ago'] = $calledTime->diffForHumans();
+            $recentHotlineGps['formatted_time'] = $calledTime->format('h:i A');
+
+            if (empty($resolvedCallerName) && ! empty($recentHotlineGps['resident_name'])) {
+                $resolvedCallerName = $recentHotlineGps['resident_name'];
+            }
+        }
+
         $prankHistory = Incident::getPrankHistoryForReporter($resident?->id, $normalizedPhone);
 
-        if (! $resident && ! $previousIncident && ! $prankHistory['has_prank_history'] && empty($resolvedCallerName)) {
+        if (! $resident && ! $previousIncident && ! $prankHistory['has_prank_history'] && empty($resolvedCallerName) && ! $recentHotlineGps) {
             return response()->json([
                 'recognized' => false,
                 'data' => null,
             ]);
         }
 
-        // 4. Build resident address if available
+        // 5. Build resident address if available
         $residentAddress = null;
         $registeredBarangayCoords = null;
         if ($resident?->residentProfile) {
@@ -999,21 +1036,6 @@ class IncidentController extends Controller
                     ];
                 }
             }
-        }
-
-        // 5. Check if resident recently triggered hotline call with live GPS from mobile app
-        $recentHotlineGps = null;
-        if ($resident) {
-            $recentHotlineGps = Cache::get("hotline_call_user_{$resident->id}");
-        }
-        if (! $recentHotlineGps && ! empty($last10)) {
-            $recentHotlineGps = Cache::get("hotline_call_phone_{$last10}");
-        }
-
-        if ($recentHotlineGps && isset($recentHotlineGps['called_at'])) {
-            $calledTime = \Carbon\Carbon::parse($recentHotlineGps['called_at']);
-            $recentHotlineGps['time_ago'] = $calledTime->diffForHumans();
-            $recentHotlineGps['formatted_time'] = $calledTime->format('h:i A');
         }
 
         // 6. Build previous location suggestion
@@ -1056,6 +1078,31 @@ class IncidentController extends Controller
         ]);
     }
 
+    /**
+     * Get active/recent hotline call with live GPS shared via resident mobile app
+     */
+    public function getActiveHotlineCall()
+    {
+        $latest = Cache::get('latest_hotline_call');
+        if ($latest && isset($latest['called_at'])) {
+            $calledTime = \Carbon\Carbon::parse($latest['called_at']);
+            if ($calledTime->diffInMinutes(now()) <= 30) {
+                $latest['time_ago'] = $calledTime->diffForHumans();
+                $latest['formatted_time'] = $calledTime->format('h:i A');
+
+                return response()->json([
+                    'active' => true,
+                    'data' => $latest,
+                ]);
+            }
+        }
+
+        return response()->json([
+            'active' => false,
+            'data' => null,
+        ]);
+    }
+
     public function searchCallerPhoneNumbers(Request $request)
     {
         $query = trim($request->query('q', ''));
@@ -1073,9 +1120,8 @@ class IncidentController extends Controller
 
         $results = collect();
 
-        // 1. Search registered residents by phone number or name
-        $residents = User::where('role', 'resident')
-            ->whereNotNull('phone_number')
+        // 1. Search registered residents / users by phone number or name
+        $residents = User::whereNotNull('phone_number')
             ->where(function ($q) use ($digits, $coreDigits, $query) {
                 if (! empty($coreDigits)) {
                     $q->where('phone_number', 'LIKE', "%{$coreDigits}%");

@@ -303,24 +303,28 @@ class IncidentController extends Controller
         ]);
 
         $user = Auth::user();
+        $phone = $request->input('phone_number') ?: $request->input('phone') ?: $user->phone_number;
 
         $hotlineData = [
             'resident_id' => $user->id,
             'resident_name' => trim("{$user->first_name} {$user->last_name}"),
-            'phone_number' => $user->phone_number,
+            'phone_number' => $phone,
             'latitude' => (float) $validated['latitude'],
             'longitude' => (float) $validated['longitude'],
             'called_at' => now()->toIso8601String(),
             'timestamp' => now()->timestamp,
         ];
 
-        // Cache for 2 hours so dispatcher intake can automatically fetch live GPS
+        // Cache globally and per-user/phone so dispatcher intake can automatically fetch live GPS
+        Cache::put('latest_hotline_call', $hotlineData, now()->addMinutes(30));
         Cache::put("hotline_call_user_{$user->id}", $hotlineData, now()->addHours(2));
-        if (! empty($user->phone_number)) {
-            $rawDigits = preg_replace('/\D+/', '', $user->phone_number);
+        if (! empty($phone)) {
+            $rawDigits = preg_replace('/\D+/', '', $phone);
             if (strlen($rawDigits) >= 10) {
                 $last10 = substr($rawDigits, -10);
                 Cache::put("hotline_call_phone_{$last10}", $hotlineData, now()->addHours(2));
+                Cache::put("hotline_call_phone_0{$last10}", $hotlineData, now()->addHours(2));
+                Cache::put("hotline_call_phone_+63{$last10}", $hotlineData, now()->addHours(2));
             }
         }
 

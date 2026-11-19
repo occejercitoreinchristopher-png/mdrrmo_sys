@@ -170,6 +170,81 @@ export default function CreatePhoneIncidentModal({
     const [callerData, setCallerData] = useState<CallerData | null>(null);
     const [lookingUpCaller, setLookingUpCaller] = useState(false);
 
+    // Active Hotline Call detection from WebSocket / SessionStorage
+    const [activeHotlineCall, setActiveHotlineCall] = useState<{
+        resident_id?: number;
+        resident_name?: string;
+        phone_number?: string;
+        latitude: number;
+        longitude: number;
+        timestamp: number;
+    } | null>(() => {
+        if (typeof window === 'undefined') return null;
+        try {
+            const raw = sessionStorage.getItem('active_hotline_call');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Date.now() - (parsed.timestamp || 0) < 30 * 60 * 1000) {
+                    return parsed;
+                }
+            }
+        } catch {}
+        return null;
+    });
+
+    useEffect(() => {
+        const handleHotlineUpdate = (evt: any) => {
+            const d = evt.detail || evt;
+            if (d && d.latitude && d.longitude) {
+                setActiveHotlineCall({
+                    resident_id: d.resident_id,
+                    resident_name: d.resident_name,
+                    phone_number: d.phone_number,
+                    latitude: Number(d.latitude),
+                    longitude: Number(d.longitude),
+                    timestamp: d.timestamp || Date.now(),
+                });
+            }
+        };
+        window.addEventListener('active-hotline-call-updated' as any, handleHotlineUpdate);
+        return () => window.removeEventListener('active-hotline-call-updated' as any, handleHotlineUpdate);
+    }, []);
+
+    // Sync active hotline call whenever modal opens
+    useEffect(() => {
+        if (!open) return;
+        try {
+            const raw = sessionStorage.getItem('active_hotline_call');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Date.now() - (parsed.timestamp || 0) < 30 * 60 * 1000) {
+                    setActiveHotlineCall(parsed);
+                }
+            }
+        } catch {}
+
+        fetch('/dispatcher/callers/active-hotline')
+            .then(res => res.json())
+            .then(json => {
+                if (json.active && json.data) {
+                    setActiveHotlineCall(prev => {
+                        if (prev && prev.timestamp && prev.timestamp > (json.data.timestamp || 0)) {
+                            return prev;
+                        }
+                        return {
+                            resident_id: json.data.resident_id,
+                            resident_name: json.data.resident_name,
+                            phone_number: json.data.phone_number,
+                            latitude: Number(json.data.latitude),
+                            longitude: Number(json.data.longitude),
+                            timestamp: json.data.timestamp || Date.now(),
+                        };
+                    });
+                }
+            })
+            .catch(() => {});
+    }, [open]);
+
     // Phone autocomplete suggestions state
     const [suggestions, setSuggestions] = useState<PhoneSuggestion[]>([]);
     const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -506,6 +581,14 @@ export default function CreatePhoneIncidentModal({
         setLocationError(null);
     };
 
+    // Check if resident's hotline GPS location is already active on the map
+    const isHotlineGpsApplied = useMemo(() => {
+        const lat = activeHotlineCall?.latitude ?? callerData?.recent_hotline_gps?.latitude;
+        const lng = activeHotlineCall?.longitude ?? callerData?.recent_hotline_gps?.longitude;
+        if (!lat || !lng || !pinLocation) return false;
+        return Math.abs(pinLocation.latitude - lat) < 0.0001 && Math.abs(pinLocation.longitude - lng) < 0.0001;
+    }, [activeHotlineCall, callerData, pinLocation]);
+
     // 1-Click apply live GPS location from resident's mobile hotline call
     const handleApplyHotlineGps = (gps: NonNullable<CallerData['recent_hotline_gps']>) => {
         setLocationMethod('pinpoint');
@@ -530,6 +613,40 @@ export default function CreatePhoneIncidentModal({
             latitude: gps.latitude,
             longitude: gps.longitude,
             zoom: 16,
+        });
+    };
+
+    // 1-Click apply active hotline call (from live WebSocket, server cache, or caller record)
+    const handleApplyActiveHotlineCall = () => {
+        const sourceGps = activeHotlineCall || (callerData?.recent_hotline_gps ? {
+            resident_id: undefined,
+            resident_name: callerData.caller_name,
+            phone_number: phoneNumber,
+            latitude: callerData.recent_hotline_gps.latitude,
+            longitude: callerData.recent_hotline_gps.longitude,
+            timestamp: Date.now(),
+        } : null);
+
+        if (!sourceGps) return;
+
+        // Auto-fill phone number if blank
+        if (sourceGps.phone_number && (!phoneNumber || phoneNumber.trim() === '')) {
+            let clean = sourceGps.phone_number.replace(/\D/g, '');
+            if (clean.startsWith('639')) clean = '0' + clean.slice(2);
+            else if (clean.startsWith('9')) clean = '0' + clean;
+            setPhoneNumber(clean.slice(0, 11));
+        }
+
+        // Auto-fill caller name if blank
+        if (sourceGps.resident_name && (!callerName || callerName.trim() === '')) {
+            setCallerName(sourceGps.resident_name);
+        }
+
+        // Apply GPS to pinpoint and map
+        handleApplyHotlineGps({
+            latitude: sourceGps.latitude,
+            longitude: sourceGps.longitude,
+            called_at: new Date(sourceGps.timestamp || Date.now()).toISOString(),
         });
     };
 
@@ -1112,6 +1229,58 @@ export default function CreatePhoneIncidentModal({
                     </div>
                 </div>
 
+                {/* Live Hotline Call Broadcast Banner */}
+                {(activeHotlineCall || callerData?.recent_hotline_gps) && (
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-emerald-500/10 border-2 border-emerald-500/50 dark:border-emerald-500/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg shadow-emerald-500/10 animate-in fade-in duration-300">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/30">
+                                <Radio className="w-5 h-5 animate-pulse" />
+                            </div>
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                                        Live Hotline GPS Shared
+                                    </span>
+                                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 truncate max-w-[200px]">
+                                        {activeHotlineCall?.resident_name || callerData?.caller_name || 'Resident Caller'}
+                                    </span>
+                                    {activeHotlineCall?.phone_number && (
+                                        <span className="text-[11px] font-mono font-semibold text-slate-600 dark:text-slate-300">
+                                            ({activeHotlineCall.phone_number})
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-slate-700 dark:text-slate-300 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                    <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                    <span>
+                                        Coordinates: <strong className="text-emerald-800 dark:text-emerald-200">{(activeHotlineCall?.latitude ?? callerData?.recent_hotline_gps?.latitude)?.toFixed(6)}, {(activeHotlineCall?.longitude ?? callerData?.recent_hotline_gps?.longitude)?.toFixed(6)}</strong>
+                                    </span>
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">(Live mobile coordinates)</span>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                            {isHotlineGpsApplied ? (
+                                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/20 border border-emerald-500/40">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                    Location Applied to Map
+                                </span>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleApplyActiveHotlineCall}
+                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 hover:from-emerald-500 hover:to-teal-500 shadow-md shadow-emerald-600/30 active:scale-95 transition-all cursor-pointer"
+                                >
+                                    <MapPin className="w-4 h-4" />
+                                    Auto-Apply Resident's Location
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* 2-COLUMN EMERGENCY CAD CONSOLE LAYOUT */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-1">
                     {/* LEFT COLUMN: Caller Intake, Classification & Field Remarks */}
@@ -1328,6 +1497,46 @@ export default function CreatePhoneIncidentModal({
                                 <div className="flex items-center gap-2 text-xs text-slate-400 py-1">
                                     <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
                                     <span>Checking caller records & past incident history...</span>
+                                </div>
+                            )}
+
+                            {/* Live Hotline Call Hint if callerData not yet loaded */}
+                            {activeHotlineCall && !callerData && !lookingUpCaller && (
+                                <div className="rounded-xl border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50/70 dark:bg-emerald-950/20 p-3 space-y-2 shadow-sm">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                                                <Radio className="w-4 h-4 animate-pulse" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                                        {activeHotlineCall.resident_name || 'Resident Caller'}
+                                                    </span>
+                                                    <span className="text-[10px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                        <Check className="w-3 h-3" /> Live Hotline Caller
+                                                    </span>
+                                                </div>
+                                                <p className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-1 mt-0.5 font-mono">
+                                                    <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                                                    <span>Live GPS: {activeHotlineCall.latitude.toFixed(6)}, {activeHotlineCall.longitude.toFixed(6)}</span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-500/20 flex items-center justify-between gap-2">
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                            Shared live GPS via resident mobile app
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={handleApplyActiveHotlineCall}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm hover:from-emerald-500 hover:to-teal-500 active:scale-95 transition-all cursor-pointer"
+                                        >
+                                            <MapPin className="w-3.5 h-3.5" />
+                                            Auto-Fill & Pinpoint
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
@@ -1617,6 +1826,46 @@ export default function CreatePhoneIncidentModal({
                                     </button>
                                 </div>
                             </div>
+
+                            {/* Live Hotline Call Direct Geolocation Banner */}
+                            {(activeHotlineCall || callerData?.recent_hotline_gps) && (
+                                <div className="p-3 rounded-xl border border-emerald-400/80 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/5 dark:from-emerald-950/40 dark:via-teal-950/30 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-sm">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                                            <Radio className="w-4 h-4 animate-ping" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                                                    Live Hotline GPS: {activeHotlineCall?.resident_name || callerData?.caller_name || 'Resident'}
+                                                </span>
+                                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold">
+                                                    Active Signal
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-slate-700 dark:text-slate-300 font-mono mt-0.5 truncate">
+                                                Coordinates: [{(activeHotlineCall?.latitude ?? callerData?.recent_hotline_gps?.latitude)?.toFixed(6)}, {(activeHotlineCall?.longitude ?? callerData?.recent_hotline_gps?.longitude)?.toFixed(6)}]
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {isHotlineGpsApplied ? (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 shrink-0">
+                                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                            Applied to Map
+                                        </span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={handleApplyActiveHotlineCall}
+                                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 hover:from-emerald-500 hover:to-teal-500 shadow-md shadow-emerald-600/30 active:scale-95 transition-all cursor-pointer shrink-0"
+                                        >
+                                            <MapPin className="w-3.5 h-3.5" />
+                                            Auto-Apply Live Location
+                                        </button>
+                                    )}
+                                </div>
+                            )}
 
                             {/* METHOD 1: Location Code — STRICTLY PREDEFINED CODES ONLY, NO LANDMARKS */}
                             {locationMethod === 'code' && (

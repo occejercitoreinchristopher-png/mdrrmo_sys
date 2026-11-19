@@ -43,7 +43,23 @@ export default function DispatcherLayout({ children, title }) {
             channel.listen('ResidentCalledResponder', handleResidentCallResponder);
             channel.listen('.ResidentCalledResponder', handleResidentCallResponder);
 
-            const handleResidentCallHotline = (e: any) => handleEvent(`Resident ${e?.resident_name || ''} is calling the MDRRMO Hotline! Location: [${e?.latitude}, ${e?.longitude}]`);
+            const handleResidentCallHotline = (e: any) => {
+                if (e && e.latitude && e.longitude) {
+                    try {
+                        const callData = {
+                            resident_id: e.resident_id,
+                            resident_name: e.resident_name,
+                            phone_number: e.phone_number,
+                            latitude: Number(e.latitude),
+                            longitude: Number(e.longitude),
+                            timestamp: Date.now(),
+                        };
+                        sessionStorage.setItem('active_hotline_call', JSON.stringify(callData));
+                        window.dispatchEvent(new CustomEvent('active-hotline-call-updated', { detail: callData }));
+                    } catch {}
+                }
+                handleEvent(`Resident ${e?.resident_name || ''} is calling the MDRRMO Hotline! Location: [${e?.latitude}, ${e?.longitude}]`);
+            };
             channel.listen('ResidentCalledHotline', handleResidentCallHotline);
             channel.listen('.ResidentCalledHotline', handleResidentCallHotline);
 

@@ -47,6 +47,7 @@ class ResidentCalledHotline implements ShouldBroadcast
         return [
             'resident_id' => $this->resident->id,
             'resident_name' => $this->resident->first_name.' '.$this->resident->last_name,
+            'phone_number' => $this->resident->phone_number,
             'latitude' => $this->latitude,
             'longitude' => $this->longitude,
             'timestamp' => now()->toIso8601String(),
