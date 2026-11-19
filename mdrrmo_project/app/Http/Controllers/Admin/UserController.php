@@ -20,6 +20,18 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
+        // Auto-purge archived staff accounts older than 15 days
+        User::onlyTrashed()
+            ->where('role', '!=', 'resident')
+            ->where('deleted_at', '<=', now()->subDays(15))
+            ->get()
+            ->each(function ($u) {
+                if ($u->responderProfile) {
+                    $u->responderProfile()->forceDelete();
+                }
+                $u->forceDelete();
+            });
+
         $users = User::withTrashed()
             ->where('role', '!=', 'resident')
             ->with(['responderProfile'])
@@ -48,6 +60,33 @@ class UserController extends Controller
         }
 
         return back()->with('success', 'User account restored successfully.');
+    }
+
+    public function forceDelete($id)
+    {
+        $user = User::withTrashed()->findOrFail($id);
+
+        $activeDispatches = Dispatch::where(function ($q) use ($user) {
+            $q->where('driver_id', $user->id)
+                ->orWhere('emt_id', $user->id)
+                ->orWhereHas('crew', fn ($cq) => $cq->where('users.id', $user->id));
+        })
+            ->whereIn('dispatch_status', ['assigned', 'accepted', 'en_route', 'arrived_on_scene'])
+            ->exists();
+
+        if ($activeDispatches) {
+            return back()->with('error', 'Cannot permanently delete responder while they are assigned to an active emergency dispatch.');
+        }
+
+        if ($user->responderProfile) {
+            $user->responderProfile()->forceDelete();
+        }
+
+        $email = $user->email;
+        $name = trim($user->first_name . ' ' . $user->last_name);
+        $user->forceDelete();
+
+        return back()->with('success', "Account for {$name} has been permanently deleted. The email address ({$email}) is now available for new registrations.");
     }
 
     public function residents(Request $request)
@@ -116,8 +155,8 @@ class UserController extends Controller
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'last_name' => 'required|string|max:255',
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')],
-            'phone_number' => ['required', 'string', 'regex:/^09\d{9}$/', Rule::unique('users')],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->whereNull('deleted_at')],
+            'phone_number' => ['required', 'string', 'regex:/^09\d{9}$/', Rule::unique('users')->whereNull('deleted_at')],
             'birthdate' => ['nullable', 'date', 'before:today'],
             'birthday' => ['nullable', 'date', 'before:today'],
             'age' => ['nullable', 'integer', 'min:1', 'max:120'],
@@ -227,8 +266,8 @@ class UserController extends Controller
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'last_name' => 'required|string|max:255',
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'phone_number' => ['required', 'string', 'regex:/^09\d{9}$/', Rule::unique('users')->ignore($user->id)],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)->whereNull('deleted_at')],
+            'phone_number' => ['required', 'string', 'regex:/^09\d{9}$/', Rule::unique('users')->ignore($user->id)->whereNull('deleted_at')],
             'birthdate' => ['nullable', 'date', 'before:today'],
             'birthday' => ['nullable', 'date', 'before:today'],
             'age' => ['nullable', 'integer', 'min:1', 'max:120'],
@@ -370,6 +409,9 @@ class UserController extends Controller
         if ($user->responderProfile) {
             $user->responderProfile->update(['availability' => 'off_duty']);
         }
+
+        // Revoke active sessions / mobile tokens
+        $user->tokens()->delete();
 
         $user->delete();
 

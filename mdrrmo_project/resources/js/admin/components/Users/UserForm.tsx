@@ -1,23 +1,43 @@
 import { useState, useEffect } from 'react';
-import { AlertCircle, KeyRound, Shield, UserCheck } from 'lucide-react';
+import {
+    AlertCircle,
+    KeyRound,
+    Shield,
+    UserCheck,
+    User as UserIcon,
+    Radio,
+    Ambulance,
+    Phone,
+    Mail,
+    Calendar,
+    Check,
+    Save,
+    X
+} from 'lucide-react';
 import Button from '@/shared/components/Button';
 import Input from '@/shared/components/Input';
 import Select from '@/shared/components/Select';
 import { clsx } from 'clsx';
-
 import type { User } from './UserManagement';
 
 const ALL_ROLES = ['admin', 'dispatcher', 'responder', 'resident'];
-const STATUSES = ['active', 'inactive', 'suspended'];
+const STATUSES = [
+    { value: 'active', label: 'Active Account' },
+    { value: 'inactive', label: 'Inactive / On Leave' },
+    { value: 'suspended', label: 'Suspended Access' },
+];
 
 const ROLE_FIELDS = {
     admin: ['first_name', 'middle_name', 'last_name', 'birthdate', 'age', 'email', 'phone_number', 'status'],
     dispatcher: ['first_name', 'middle_name', 'last_name', 'birthdate', 'age', 'email', 'phone_number', 'status'],
     responder: ['first_name', 'middle_name', 'last_name', 'birthdate', 'age', 'email', 'phone_number', 'team', 'position', 'status'],
-    resident: ['first_name', 'middle_name', 'last_name', 'birthdate', 'age', 'email', 'phone_number', 'status']
+    resident: ['first_name', 'middle_name', 'last_name', 'birthdate', 'age', 'email', 'phone_number', 'status'],
 };
 
-const POSITIONS = ['driver', 'emt'];
+const POSITIONS = [
+    { value: 'driver', label: 'Emergency Driver' },
+    { value: 'emt', label: 'Emergency Medical Technician (EMT)' },
+];
 
 interface UserFormProps {
     user?: User | null;
@@ -28,13 +48,19 @@ interface UserFormProps {
     allowedRoles?: string[];
 }
 
-export default function UserForm({ user = null, onSubmit, onCancel, loading = false, errors = {}, allowedRoles = ['dispatcher', 'responder'] }: UserFormProps) {
+export default function UserForm({
+    user = null,
+    onSubmit,
+    onCancel,
+    loading = false,
+    errors = {},
+    allowedRoles = ['dispatcher', 'responder'],
+}: UserFormProps) {
     const userRole = user?.role;
-    const rolesToDisplay = userRole && !allowedRoles.includes(userRole)
-        ? [...allowedRoles, userRole]
-        : allowedRoles;
+    const rolesToDisplay =
+        userRole && !allowedRoles.includes(userRole) ? [...allowedRoles, userRole] : allowedRoles;
 
-    const availableRoles = ALL_ROLES.filter(r => rolesToDisplay.includes(r));
+    const availableRoles = ALL_ROLES.filter((r) => rolesToDisplay.includes(r));
     const initialRole = userRole || allowedRoles[0] || 'dispatcher';
 
     const normalizePhone = (phone?: string | null) => {
@@ -52,7 +78,11 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
         first_name: targetUser?.first_name ?? '',
         middle_name: targetUser?.middle_name ?? '',
         last_name: targetUser?.last_name ?? '',
-        birthdate: targetUser?.birthdate ? String(targetUser.birthdate).substring(0, 10) : (targetUser?.birthday ? String(targetUser.birthday).substring(0, 10) : ''),
+        birthdate: targetUser?.birthdate
+            ? String(targetUser.birthdate).substring(0, 10)
+            : targetUser?.birthday
+            ? String(targetUser.birthday).substring(0, 10)
+            : '',
         age: targetUser?.age !== undefined && targetUser?.age !== null ? String(targetUser.age) : '',
         email: targetUser?.email ?? '',
         phone_number: normalizePhone(targetUser?.phone_number),
@@ -93,13 +123,12 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
                 setAgeError('');
             }
         }
-        setForm(f => ({ ...f, birthdate: val, age: calculatedAge }));
+        setForm((f) => ({ ...f, birthdate: val, age: calculatedAge }));
     };
 
-    // Strictly enforce numbers only for Age (no letters or special characters)
+    // Strictly enforce numbers only for Age (1-120)
     const handleAgeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const rawVal = e.target.value;
-        // Strip out any non-numeric characters
         const cleanVal = rawVal.replace(/[^0-9]/g, '');
 
         if (cleanVal !== '') {
@@ -113,29 +142,24 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
             setAgeError('');
         }
 
-        setForm(f => ({ ...f, age: cleanVal }));
+        setForm((f) => ({ ...f, age: cleanVal }));
     };
 
-    // Strictly enforce Philippine mobile numbers (numbers only, exactly 11 digits, starts with 09)
+    // Strictly enforce Philippine mobile numbers (starts with 09, 11 digits)
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const rawVal = e.target.value;
-        // Strip out any non-numeric characters
         let cleanVal = rawVal.replace(/[^0-9]/g, '');
 
-        // Auto-convert standard Philippine mobile international prefixes if pasted
         if (cleanVal.startsWith('639')) {
             cleanVal = '09' + cleanVal.slice(3);
         } else if (cleanVal.startsWith('9')) {
-            // Auto-prepend 0 if user directly typed 9
             cleanVal = '09' + cleanVal.slice(1);
         }
 
-        // Strictly cap at 11 digits
         if (cleanVal.length > 11) {
             cleanVal = cleanVal.slice(0, 11);
         }
 
-        // Real-time validation feedback
         if (cleanVal !== '') {
             if (!cleanVal.startsWith('09')) {
                 setPhoneError('Philippine mobile numbers must start with 09 (e.g. 09123456789).');
@@ -148,7 +172,7 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
             setPhoneError('');
         }
 
-        setForm(f => ({ ...f, phone_number: cleanVal }));
+        setForm((f) => ({ ...f, phone_number: cleanVal }));
     };
 
     const handlePhoneKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -164,7 +188,9 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
     const handlePhoneBlur = () => {
         if (!form.phone_number) return;
         if (!/^09\d{9}$/.test(form.phone_number)) {
-            setPhoneError('Please enter a valid 11-digit Philippine mobile number starting with 09 (e.g. 09123456789).');
+            setPhoneError(
+                'Please enter a valid 11-digit Philippine mobile number starting with 09 (e.g. 09123456789).'
+            );
         } else {
             setPhoneError('');
         }
@@ -187,10 +213,13 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
                 return;
             }
             if (!/^09\d{9}$/.test(form.phone_number)) {
-                setPhoneError('Please enter a valid 11-digit Philippine mobile number starting with 09 (e.g. 09123456789).');
+                setPhoneError(
+                    'Please enter a valid 11-digit Philippine mobile number starting with 09 (e.g. 09123456789).'
+                );
                 return;
             }
         }
+
         const payload: Record<string, any> = { ...form };
         if (payload.role !== 'responder') {
             delete payload.position;
@@ -202,280 +231,387 @@ export default function UserForm({ user = null, onSubmit, onCancel, loading = fa
                 payload.team = null;
             }
         }
-        // Format payload: send integer age or null
+
         if (payload.age !== '') {
             payload.age = parseInt(payload.age, 10);
         } else {
             payload.age = null;
         }
+
         if (!payload.birthdate) {
             payload.birthdate = null;
         }
-        // When creating a new user, status is automatically active
-        payload.status = user ? (form.status || 'active') : 'active';
+
+        payload.status = user ? form.status || 'active' : 'active';
         onSubmit?.(payload);
     };
 
-    const handleRoleChange = (value: any) => {
-        const newRole = value?.target ? value.target.value : value;
-        setForm(f => ({
+    const handleRoleChange = (newRole: string) => {
+        setForm((f) => ({
             ...f,
             role: newRole,
-            // Reset role-specific fields
-            position: newRole === 'responder' ? (f.position || 'driver') : '',
-            team: newRole === 'responder' ? f.team : ''
+            position: newRole === 'responder' ? f.position || 'driver' : '',
+            team: newRole === 'responder' ? f.team : '',
         }));
     };
 
-    const activeFields = ROLE_FIELDS[form.role] || [];
+    const activeFields = ROLE_FIELDS[form.role as keyof typeof ROLE_FIELDS] || [];
     const showField = (field: string) => activeFields.includes(field);
 
-    const hasErrors = (errors && Object.keys(errors).length > 0) || Boolean(ageError) || Boolean(phoneError);
+    const hasErrors =
+        (errors && Object.keys(errors).length > 0) || Boolean(ageError) || Boolean(phoneError);
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Error Banner */}
             {hasErrors && (
-                <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-sm flex items-start gap-2.5">
-                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                     <div>
-                        <p className="font-semibold mb-1">Please fix the following errors:</p>
-                        <ul className="list-disc list-inside space-y-0.5 text-xs">
-                            {ageError && <li><span className="capitalize font-medium">Age:</span> {ageError}</li>}
-                            {phoneError && <li><span className="capitalize font-medium">Phone Number:</span> {phoneError}</li>}
-                            {errors && Object.entries(errors).map(([field, err]) => (
-                                <li key={field}>
-                                    <span className="capitalize font-medium">{field.replace(/_/g, ' ')}:</span> {String(err)}
+                        <p className="font-bold mb-1">Please review the form errors:</p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                            {ageError && (
+                                <li>
+                                    <span className="font-semibold">Age:</span> {ageError}
                                 </li>
-                            ))}
+                            )}
+                            {phoneError && (
+                                <li>
+                                    <span className="font-semibold">Phone:</span> {phoneError}
+                                </li>
+                            )}
+                            {errors &&
+                                Object.entries(errors).map(([field, err]) => (
+                                    <li key={field}>
+                                        <span className="font-semibold capitalize">
+                                            {field.replace(/_/g, ' ')}:
+                                        </span>{' '}
+                                        {String(err)}
+                                    </li>
+                                ))}
                         </ul>
                     </div>
                 </div>
             )}
 
-            {/* Top-Level Role Selection */}
-            <div className="grid grid-cols-1 mb-6">
-                <Select
-                    label="Role"
-                    id="role"
-                    value={form.role}
-                    onChange={handleRoleChange}
-                    options={availableRoles.map((r) => ({ value: r, label: r.charAt(0).toUpperCase() + r.slice(1) }))}
-                    error={errors.role}
-                />
+            {/* SECTION 1: ROLE DESIGNATION */}
+            <div className="space-y-3">
+                <div className="flex items-center gap-2 pb-1 border-b border-slate-100 dark:border-white/5">
+                    <Shield className="w-4 h-4 text-red-500" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                        Operational Role Designation
+                    </h4>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {availableRoles.map((r) => {
+                        const isSelected = form.role === r;
+                        const roleMeta = {
+                            dispatcher: { label: 'Dispatcher', icon: Radio, desc: 'Communications' },
+                            responder: { label: 'Responder', icon: Ambulance, desc: 'Field Team / EMT' },
+                            admin: { label: 'Admin', icon: Shield, desc: 'Full System Access' },
+                            resident: { label: 'Resident', icon: UserIcon, desc: 'Public User' },
+                        }[r] || { label: r, icon: UserIcon, desc: 'Staff Role' };
+
+                        const Icon = roleMeta.icon;
+
+                        return (
+                            <button
+                                key={r}
+                                type="button"
+                                onClick={() => handleRoleChange(r)}
+                                className={clsx(
+                                    'p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col gap-1',
+                                    isSelected
+                                        ? 'bg-red-500/10 border-red-500 text-red-600 dark:text-red-400 ring-1 ring-red-500/30 shadow-xs'
+                                        : 'bg-slate-50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300'
+                                )}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <Icon className={clsx('w-4 h-4', isSelected ? 'text-red-500' : 'text-slate-400')} />
+                                    {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-red-500" />}
+                                </div>
+                                <span className="text-xs font-bold capitalize mt-1">{roleMeta.label}</span>
+                                <span className="text-[10px] text-slate-400">{roleMeta.desc}</span>
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {showField('first_name') && (
-                    <Input
-                        label="First Name"
-                        id="first_name"
-                        value={form.first_name}
-                        onChange={set('first_name')}
-                        error={errors.first_name}
-                        required
-                        placeholder="Juan"
-                    />
-                )}
-                {showField('middle_name') && (
-                    <Input
-                        label="Middle Name"
-                        id="middle_name"
-                        value={form.middle_name}
-                        onChange={set('middle_name')}
-                        error={errors.middle_name}
-                        placeholder="(Optional)"
-                    />
-                )}
-                {showField('last_name') && (
-                    <Input
-                        label="Last Name"
-                        id="last_name"
-                        value={form.last_name}
-                        onChange={set('last_name')}
-                        error={errors.last_name}
-                        required
-                        placeholder="Dela Cruz"
-                    />
-                )}
+            {/* SECTION 2: PERSONAL DETAILS (Organized 2-Column Grid) */}
+            <div className="space-y-3">
+                <div className="flex items-center gap-2 pb-1 border-b border-slate-100 dark:border-white/5">
+                    <UserIcon className="w-4 h-4 text-blue-500" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                        Personal Information
+                    </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {showField('first_name') && (
+                        <Input
+                            label="First Name"
+                            id="first_name"
+                            value={form.first_name}
+                            onChange={set('first_name')}
+                            error={errors.first_name}
+                            required
+                            placeholder="e.g. Juan"
+                        />
+                    )}
+
+                    {showField('last_name') && (
+                        <Input
+                            label="Last Name"
+                            id="last_name"
+                            value={form.last_name}
+                            onChange={set('last_name')}
+                            error={errors.last_name}
+                            required
+                            placeholder="e.g. Dela Cruz"
+                        />
+                    )}
+
+                    {showField('middle_name') && (
+                        <Input
+                            label="Middle Name (Optional)"
+                            id="middle_name"
+                            value={form.middle_name}
+                            onChange={set('middle_name')}
+                            error={errors.middle_name}
+                            placeholder="(Optional)"
+                        />
+                    )}
+
+                    {showField('birthdate') && (
+                        <Input
+                            label="Birthday"
+                            id="birthdate"
+                            type="date"
+                            max={maxDate}
+                            value={form.birthdate}
+                            onChange={handleBirthdateChange}
+                            error={errors.birthdate || errors.birthday}
+                        />
+                    )}
+
+                    {showField('age') && (
+                        <Input
+                            label="Age"
+                            id="age"
+                            type="text"
+                            inputMode="numeric"
+                            value={form.age}
+                            onChange={handleAgeChange}
+                            error={ageError || errors.age}
+                            placeholder="e.g. 24"
+                        />
+                    )}
+                </div>
             </div>
 
-            {/* Birthday and Age Fields */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {showField('birthdate') && (
-                    <Input
-                        label="Birthday"
-                        id="birthdate"
-                        type="date"
-                        max={maxDate}
-                        value={form.birthdate}
-                        onChange={handleBirthdateChange}
-                        error={errors.birthdate || errors.birthday}
-                        placeholder="YYYY-MM-DD"
-                    />
-                )}
-                {showField('age') && (
-                    <Input
-                        label="Age"
-                        id="age"
-                        type="text"
-                        inputMode="numeric"
-                        value={form.age}
-                        onChange={handleAgeChange}
-                        onKeyDown={(e) => {
-                            // Block any non-numeric keys, except navigation and editing keys
-                            const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'];
-                            if (!allowedKeys.includes(e.key) && !/^[0-9]$/.test(e.key)) {
-                                e.preventDefault();
-                            }
-                        }}
-                        error={ageError || errors.age}
-                        placeholder="e.g. 28 (numbers only)"
-                    />
-                )}
+            {/* SECTION 3: CONTACT & TELECOMMUNICATIONS */}
+            <div className="space-y-3">
+                <div className="flex items-center gap-2 pb-1 border-b border-slate-100 dark:border-white/5">
+                    <Phone className="w-4 h-4 text-emerald-500" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                        Contact Details
+                    </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {showField('email') && (
+                        <div className="sm:col-span-2">
+                            <Input
+                                label="Email Address (Login Username)"
+                                id="email"
+                                type="email"
+                                value={form.email}
+                                onChange={set('email')}
+                                error={errors.email}
+                                required
+                                placeholder="name@mdrrmo.gov.ph"
+                            />
+                        </div>
+                    )}
+
+                    {showField('phone_number') && (
+                        <div className="sm:col-span-2">
+                            <Input
+                                label="Contact Number (Philippine Mobile)"
+                                id="phone_number"
+                                type="tel"
+                                inputMode="numeric"
+                                maxLength={11}
+                                value={form.phone_number}
+                                onChange={handlePhoneChange}
+                                onKeyDown={handlePhoneKeyDown}
+                                onBlur={handlePhoneBlur}
+                                error={phoneError || errors.phone_number}
+                                required
+                                placeholder="09XXXXXXXXX"
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {showField('email') && (
-                    <Input
-                        label="Email"
-                        id="email"
-                        type="email"
-                        value={form.email}
-                        onChange={set('email')}
-                        error={errors.email}
-                        required
-                        placeholder="juan@example.com"
-                    />
-                )}
-                {showField('phone_number') && (
-                    <Input
-                        label="Phone Number"
-                        id="phone_number"
-                        type="tel"
-                        inputMode="numeric"
-                        maxLength={11}
-                        value={form.phone_number}
-                        onChange={handlePhoneChange}
-                        onKeyDown={handlePhoneKeyDown}
-                        onBlur={handlePhoneBlur}
-                        error={phoneError || errors.phone_number}
-                        required
-                        placeholder="09XXXXXXXXX"
-                    />
-                )}
-            </div>
-
+            {/* SECTION 4: RESPONDER TEAM & MEMBERSHIP (Only for Responders) */}
             {form.role === 'responder' && (
-                <div className="space-y-4">
-                    <div className="p-3.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl space-y-2.5">
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 pb-1 border-b border-slate-100 dark:border-white/5">
+                        <Ambulance className="w-4 h-4 text-amber-500" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                            Responder Crew Assignment
+                        </h4>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 space-y-3">
                         <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                                <Shield className="w-3.5 h-3.5 text-blue-500" /> Responder Membership Type
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                                Membership Structure
                             </span>
-                            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                                {form.is_reliever ? 'Reliever Pool' : 'Permanent Team'}
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-300">
+                                {form.is_reliever ? 'Standby Reliever Pool' : 'Permanent Shift Team'}
                             </span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+
+                        <div className="grid grid-cols-2 gap-2.5">
                             <button
                                 type="button"
-                                onClick={() => setForm(f => ({ ...f, is_reliever: false }))}
+                                onClick={() => setForm((f) => ({ ...f, is_reliever: false }))}
                                 className={clsx(
-                                    "px-3 py-2.5 text-xs font-semibold rounded-xl border transition-all text-center cursor-pointer flex items-center justify-center gap-1.5",
+                                    'p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1.5',
                                     !form.is_reliever
-                                        ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                                        : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-blue-400"
+                                        ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
+                                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-blue-400'
                                 )}
                             >
-                                <Shield className="w-3.5 h-3.5" />
-                                Permanent Member
+                                <Shield className="w-4 h-4" />
+                                <span className="text-xs font-bold">Permanent Team</span>
                             </button>
+
                             <button
                                 type="button"
-                                onClick={() => setForm(f => ({ ...f, is_reliever: true, team: '' }))}
+                                onClick={() => setForm((f) => ({ ...f, is_reliever: true, team: '' }))}
                                 className={clsx(
-                                    "px-3 py-2.5 text-xs font-semibold rounded-xl border transition-all text-center cursor-pointer flex items-center justify-center gap-1.5",
+                                    'p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1.5',
                                     form.is_reliever
-                                        ? "bg-amber-600 text-white border-amber-600 shadow-sm"
-                                        : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-amber-400"
+                                        ? 'bg-amber-600 text-white border-amber-500 shadow-sm'
+                                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-amber-400'
                                 )}
                             >
-                                <UserCheck className="w-3.5 h-3.5" />
-                                Reliever (Standby)
+                                <UserCheck className="w-4 h-4" />
+                                <span className="text-xs font-bold">Reliever (Standby)</span>
                             </button>
                         </div>
+
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                             {!form.is_reliever
-                                ? "Each permanent team has exactly 1 Driver and up to 3 EMTs (max 4 members total)."
-                                : "Relievers are separate, unlimited personnel that temporarily fill mission roles when permanent members are unavailable."}
+                                ? 'Permanent teams are limited to exactly 1 Driver and up to 3 EMTs per shift.'
+                                : 'Relievers can be called on-demand to replace permanent members during absence or off-duty rotations.'}
                         </p>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {!form.is_reliever ? (
                             <Input
-                                label="Permanent Team"
+                                label="Permanent Team Name"
                                 id="team"
                                 value={form.team}
                                 onChange={set('team')}
                                 error={errors.team}
                                 required
-                                placeholder="e.g. Alpha"
+                                placeholder="e.g. Alpha, Bravo, Charlie"
                             />
                         ) : (
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Assignment Pool</label>
-                                <div className="px-4 py-2.5 text-sm rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 font-medium">
-                                    Reliever Pool (No Permanent Team)
+                                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
+                                    Assignment Pool
+                                </label>
+                                <div className="px-3.5 py-2.5 text-xs rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 font-bold">
+                                    Standby Pool (Rotational Reliever)
                                 </div>
                             </div>
                         )}
 
                         <Select
-                            label={form.is_reliever ? "Reliever Position" : "Team Position"}
+                            label={form.is_reliever ? 'Reliever Position' : 'Team Position'}
                             id="position"
                             value={form.position}
                             onChange={set('position')}
-                            options={POSITIONS.map((p) => ({ value: p, label: p === 'emt' ? 'EMT' : 'Driver' }))}
+                            options={POSITIONS}
                             error={errors.position}
                         />
                     </div>
                 </div>
             )}
 
+            {/* SECTION 5: ACCOUNT STATUS (When Editing) */}
             {Boolean(user) && showField('status') && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 pb-1 border-b border-slate-100 dark:border-white/5">
+                        <UserCheck className="w-4 h-4 text-purple-500" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                            Account Access Status
+                        </h4>
+                    </div>
+
                     <Select
                         label="Status"
                         id="status"
                         value={form.status}
                         onChange={set('status')}
-                        options={STATUSES.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
+                        options={STATUSES}
                         error={errors.status}
                     />
                 </div>
             )}
 
+            {/* Notice for New User Password Generation */}
             {!user && (
-                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm flex items-start gap-3">
-                    <KeyRound className="w-5 h-5 shrink-0 mt-0.5 text-blue-500" />
-                    <div className="space-y-1 text-xs">
-                        <p className="font-semibold text-slate-800 dark:text-slate-200">Temporary Password Generation</p>
-                        <p className="text-slate-600 dark:text-slate-400">
-                            A secure temporary password will be automatically generated and sent to the user's email address upon creation. The user will be required to change their password on their first login.
+                <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs flex items-start gap-3">
+                    <KeyRound className="w-5 h-5 shrink-0 text-blue-500 mt-0.5" />
+                    <div>
+                        <p className="font-bold text-slate-900 dark:text-white mb-0.5">
+                            Automated Credential Dispatch
+                        </p>
+                        <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+                            A temporary randomized password will be automatically dispatched to{' '}
+                            <strong>{form.email || 'the specified email'}</strong> upon creation. The staff
+                            member will be required to set their permanent password upon initial login.
                         </p>
                     </div>
                 </div>
             )}
 
-            <div className="flex gap-3 pt-2">
-                <Button type="submit" loading={loading} variant="admin" className="flex-1">
-                    {user ? 'Update User' : 'Create User'}
-                </Button>
+            {/* ACTION FOOTER BUTTONS */}
+            <div className="flex items-center gap-3 pt-4 border-t border-slate-100 dark:border-white/5">
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs sm:text-sm shadow-md shadow-red-600/30 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                >
+                    {loading ? (
+                        <span>Saving Changes...</span>
+                    ) : (
+                        <>
+                            <Save className="w-4 h-4" />
+                            <span>{user ? 'Update Staff Member' : 'Provision Staff Account'}</span>
+                        </>
+                    )}
+                </button>
+
                 {onCancel && (
-                    <Button type="button" variant="ghost" onClick={onCancel}>
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        disabled={loading}
+                        className="px-4 py-3 text-xs font-bold rounded-xl text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                    >
                         Cancel
-                    </Button>
+                    </button>
                 )}
             </div>
         </form>

@@ -8,6 +8,12 @@ const sizes = {
     md: 'max-w-lg',
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
+    '2xl': 'max-w-5xl',
+    '3xl': 'max-w-6xl',
+    '4xl': 'max-w-7xl',
+    '6xl': 'max-w-6xl',
+    '7xl': 'max-w-7xl',
+    full: 'max-w-[96vw]',
 };
 
 interface ModalProps {
@@ -19,6 +25,7 @@ interface ModalProps {
     size?: keyof typeof sizes;
     footer?: ReactNode;
     zIndex?: string;
+    className?: string;
 }
 
 export default function Modal({
@@ -30,6 +37,7 @@ export default function Modal({
     size = 'md',
     footer,
     zIndex = 'z-50',
+    className,
 }: ModalProps) {
     return (
         <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
@@ -40,13 +48,14 @@ export default function Modal({
                         'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full',
                         zIndex,
                         'bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl text-slate-900 dark:text-white',
-                        'max-h-[90vh] flex flex-col',
+                        'max-h-[92vh] flex flex-col',
                         'data-[state=open]:animate-in data-[state=closed]:animate-out',
                         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
                         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
                         'data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]',
                         'data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
                         sizes[size],
+                        className
                     )}
                 >
                     {/* Header */}

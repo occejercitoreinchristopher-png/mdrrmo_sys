@@ -1,192 +1,512 @@
-import Card from '@/shared/components/Card';
+import { useState, useMemo } from 'react';
 import ReactApexChart from 'react-apexcharts';
 import { useAppearance } from '@/shared/contexts/ThemeContext';
+import {
+    Activity,
+    BarChart3,
+    TrendingUp,
+    PieChart,
+    MapPin,
+    Layers,
+    Filter,
+    ShieldAlert,
+    CheckCircle2,
+    XCircle,
+    ArrowUpRight
+} from 'lucide-react';
+import { clsx } from 'clsx';
+import { router } from '@inertiajs/react';
 
-export default function IncidentIntelligence({ incidents }) {
+const PALETTE = [
+    '#F61509', // MDRRMO Crimson
+    '#3b82f6', // Electric Blue
+    '#10b981', // Emerald
+    '#f59e0b', // Amber
+    '#8b5cf6', // Violet
+    '#06b6d4', // Cyan
+    '#ec4899', // Pink
+    '#14b8a6', // Teal
+];
+
+export default function IncidentIntelligence({ incidents = [] }: { incidents?: any[] }) {
     const { theme } = useAppearance();
     const isDark = theme === 'dark';
 
-    // Calculate Trend Data (Reported vs Resolved per month or day based on date span)
-    const trends: Record<string, { reported: number; resolved: number }> = {};
-    const typeDistribution: Record<string, number> = {};
-    const statusDistribution: Record<string, number> = {};
-    const barangayActivity: Record<string, { total: number; resolved: number; rejected: number }> = {};
+    const [trendStyle, setTrendStyle] = useState<'area' | 'bar'>('area');
+    const [pieStyle, setPieStyle] = useState<'donut' | 'polarArea'>('donut');
 
-    incidents.forEach(inc => {
-        // Trend (group by Month for now, could be Day if span is short)
-        if (inc.reported_at) {
-            const date = new Date(inc.reported_at);
-            const key = date.toLocaleString('default', { month: 'short', year: 'numeric' });
-            if (!trends[key]) trends[key] = { reported: 0, resolved: 0 };
-            trends[key].reported++;
-            if (inc.incident_status === 'resolved') trends[key].resolved++;
-        }
+    // Aggregate trends, types, statuses, and barangay activities
+    const {
+        trendLabels,
+        trendReported,
+        trendResolved,
+        typeLabels,
+        typeData,
+        statusLabels,
+        statusData,
+        barangayActivity,
+        totalReported,
+        totalResolved,
+    } = useMemo(() => {
+        const trends: Record<string, { reported: number; resolved: number }> = {};
+        const typeDistribution: Record<string, number> = {};
+        const statusDistribution: Record<string, number> = {};
+        const barangayMap: Record<string, { total: number; resolved: number; rejected: number }> = {};
 
-        // Type
-        const typeName = inc.incident_type?.incident_type_name || 'General';
-        typeDistribution[typeName] = (typeDistribution[typeName] || 0) + 1;
+        incidents.forEach((inc) => {
+            // Trend (Group by Month / Year)
+            if (inc.reported_at) {
+                const date = new Date(inc.reported_at);
+                const key = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+                if (!trends[key]) trends[key] = { reported: 0, resolved: 0 };
+                trends[key].reported++;
+                if (inc.incident_status === 'resolved') trends[key].resolved++;
+            }
 
-        // Status
-        const status = inc.incident_status || 'pending';
-        statusDistribution[status] = (statusDistribution[status] || 0) + 1;
+            // Incident Type
+            const typeName = inc.incident_type?.name || inc.incident_type?.incident_type_name || 'General Emergency';
+            typeDistribution[typeName] = (typeDistribution[typeName] || 0) + 1;
 
-        // Barangay
-        const brgy = inc.barangay || 'Unknown';
-        if (!barangayActivity[brgy]) barangayActivity[brgy] = { total: 0, resolved: 0, rejected: 0 };
-        barangayActivity[brgy].total++;
-        if (inc.incident_status === 'resolved') barangayActivity[brgy].resolved++;
-        if (inc.incident_status === 'rejected') barangayActivity[brgy].rejected++;
-    });
+            // Status
+            const status = inc.incident_status || 'pending';
+            statusDistribution[status] = (statusDistribution[status] || 0) + 1;
 
-    const trendLabels = Object.keys(trends).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-    const trendReported = trendLabels.map(k => trends[k].reported);
-    const trendResolved = trendLabels.map(k => trends[k].resolved);
+            // Barangay
+            const brgy = inc.barangay || 'Unknown / Unassigned';
+            if (!barangayMap[brgy]) barangayMap[brgy] = { total: 0, resolved: 0, rejected: 0 };
+            barangayMap[brgy].total++;
+            if (inc.incident_status === 'resolved') barangayMap[brgy].resolved++;
+            if (inc.incident_status === 'rejected') barangayMap[brgy].rejected++;
+        });
 
-    const typeLabels = Object.keys(typeDistribution);
-    const typeData = Object.values(typeDistribution);
+        const sortedTrendKeys = Object.keys(trends).sort(
+            (a, b) => new Date(a).getTime() - new Date(b).getTime()
+        );
 
-    const statusLabels = Object.keys(statusDistribution).map(s => s.charAt(0).toUpperCase() + s.slice(1));
-    const statusData = Object.values(statusDistribution);
+        const rep = sortedTrendKeys.map((k) => trends[k].reported);
+        const res = sortedTrendKeys.map((k) => trends[k].resolved);
 
-    const getBaseOptions = (categories: any) => ({
-        chart: { background: 'transparent', toolbar: { show: false } },
-        theme: { mode: (isDark ? 'dark' : 'light') as 'dark' | 'light' },
+        return {
+            trendLabels: sortedTrendKeys,
+            trendReported: rep,
+            trendResolved: res,
+            typeLabels: Object.keys(typeDistribution),
+            typeData: Object.values(typeDistribution),
+            statusLabels: Object.keys(statusDistribution).map((s) => s.charAt(0).toUpperCase() + s.slice(1)),
+            statusData: Object.values(statusDistribution),
+            barangayActivity: barangayMap,
+            totalReported: rep.reduce((a, b) => a + b, 0),
+            totalResolved: res.reduce((a, b) => a + b, 0),
+        };
+    }, [incidents]);
+
+    const clearanceRate = totalReported > 0 ? Math.round((totalResolved / totalReported) * 100) : 0;
+
+    // Filter by clicking on a barangay
+    const handleFilterBarangay = (brgyName: string) => {
+        if (brgyName === 'Unknown / Unassigned') return;
+        router.get('/admin/reports', { barangay: brgyName }, { preserveState: true, replace: true });
+    };
+
+    // Trend chart options
+    const trendChartOptions: any = {
+        chart: {
+            type: trendStyle,
+            background: 'transparent',
+            toolbar: { show: false },
+            fontFamily: 'inherit',
+            animations: {
+                enabled: true,
+                easing: 'easeinout',
+                speed: 800,
+            },
+            dropShadow:
+                trendStyle === 'area'
+                    ? {
+                          enabled: true,
+                          top: 4,
+                          left: 0,
+                          blur: 8,
+                          opacity: isDark ? 0.25 : 0.12,
+                      }
+                    : { enabled: false },
+        },
+        colors: ['#F61509', '#10b981'],
+        stroke: {
+            curve: 'smooth',
+            width: trendStyle === 'area' ? 3 : 0,
+        },
+        fill:
+            trendStyle === 'area'
+                ? {
+                      type: 'gradient',
+                      gradient: {
+                          shade: isDark ? 'dark' : 'light',
+                          type: 'vertical',
+                          shadeIntensity: 0.5,
+                          opacityFrom: 0.45,
+                          opacityTo: 0.05,
+                      },
+                  }
+                : {
+                      type: 'gradient',
+                      gradient: {
+                          shade: isDark ? 'dark' : 'light',
+                          type: 'vertical',
+                          shadeIntensity: 0.35,
+                          opacityFrom: 0.95,
+                          opacityTo: 0.7,
+                      },
+                  },
+        plotOptions: {
+            bar: {
+                borderRadius: 6,
+                columnWidth: '45%',
+            },
+        },
         xaxis: {
-            categories,
-            labels: { style: { colors: isDark ? '#94a3b8' : '#64748b', fontSize: '10px' } },
+            categories: trendLabels,
+            labels: {
+                style: {
+                    colors: isDark ? '#94a3b8' : '#64748b',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                },
+            },
             axisBorder: { show: false },
             axisTicks: { show: false },
         },
-        yaxis: { labels: { style: { colors: isDark ? '#94a3b8' : '#64748b', fontSize: '11px' } } },
-        grid: { borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', strokeDashArray: 4 },
+        yaxis: {
+            labels: {
+                style: {
+                    colors: isDark ? '#94a3b8' : '#64748b',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                },
+            },
+        },
+        grid: {
+            borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+            strokeDashArray: 4,
+        },
         dataLabels: { enabled: false },
-        tooltip: { theme: (isDark ? 'dark' : 'light') as 'dark' | 'light' },
-    });
+        tooltip: {
+            theme: isDark ? 'dark' : 'light',
+            y: { formatter: (val: number) => `${val} incidents` },
+        },
+        legend: {
+            position: 'top',
+            horizontalAlign: 'right',
+            labels: { colors: isDark ? '#cbd5e1' : '#334155' },
+        },
+    };
+
+    // Donut / Polar chart options
+    const typeChartOptions: any = {
+        chart: {
+            type: pieStyle,
+            background: 'transparent',
+            toolbar: { show: false },
+            fontFamily: 'inherit',
+            animations: { enabled: true, easing: 'easeinout', speed: 800 },
+        },
+        colors: PALETTE,
+        labels: typeLabels,
+        theme: { mode: isDark ? 'dark' : 'light' },
+        stroke: { width: 2, colors: [isDark ? '#0c1220' : '#ffffff'] },
+        plotOptions: {
+            pie: {
+                donut: {
+                    size: '72%',
+                    labels: {
+                        show: true,
+                        name: { show: true, fontSize: '12px', fontWeight: 600, color: isDark ? '#94a3b8' : '#64748b' },
+                        value: { show: true, fontSize: '24px', fontWeight: 800, color: isDark ? '#ffffff' : '#0f172a' },
+                        total: {
+                            show: true,
+                            label: 'Total Incidents',
+                            color: isDark ? '#94a3b8' : '#64748b',
+                            formatter: () => `${incidents.length}`,
+                        },
+                    },
+                },
+            },
+        },
+        dataLabels: {
+            enabled: false,
+        },
+        legend: {
+            position: 'bottom',
+            fontSize: '11px',
+            labels: { colors: isDark ? '#cbd5e1' : '#334155' },
+        },
+        tooltip: {
+            theme: isDark ? 'dark' : 'light',
+            y: { formatter: (val: number) => `${val} cases` },
+        },
+    };
+
+    // Sorted barangays by incident count
+    const sortedBarangays = Object.entries(barangayActivity).sort(
+        ([, a]: any, [, b]: any) => b.total - a.total
+    );
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-4">
-                <div className="w-1 h-6 bg-rose-600 rounded-full" />
-                <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-white uppercase">
-                    01 Incident Intelligence
-                </h2>
+        <div className="space-y-6">
+            {/* Section Header */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                    <div className="w-1.5 h-6 bg-blue-600 rounded-full shadow-[0_0_12px_rgba(59,130,246,0.5)]" />
+                    <div>
+                        <h2 className="text-sm font-black tracking-wider text-slate-900 dark:text-white uppercase flex items-center gap-2">
+                            <span>01 Incident Intelligence</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                                Analytics
+                            </span>
+                        </h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Temporal trends, category distribution, and territorial frequency
+                        </p>
+                    </div>
+                </div>
             </div>
 
-            <Card padding={false} className="border-slate-200/60 dark:border-white/10 shadow-sm mb-4">
-                <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-slate-800/30">
-                    <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Reported vs Resolved Trend</h3>
+            {/* Main Trend Card */}
+            <div className="rounded-2xl p-5 bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-white/5">
+                    <div>
+                        <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+                            <TrendingUp className="w-4 h-4 text-red-500" />
+                            <span>Incident Inflow & Clearance Velocity</span>
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            Monthly volume of incoming distress calls versus successfully resolved missions
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 self-end sm:self-auto">
+                        {/* Quick KPI stats */}
+                        <div className="hidden md:flex items-center gap-3 text-xs pr-3 border-r border-slate-200 dark:border-white/10">
+                            <div>
+                                <span className="text-slate-400 text-[10px] uppercase font-bold block">Clearance</span>
+                                <span className="font-black text-emerald-500 font-mono">{clearanceRate}%</span>
+                            </div>
+                            <div>
+                                <span className="text-slate-400 text-[10px] uppercase font-bold block">Total Vol</span>
+                                <span className="font-black text-slate-900 dark:text-white font-mono">{totalReported}</span>
+                            </div>
+                        </div>
+
+                        {/* Chart type toggle */}
+                        <div className="flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200/80 dark:border-white/10">
+                            <button
+                                type="button"
+                                onClick={() => setTrendStyle('area')}
+                                className={clsx(
+                                    'px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer',
+                                    trendStyle === 'area'
+                                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                )}
+                            >
+                                Wave Area
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setTrendStyle('bar')}
+                                className={clsx(
+                                    'px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer',
+                                    trendStyle === 'bar'
+                                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                )}
+                            >
+                                Rising Bars
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div className="p-4">
+
+                <div className="pt-4">
                     {trendLabels.length === 0 ? (
-                        <div className="py-8 text-center text-sm text-slate-500 italic">No trend data for selected filters.</div>
+                        <div className="py-12 text-center text-sm text-slate-400 italic">
+                            No incident records found for the selected time range or filters.
+                        </div>
                     ) : (
                         <ReactApexChart
-                            key={`trend-${theme}`}
-                            options={{
-                                ...getBaseOptions(trendLabels),
-                                colors: ['#3b82f6', '#10b981'],
-                                stroke: { curve: 'smooth', width: 3 },
-                                markers: { size: 4, strokeWidth: 2, hover: { size: 6 } }
-                            }}
+                            key={`trend-${trendStyle}-${theme}`}
+                            options={trendChartOptions}
                             series={[
                                 { name: 'Reported', data: trendReported },
-                                { name: 'Resolved', data: trendResolved }
+                                { name: 'Resolved', data: trendResolved },
                             ]}
-                            type="area"
-                            height={250}
+                            type={trendStyle}
+                            height={280}
                         />
                     )}
                 </div>
-            </Card>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <Card padding={false} className="border-slate-200/60 dark:border-white/10 shadow-sm">
-                    <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-slate-800/30">
-                        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Incident Distribution</h3>
-                    </div>
-                    <div className="p-4 flex justify-center">
-                        {typeLabels.length === 0 ? (
-                            <div className="py-8 text-center text-sm text-slate-500 italic">No type data.</div>
-                        ) : (
-                            <ReactApexChart
-                                key={`type-${theme}`}
-                                options={{
-                                    chart: { type: 'donut', background: 'transparent' },
-                                    labels: typeLabels,
-                                    theme: { mode: (isDark ? 'dark' : 'light') as 'dark' | 'light' },
-                                    dataLabels: { enabled: true, formatter: (val) => `${Number(val).toFixed(1)}%` },
-                                    legend: { position: 'bottom' },
-                                    stroke: { show: false }
-                                }}
-                                series={typeData}
-                                type="donut"
-                                height={280}
-                            />
-                        )}
-                    </div>
-                </Card>
-                <Card padding={false} className="border-slate-200/60 dark:border-white/10 shadow-sm">
-                    <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-slate-800/30">
-                        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Status Distribution</h3>
-                    </div>
-                    <div className="p-4 flex justify-center">
-                        {statusLabels.length === 0 ? (
-                            <div className="py-8 text-center text-sm text-slate-500 italic">No status data.</div>
-                        ) : (
-                            <ReactApexChart
-                                key={`status-${theme}`}
-                                options={{
-                                    chart: { type: 'pie', background: 'transparent' },
-                                    labels: statusLabels,
-                                    theme: { mode: (isDark ? 'dark' : 'light') as 'dark' | 'light' },
-                                    colors: ['#64748b', '#3b82f6', '#8b5cf6', '#eab308', '#10b981', '#ef4444'],
-                                    dataLabels: { enabled: true, formatter: (val) => `${Number(val).toFixed(1)}%` },
-                                    legend: { position: 'bottom' },
-                                    stroke: { show: false }
-                                }}
-                                series={statusData}
-                                type="pie"
-                                height={280}
-                            />
-                        )}
-                    </div>
-                </Card>
             </div>
 
-            <Card padding={false} className="border-slate-200/60 dark:border-white/10 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-slate-800/30">
-                    <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Incident Activity by Barangay</h3>
+            {/* Two-column Grid: Types Donut + Barangay Activity */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Left: Incident Distribution (5 cols) */}
+                <div className="lg:col-span-5 rounded-2xl p-5 bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-sm flex flex-col">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/5">
+                        <div className="flex items-center gap-2">
+                            <PieChart className="w-4 h-4 text-blue-500" />
+                            <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                                Incident Classification
+                            </h3>
+                        </div>
+
+                        {/* Donut vs Polar Area toggle */}
+                        <div className="flex items-center p-0.5 rounded-lg bg-slate-100 dark:bg-white/5 text-[11px] font-bold">
+                            <button
+                                type="button"
+                                onClick={() => setPieStyle('donut')}
+                                className={clsx(
+                                    'px-2 py-0.5 rounded-md transition-all',
+                                    pieStyle === 'donut'
+                                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                                        : 'text-slate-400'
+                                )}
+                            >
+                                Donut
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPieStyle('polarArea')}
+                                className={clsx(
+                                    'px-2 py-0.5 rounded-md transition-all',
+                                    pieStyle === 'polarArea'
+                                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                                        : 'text-slate-400'
+                                )}
+                            >
+                                Polar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="pt-4 flex-1 flex flex-col justify-center">
+                        {typeLabels.length === 0 ? (
+                            <div className="py-8 text-center text-sm text-slate-400 italic">No classification data.</div>
+                        ) : (
+                            <ReactApexChart
+                                key={`classification-${pieStyle}-${theme}`}
+                                options={typeChartOptions}
+                                series={typeData}
+                                type={pieStyle}
+                                height={290}
+                            />
+                        )}
+                    </div>
                 </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-max">
-                        <thead>
-                            <tr className="bg-slate-50 dark:bg-white/[0.02] border-b border-slate-100 dark:border-white/5 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                                <th className="p-3">Barangay</th>
-                                <th className="p-3 text-center">Total Incidents</th>
-                                <th className="p-3 text-center">Resolved</th>
-                                <th className="p-3 text-center">Rejected</th>
-                                <th className="p-3 text-center">% of Total</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                            {Object.entries(barangayActivity)
-                                .sort(([,a]: any, [,b]: any) => b.total - a.total)
-                                .map(([brgy, stat]: any, idx) => (
-                                <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-white/[0.02] text-sm text-slate-700 dark:text-slate-300">
-                                    <td className="p-3 font-medium">{brgy}</td>
-                                    <td className="p-3 text-center font-bold text-slate-900 dark:text-white">{stat.total}</td>
-                                    <td className="p-3 text-center font-medium text-emerald-600 dark:text-emerald-400">{stat.resolved}</td>
-                                    <td className="p-3 text-center font-medium text-rose-600 dark:text-rose-400">{stat.rejected}</td>
-                                    <td className="p-3 text-center font-mono text-xs">{((stat.total / incidents.length) * 100).toFixed(1)}%</td>
+
+                {/* Right: Barangay Vulnerability & Leaderboard (7 cols) */}
+                <div className="lg:col-span-7 rounded-2xl p-5 bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-sm flex flex-col">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/5">
+                        <div className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-red-500" />
+                            <div>
+                                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                                    Barangay Activity & Vulnerability
+                                </h3>
+                                <p className="text-[11px] text-slate-400">
+                                    Incident frequency across Opol administrative jurisdictions
+                                </p>
+                            </div>
+                        </div>
+                        <span className="text-xs font-semibold text-slate-400">
+                            {sortedBarangays.length} Areas
+                        </span>
+                    </div>
+
+                    <div className="pt-3 flex-1 overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="text-[10px] uppercase font-bold text-slate-400 border-b border-slate-100 dark:border-white/5">
+                                    <th className="py-2.5 px-3">#</th>
+                                    <th className="py-2.5 px-3">Barangay</th>
+                                    <th className="py-2.5 px-3 text-center">Incidents</th>
+                                    <th className="py-2.5 px-3 text-center">Resolved</th>
+                                    <th className="py-2.5 px-3 text-center">Share</th>
+                                    <th className="py-2.5 px-3 text-right">Action</th>
                                 </tr>
-                            ))}
-                            {Object.keys(barangayActivity).length === 0 && (
-                                <tr><td colSpan={5} className="p-4 text-center text-sm text-slate-500 italic">No barangay data matching filters.</td></tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                                {sortedBarangays.slice(0, 7).map(([brgy, stat]: any, idx) => {
+                                    const sharePct =
+                                        incidents.length > 0
+                                            ? Math.round((stat.total / incidents.length) * 100)
+                                            : 0;
+                                    const resPct =
+                                        stat.total > 0
+                                            ? Math.round((stat.resolved / stat.total) * 100)
+                                            : 0;
+
+                                    return (
+                                        <tr
+                                            key={brgy}
+                                            className="hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors group text-xs"
+                                        >
+                                            <td className="py-2 px-3 font-mono font-bold text-slate-400">
+                                                {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
+                                            </td>
+                                            <td className="py-2 px-3 font-bold text-slate-900 dark:text-white">
+                                                {brgy}
+                                            </td>
+                                            <td className="py-2 px-3 text-center font-mono font-black text-slate-900 dark:text-white">
+                                                {stat.total}
+                                            </td>
+                                            <td className="py-2 px-3 text-center">
+                                                <span className="font-mono text-emerald-500 font-bold">
+                                                    {stat.resolved}
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 ml-1">
+                                                    ({resPct}%)
+                                                </span>
+                                            </td>
+                                            <td className="py-2 px-3 text-center">
+                                                <div className="flex items-center justify-center gap-1.5">
+                                                    <div className="w-16 bg-slate-100 dark:bg-white/5 h-1.5 rounded-full overflow-hidden">
+                                                        <div
+                                                            className="bg-red-500 h-full rounded-full"
+                                                            style={{ width: `${sharePct}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="font-mono text-[10px] text-slate-400">
+                                                        {sharePct}%
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="py-2 px-3 text-right">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleFilterBarangay(brgy)}
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                                                    title="Filter by this Barangay"
+                                                >
+                                                    <span>Filter</span>
+                                                    <ArrowUpRight className="w-3 h-3" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+
+                                {sortedBarangays.length === 0 && (
+                                    <tr>
+                                        <td colSpan={6} className="py-8 text-center text-xs text-slate-400 italic">
+                                            No barangay activity records match the selected filters.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </Card>
+            </div>
         </div>
     );
 }

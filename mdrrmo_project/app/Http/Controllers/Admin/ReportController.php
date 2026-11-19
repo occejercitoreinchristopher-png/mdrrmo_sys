@@ -24,12 +24,52 @@ class ReportController extends Controller
             'dispatches.patientCareRecords',
         ]);
 
-        // Date Range Filter
-        if ($request->filled('date_from')) {
-            $query->whereDate('reported_at', '>=', $request->date_from);
+        // Period Preset Filter ('today', 'this_week', 'this_month', 'this_year', 'all')
+        $period = $request->input('period', 'all');
+        if ($period === 'today') {
+            $query->whereDate('reported_at', now()->toDateString());
+        } elseif ($period === 'this_week') {
+            $query->whereBetween('reported_at', [
+                now()->startOfWeek()->startOfDay()->toDateTimeString(),
+                now()->endOfWeek()->endOfDay()->toDateTimeString(),
+            ]);
+        } elseif ($period === 'this_month') {
+            $query->whereBetween('reported_at', [
+                now()->startOfMonth()->startOfDay()->toDateTimeString(),
+                now()->endOfMonth()->endOfDay()->toDateTimeString(),
+            ]);
+        } elseif ($period === 'this_year') {
+            $query->whereBetween('reported_at', [
+                now()->startOfYear()->startOfDay()->toDateTimeString(),
+                now()->endOfYear()->endOfDay()->toDateTimeString(),
+            ]);
+        } else {
+            // Custom Date Range Filter
+            if ($request->filled('date_from')) {
+                $query->whereDate('reported_at', '>=', $request->date_from);
+            }
+            if ($request->filled('date_to')) {
+                $query->whereDate('reported_at', '<=', $request->date_to);
+            }
         }
-        if ($request->filled('date_to')) {
-            $query->whereDate('reported_at', '<=', $request->date_to);
+
+        // Search Filter
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            $query->where(function ($sq) use ($search) {
+                if (is_numeric(ltrim($search, '#'))) {
+                    $sq->orWhere('id', (int) ltrim($search, '#'));
+                }
+                $sq->orWhere('incident_address', 'LIKE', "%{$search}%")
+                   ->orWhere('incident_description', 'LIKE', "%{$search}%")
+                   ->orWhereHas('incidentType', fn($tq) => $tq->where('incident_type_name', 'LIKE', "%{$search}%"))
+                   ->orWhereHas('resident', fn($rq) => $rq->where('first_name', 'LIKE', "%{$search}%")->orWhere('last_name', 'LIKE', "%{$search}%"));
+            });
+        }
+
+        // Priority Filter
+        if ($request->filled('priority')) {
+            $query->where('priority', $request->priority);
         }
 
         // Incident Type Filter
@@ -159,7 +199,7 @@ class ReportController extends Controller
             'incidents' => $incidents->values(),
             'lookups' => $lookups,
             'barangayGeojson' => $barangayGeojson,
-            'filters' => $request->only(['date_from', 'date_to', 'barangay', 'incident_type_id', 'status', 'responder_id', 'ambulance_id']),
+            'filters' => $request->only(['period', 'date_from', 'date_to', 'barangay', 'incident_type_id', 'status', 'responder_id', 'ambulance_id', 'priority', 'search']),
             'monthlyReportData' => $monthlyReportData,
         ]);
     }

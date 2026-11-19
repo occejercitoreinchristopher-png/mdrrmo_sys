@@ -11,6 +11,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Incident;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class IncidentController extends Controller
 {
@@ -302,6 +303,26 @@ class IncidentController extends Controller
         ]);
 
         $user = Auth::user();
+
+        $hotlineData = [
+            'resident_id' => $user->id,
+            'resident_name' => trim("{$user->first_name} {$user->last_name}"),
+            'phone_number' => $user->phone_number,
+            'latitude' => (float) $validated['latitude'],
+            'longitude' => (float) $validated['longitude'],
+            'called_at' => now()->toIso8601String(),
+            'timestamp' => now()->timestamp,
+        ];
+
+        // Cache for 2 hours so dispatcher intake can automatically fetch live GPS
+        Cache::put("hotline_call_user_{$user->id}", $hotlineData, now()->addHours(2));
+        if (! empty($user->phone_number)) {
+            $rawDigits = preg_replace('/\D+/', '', $user->phone_number);
+            if (strlen($rawDigits) >= 10) {
+                $last10 = substr($rawDigits, -10);
+                Cache::put("hotline_call_phone_{$last10}", $hotlineData, now()->addHours(2));
+            }
+        }
 
         // Fire event to dispatcher
         event(new ResidentCalledHotline($user, $validated['latitude'], $validated['longitude']));

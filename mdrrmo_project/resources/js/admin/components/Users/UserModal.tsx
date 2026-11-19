@@ -2,6 +2,7 @@ import Drawer from '@/shared/components/Drawer';
 import Modal from '@/shared/components/Modal';
 import UserForm from './UserForm';
 import type { User } from './UserManagement';
+import { toPascalCase } from '@/shared/utils/utils';
 
 interface UserModalProps {
     open: boolean;
@@ -24,10 +25,11 @@ export default function UserModal({
     allowedRoles = ['dispatcher', 'responder'],
     mode = 'drawer', // 'modal' | 'drawer'
 }: UserModalProps) {
-    const title = user ? 'Edit User' : 'Add New User';
+    const formattedName = user ? toPascalCase(`${user.first_name} ${user.last_name}`) : '';
+    const title = user ? `Edit Staff • ${formattedName}` : 'Add New System User';
     const description = user
-        ? `Update details for ${user.first_name} ${user.last_name}`
-        : 'Fill in the form to create a new user.';
+        ? 'Update operational role, team assignment, and credentials.'
+        : 'Fill in the operational profile to provision a new staff account.';
 
     const form = (
         <UserForm
@@ -42,14 +44,20 @@ export default function UserModal({
 
     if (mode === 'drawer') {
         return (
-            <Drawer open={open} onClose={onClose} title={title} description={description}>
+            <Drawer
+                open={open}
+                onClose={onClose}
+                title={title}
+                description={description}
+                width="w-full max-w-lg sm:max-w-xl"
+            >
                 {form}
             </Drawer>
         );
     }
 
     return (
-        <Modal open={open} onClose={onClose} title={title} description={description} size="lg">
+        <Modal open={open} onClose={onClose} title={title} description={description} size="xl">
             {form}
         </Modal>
     );

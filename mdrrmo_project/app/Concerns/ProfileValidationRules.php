@@ -39,8 +39,8 @@ trait ProfileValidationRules
             'string',
             'regex:/^09\d{9}$/',
             $userId === null
-                ? Rule::unique(User::class, 'phone_number')
-                : Rule::unique(User::class, 'phone_number')->ignore($userId),
+                ? Rule::unique(User::class, 'phone_number')->whereNull('deleted_at')
+                : Rule::unique(User::class, 'phone_number')->ignore($userId)->whereNull('deleted_at'),
         ];
     }
 
@@ -57,8 +57,8 @@ trait ProfileValidationRules
             'email',
             'max:255',
             $userId === null
-                ? Rule::unique(User::class)
-                : Rule::unique(User::class)->ignore($userId),
+                ? Rule::unique(User::class)->whereNull('deleted_at')
+                : Rule::unique(User::class)->ignore($userId)->whereNull('deleted_at'),
         ];
     }
 }

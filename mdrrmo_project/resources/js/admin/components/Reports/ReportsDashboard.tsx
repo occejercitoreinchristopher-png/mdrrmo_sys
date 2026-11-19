@@ -1,8 +1,22 @@
 import { useState, useEffect } from 'react';
 import { usePage } from '@inertiajs/react';
-import PageHeader from '@/shared/components/PageHeader';
-import { Download, Printer, FileText } from 'lucide-react';
+import {
+    Printer,
+    FileText,
+    TrendingUp,
+    Truck,
+    Stethoscope,
+    MapPin,
+    Layers,
+    ListFilter,
+    Table,
+    Sparkles,
+    Calendar,
+    ArrowDownToLine,
+    Shield
+} from 'lucide-react';
 import { toast } from 'sonner';
+import { clsx } from 'clsx';
 
 import ReportFilters from './ReportFilters';
 import ReportOverview from './ReportOverview';
@@ -10,20 +24,31 @@ import IncidentIntelligence from './IncidentIntelligence';
 import ResponseOperations from './ResponseOperations';
 import PatientCareAnalytics from './PatientCareAnalytics';
 import ReportsGeographic from './ReportsGeographic';
+import ReportsTable from './ReportsTable';
 import MonthlyReportPrintModal from './MonthlyReportPrintModal';
 
-export default function ReportsDashboard({ 
-    stats = {}, 
-    incidents = [], 
-    lookups = {}, 
-    initialFilters = {}, 
-    initialMonthlyReport = null 
+export default function ReportsDashboard({
+    stats = {},
+    incidents = [],
+    lookups = {},
+    initialFilters = {},
+    initialMonthlyReport = null,
 }: any) {
     const { auth } = usePage().props as any;
+
+    // Active View Tab: 'intelligence' | 'fleet' | 'pcr' | 'geographic' | 'records' | 'all'
+    const [activeTab, setActiveTab] = useState<
+        'intelligence' | 'fleet' | 'pcr' | 'geographic' | 'records' | 'all'
+    >('all');
+
     const [isMonthlyReportModalOpen, setIsMonthlyReportModalOpen] = useState(() => {
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
-            return params.get('print') === 'monthly' || params.get('tab') === 'monthly' || params.get('modal') === 'print';
+            return (
+                params.get('print') === 'monthly' ||
+                params.get('tab') === 'monthly' ||
+                params.get('modal') === 'print'
+            );
         }
         return false;
     });
@@ -31,17 +56,28 @@ export default function ReportsDashboard({
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
-            if (params.get('print') === 'monthly' || params.get('tab') === 'monthly' || params.get('modal') === 'print') {
+            if (
+                params.get('print') === 'monthly' ||
+                params.get('tab') === 'monthly' ||
+                params.get('modal') === 'print'
+            ) {
                 setIsMonthlyReportModalOpen(true);
             }
         }
     }, []);
-    
+
     const handleExportCSV = () => {
         const headers = [
-            'Incident #', 'Incident Type', 'Priority', 'Status', 'Barangay', 'Reported At', 'Resolved At'
+            'Incident #',
+            'Incident Type',
+            'Priority',
+            'Status',
+            'Barangay',
+            'Address',
+            'Reported At',
+            'Resolved At',
         ];
-        
+
         const escapeCSV = (val: any) => {
             if (val === null || val === undefined) return '""';
             return `"${String(val).replace(/"/g, '""')}"`;
@@ -58,6 +94,7 @@ export default function ReportsDashboard({
             escapeCSV(inc.priority ?? 'Moderate'),
             escapeCSV(inc.incident_status ?? 'pending'),
             escapeCSV(inc.barangay ?? 'N/A'),
+            escapeCSV(inc.incident_address ?? 'N/A'),
             escapeCSV(inc.reported_at ? new Date(inc.reported_at).toLocaleString('en-PH') : 'N/A'),
             escapeCSV(inc.resolved_at ? new Date(inc.resolved_at).toLocaleString('en-PH') : 'N/A'),
         ]);
@@ -80,89 +117,197 @@ export default function ReportsDashboard({
         window.print();
     };
 
+    const tabs = [
+        { id: 'all', label: 'All Modules', icon: Layers, badge: incidents.length },
+        { id: 'intelligence', label: 'Incident Trends', icon: TrendingUp },
+        { id: 'fleet', label: 'Fleet & Response', icon: Truck },
+        { id: 'pcr', label: 'Patient Care (PCR)', icon: Stethoscope },
+        { id: 'geographic', label: 'Spatial Heatmap', icon: MapPin },
+        { id: 'records', label: 'Incident Records', icon: Table, badge: incidents.length },
+    ];
+
     return (
-        <div className="space-y-8 print:space-y-4 print:bg-white print:text-black">
-            
-            {/* Header (Hidden in print, replaced by specific print header) */}
-            <div className="print:hidden">
-                <PageHeader
-                    title="Reports & Analytics"
-                    subtitle="Operational performance, incident patterns, dispatch activity, and patient-care statistics"
-                    actions={
+        <div className="space-y-6 print:space-y-4 print:bg-white print:text-black">
+            {/* Top Command Center Header (Screen only) */}
+            <div className="print:hidden rounded-3xl p-6 bg-gradient-to-r from-slate-900 via-[#0d1527] to-slate-900 text-white border border-slate-800/80 shadow-xl relative overflow-hidden">
+                {/* Decorative glow */}
+                <div className="absolute -top-24 -right-24 w-80 h-80 bg-red-600/15 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    {/* Title & Metadata */}
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-red-600/20 text-red-400 border border-red-500/30">
+                                <Shield className="w-3 h-3 text-red-500" />
+                                <span>MDRRMO HQ • Executive Intelligence</span>
+                            </span>
+                            <span className="text-slate-400 text-xs hidden sm:inline">•</span>
+                            <span className="text-slate-400 text-xs font-mono hidden sm:inline">
+                                Municipality of Opol
+                            </span>
+                        </div>
+
+                        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                            Reports & Operational Analytics
+                        </h1>
+                        <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
+                            Municipal emergency performance command, dispatch velocity metrics, spatial cluster
+                            analysis, and clinical patient-care registries.
+                        </p>
+                    </div>
+
+                    {/* Header Action Buttons */}
+                    <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                        {/* Official Print Modal Trigger */}
                         <button
+                            type="button"
                             onClick={() => setIsMonthlyReportModalOpen(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-red-600/20 transition-all cursor-pointer active:scale-95"
-                            title="Open official MDRRMO Monthly Responses & Patient Complaints report with print preview"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-red-600/30 transition-all cursor-pointer active:scale-95 border border-red-400/30"
+                            title="Open official MDRRMO Monthly Responses & Patient Complaints printable form"
                         >
                             <Printer className="w-4 h-4" />
-                            <span>Print Report</span>
+                            <span>Official Monthly Report</span>
                         </button>
-                    }
-                />
-            </div>
 
-            {/* Print Only Header */}
-            <div className="hidden print:block mb-8 border-b-2 border-slate-900 pb-4">
-                <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">MDRRMO OPOL</h1>
-                <h2 className="text-xl font-bold text-slate-700">Emergency Medical Services Management System</h2>
-                <h3 className="text-lg font-semibold text-slate-600 mt-2">Operational Report</h3>
-                <div className="mt-4 text-sm text-slate-600 flex flex-col gap-1">
-                    <p><strong>Report Date:</strong> {new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                    <p><strong>Total Records:</strong> {incidents.length} incidents</p>
-                    {/* Display active filters */}
-                    <div className="mt-2 text-xs">
-                        <strong>Filters Applied: </strong>
-                        {Object.entries(initialFilters).filter(([_,v]) => v).length > 0 ? (
-                            Object.entries(initialFilters).filter(([_,v]) => v).map(([k,v]) => `${k.replace('_', ' ').toUpperCase()}: ${v}`).join(' | ')
-                        ) : 'None (All Records)'}
+                        {/* Export CSV */}
+                        <button
+                            type="button"
+                            onClick={handleExportCSV}
+                            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700/80 font-semibold text-xs sm:text-sm shadow-sm transition-all cursor-pointer active:scale-95"
+                            title="Download CSV spreadsheet of current filtered incidents"
+                        >
+                            <ArrowDownToLine className="w-4 h-4 text-emerald-400" />
+                            <span>Export CSV</span>
+                        </button>
+
+                        {/* Quick Page Print */}
+                        <button
+                            type="button"
+                            onClick={handlePrint}
+                            className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 text-slate-300 border border-slate-700/60 font-semibold text-xs transition-all cursor-pointer"
+                            title="Direct print current dashboard layout"
+                        >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Print View</span>
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* Global Filters */}
-            <ReportFilters initialFilters={initialFilters} lookups={lookups} />
-
-            {/* Actions for Web (Hidden in Print) */}
-            <div className="flex flex-wrap items-center gap-3 print:hidden border-b border-slate-200 dark:border-white/10 pb-6">
-                {/* Official MDRRMO Print Report Button */}
-                <button
-                    onClick={() => setIsMonthlyReportModalOpen(true)}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-red-600/20 transition-all cursor-pointer active:scale-95"
-                    title="Open official MDRRMO Monthly Responses & Patient Complaints report with print preview"
-                >
-                    <Printer className="w-4 h-4" />
-                    <span>Print Report</span>
-                </button>
-
-                <button
-                    onClick={handleExportCSV}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-semibold text-xs sm:text-sm shadow-sm hover:bg-slate-800 dark:hover:bg-slate-100 transition-all cursor-pointer active:scale-95"
-                >
-                    <FileText className="w-4 h-4" />
-                    <span>Export CSV / Excel</span>
-                </button>
-
-                <button
-                    onClick={handlePrint}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 font-semibold text-xs sm:text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer active:scale-95"
-                    title="Quick print raw overview dashboard"
-                >
-                    <Printer className="w-4 h-4" />
-                    <span>Quick Dashboard Print</span>
-                </button>
+            {/* Print-Only Header */}
+            <div className="hidden print:block mb-8 border-b-2 border-slate-900 pb-4">
+                <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">MDRRMO OPOL</h1>
+                <h2 className="text-xl font-bold text-slate-700">
+                    Emergency Medical Services & Disaster Operations Center
+                </h2>
+                <h3 className="text-lg font-semibold text-slate-600 mt-2">Executive Analytics Report</h3>
+                <div className="mt-4 text-sm text-slate-600 flex flex-col gap-1">
+                    <p>
+                        <strong>Generated:</strong>{' '}
+                        {new Date().toLocaleDateString('en-PH', {
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                        })}
+                    </p>
+                    <p>
+                        <strong>Total Records In Scope:</strong> {incidents.length} incidents
+                    </p>
+                    <div className="mt-2 text-xs">
+                        <strong>Filters Applied: </strong>
+                        {Object.entries(initialFilters).filter(([_, v]) => v).length > 0
+                            ? Object.entries(initialFilters)
+                                  .filter(([_, v]) => v)
+                                  .map(([k, v]) => `${k.replace('_', ' ').toUpperCase()}: ${v}`)
+                                  .join(' | ')
+                            : 'None (All Records)'}
+                    </div>
+                </div>
             </div>
 
-            {/* Report Sections */}
-            <div className="space-y-12 print:space-y-8">
-                <ReportOverview stats={stats} />
-                <hr className="border-slate-200 dark:border-white/5 print:border-slate-300" />
-                <IncidentIntelligence incidents={incidents} />
-                <hr className="border-slate-200 dark:border-white/5 print:border-slate-300" />
-                <ResponseOperations stats={stats} incidents={incidents} />
-                <hr className="border-slate-200 dark:border-white/5 print:border-slate-300" />
-                <PatientCareAnalytics stats={stats} />
-                <hr className="border-slate-200 dark:border-white/5 print:hidden" />
-                <ReportsGeographic incidents={incidents} />
+            {/* Global Intuitive Filter Bar */}
+            <ReportFilters initialFilters={initialFilters} lookups={lookups} />
+
+            {/* Core Executive KPI Stat Cards */}
+            <ReportOverview stats={stats} />
+
+            {/* Module Navigation Tabs (Screen only) */}
+            <div className="print:hidden border-b border-slate-200/80 dark:border-white/10 pt-2">
+                <div className="flex items-center gap-2 overflow-x-auto pb-3 scrollbar-none">
+                    {tabs.map((tab) => {
+                        const Icon = tab.icon;
+                        const isActive = activeTab === tab.id;
+                        return (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setActiveTab(tab.id as any)}
+                                className={clsx(
+                                    'inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer',
+                                    isActive
+                                        ? 'bg-red-600 text-white shadow-md shadow-red-600/25 ring-2 ring-red-500/20'
+                                        : 'bg-white/80 dark:bg-[#0c1220]/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200/80 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/15'
+                                )}
+                            >
+                                <Icon className="w-3.5 h-3.5" />
+                                <span>{tab.label}</span>
+                                {typeof tab.badge === 'number' && (
+                                    <span
+                                        className={clsx(
+                                            'px-1.5 py-0.2 rounded-full text-[10px] font-mono',
+                                            isActive
+                                                ? 'bg-white/20 text-white'
+                                                : 'bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400'
+                                        )}
+                                    >
+                                        {tab.badge}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Content Sections based on Active Tab */}
+            <div className="space-y-10 print:space-y-8">
+                {/* 1. Incident Intelligence */}
+                {(activeTab === 'all' || activeTab === 'intelligence') && (
+                    <section className="space-y-4 animate-in fade-in duration-300">
+                        <IncidentIntelligence incidents={incidents} />
+                    </section>
+                )}
+
+                {/* 2. Fleet & Operations */}
+                {(activeTab === 'all' || activeTab === 'fleet') && (
+                    <section className="space-y-4 animate-in fade-in duration-300">
+                        <ResponseOperations stats={stats} incidents={incidents} />
+                    </section>
+                )}
+
+                {/* 3. Patient Care Analytics */}
+                {(activeTab === 'all' || activeTab === 'pcr') && (
+                    <section className="space-y-4 animate-in fade-in duration-300">
+                        <PatientCareAnalytics stats={stats} />
+                    </section>
+                )}
+
+                {/* 4. Geographic Heatmap */}
+                {(activeTab === 'all' || activeTab === 'geographic') && (
+                    <section className="space-y-4 animate-in fade-in duration-300 print:hidden">
+                        <ReportsGeographic incidents={incidents} />
+                    </section>
+                )}
+
+                {/* 5. Filtered Incident Records Table */}
+                {(activeTab === 'all' || activeTab === 'records') && (
+                    <section className="space-y-4 animate-in fade-in duration-300">
+                        <ReportsTable incidents={incidents} />
+                    </section>
+                )}
             </div>
 
             {/* Dedicated Official MDRRMO Opol Monthly Report Print Preview Modal */}
@@ -172,7 +317,6 @@ export default function ReportsDashboard({
                 initialData={initialMonthlyReport}
                 currentUser={auth?.user}
             />
-            
         </div>
     );
 }

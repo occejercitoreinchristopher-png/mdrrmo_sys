@@ -16,6 +16,7 @@ use App\Models\PatientCareRecord;
 use App\Models\ResponderProfile;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -907,18 +908,26 @@ class IncidentController extends Controller
             ], 422);
         }
 
+        $rawDigits = preg_replace('/\D+/', '', $normalizedPhone);
+        $last10 = substr($rawDigits, -10);
+        $phoneVariants = array_unique([
+            $normalizedPhone,
+            '0'.$last10,
+            '+63'.$last10,
+            '63'.$last10,
+        ]);
+
         // 1. Check if caller matches a registered resident
         $resident = User::where('role', 'resident')
             ->with(['residentProfile.barangay'])
-            ->where(function ($q) use ($normalizedPhone) {
-                $q->where('phone_number', $normalizedPhone)
-                    ->orWhere('phone_number', '0'.substr($normalizedPhone, 3));
+            ->where(function ($q) use ($phoneVariants) {
+                $q->whereIn('phone_number', $phoneVariants);
             })
             ->first();
 
         // 2. Find any previous incident(s) from this phone number or resident
-        $previousIncident = Incident::where(function ($q) use ($normalizedPhone, $resident) {
-            $q->where('caller_phone_number', $normalizedPhone);
+        $previousIncident = Incident::where(function ($q) use ($phoneVariants, $resident) {
+            $q->whereIn('caller_phone_number', $phoneVariants);
             if ($resident) {
                 $q->orWhere('resident_id', $resident->id);
             }
@@ -926,25 +935,50 @@ class IncidentController extends Controller
             ->latest('id')
             ->first();
 
-        $totalCalls = Incident::where(function ($q) use ($normalizedPhone, $resident) {
-            $q->where('caller_phone_number', $normalizedPhone);
+        $totalCalls = Incident::where(function ($q) use ($phoneVariants, $resident) {
+            $q->whereIn('caller_phone_number', $phoneVariants);
             if ($resident) {
                 $q->orWhere('resident_id', $resident->id);
             }
         })
             ->count();
 
+        // 3. Resolve 1 Number = 1 Name:
+        $resolvedCallerName = null;
+        if ($resident) {
+            $resolvedCallerName = trim("{$resident->first_name} {$resident->last_name}");
+        }
+
+        if (empty($resolvedCallerName)) {
+            // Find latest non-empty caller_name from prior incidents with this phone number
+            $latestNamedIncident = Incident::where(function ($q) use ($phoneVariants, $resident) {
+                $q->whereIn('caller_phone_number', $phoneVariants);
+                if ($resident) {
+                    $q->orWhere('resident_id', $resident->id);
+                }
+            })
+                ->whereNotNull('caller_name')
+                ->where('caller_name', '!=', '')
+                ->latest('id')
+                ->first();
+
+            if ($latestNamedIncident && ! empty(trim($latestNamedIncident->caller_name))) {
+                $resolvedCallerName = trim($latestNamedIncident->caller_name);
+            }
+        }
+
         $prankHistory = Incident::getPrankHistoryForReporter($resident?->id, $normalizedPhone);
 
-        if (! $resident && ! $previousIncident && ! $prankHistory['has_prank_history']) {
+        if (! $resident && ! $previousIncident && ! $prankHistory['has_prank_history'] && empty($resolvedCallerName)) {
             return response()->json([
                 'recognized' => false,
                 'data' => null,
             ]);
         }
 
-        // 3. Build resident address if available
+        // 4. Build resident address if available
         $residentAddress = null;
+        $registeredBarangayCoords = null;
         if ($resident?->residentProfile) {
             $rp = $resident->residentProfile;
             $parts = array_filter([
@@ -952,9 +986,37 @@ class IncidentController extends Controller
                 'Opol',
             ]);
             $residentAddress = ! empty($parts) ? implode(', ', $parts) : null;
+
+            if ($rp->barangay_id) {
+                $loc = LocationCode::where('barangay_id', $rp->barangay_id)
+                    ->whereNotNull('latitude')
+                    ->whereNotNull('longitude')
+                    ->first();
+                if ($loc) {
+                    $registeredBarangayCoords = [
+                        'latitude' => (float) $loc->latitude,
+                        'longitude' => (float) $loc->longitude,
+                    ];
+                }
+            }
         }
 
-        // 4. Build previous location suggestion
+        // 5. Check if resident recently triggered hotline call with live GPS from mobile app
+        $recentHotlineGps = null;
+        if ($resident) {
+            $recentHotlineGps = Cache::get("hotline_call_user_{$resident->id}");
+        }
+        if (! $recentHotlineGps && ! empty($last10)) {
+            $recentHotlineGps = Cache::get("hotline_call_phone_{$last10}");
+        }
+
+        if ($recentHotlineGps && isset($recentHotlineGps['called_at'])) {
+            $calledTime = \Carbon\Carbon::parse($recentHotlineGps['called_at']);
+            $recentHotlineGps['time_ago'] = $calledTime->diffForHumans();
+            $recentHotlineGps['formatted_time'] = $calledTime->format('h:i A');
+        }
+
+        // 6. Build previous location suggestion
         $previousLocation = null;
         if ($previousIncident?->location_code_id || $previousIncident?->location_code) {
             $loc = $previousIncident->locationCode ?: LocationCode::with('barangay')
@@ -978,10 +1040,12 @@ class IncidentController extends Controller
             'recognized' => true,
             'data' => [
                 'phone_number' => $normalizedPhone,
-                'caller_name' => $resident ? trim("{$resident->first_name} {$resident->last_name}") : null,
+                'caller_name' => $resolvedCallerName,
                 'is_registered_resident' => (bool) $resident,
                 'resident_address' => $residentAddress,
                 'resident_barangay' => $resident?->residentProfile?->barangay?->barangay_name,
+                'registered_barangay_coords' => $registeredBarangayCoords,
+                'recent_hotline_gps' => $recentHotlineGps,
                 'total_calls' => $totalCalls,
                 'previous_incident_id' => $previousIncident?->id,
                 'previous_location' => $previousLocation,
@@ -1057,9 +1121,9 @@ class IncidentController extends Controller
 
         $recentPhoneIncidents = $incidentsQuery
             ->with('locationCode')
-            ->select('id', 'caller_phone_number', 'location_code_id', 'incident_address')
+            ->select('id', 'caller_phone_number', 'caller_name', 'location_code_id', 'incident_address')
             ->latest('id')
-            ->take(15)
+            ->take(50)
             ->get();
 
         $phoneNumbers = $recentPhoneIncidents->pluck('caller_phone_number')->unique()->toArray();
@@ -1071,9 +1135,13 @@ class IncidentController extends Controller
 
         foreach ($recentPhoneIncidents as $inc) {
             $normalized = $inc->caller_phone_number;
+            $incCallerName = ! empty($inc->caller_name) ? trim($inc->caller_name) : null;
             if ($results->has($normalized)) {
                 $item = $results->get($normalized);
                 $item['total_calls'] = ($item['total_calls'] ?? 0) + 1;
+                if (empty($item['caller_name']) && ! empty($incCallerName)) {
+                    $item['caller_name'] = $incCallerName;
+                }
                 if (empty($item['previous_location_code']) && ! empty($inc->location_code)) {
                     $item['previous_location_code'] = $inc->location_code;
                 }
@@ -1082,7 +1150,7 @@ class IncidentController extends Controller
                 $results->put($normalized, [
                     'phone_number' => $normalized,
                     'normalized_phone' => $normalized,
-                    'caller_name' => null,
+                    'caller_name' => $incCallerName,
                     'is_registered_resident' => false,
                     'barangay' => null,
                     'total_calls' => 1,
@@ -1212,9 +1280,25 @@ class IncidentController extends Controller
             $incidentAddress = ! empty($parts) ? implode(', ', $parts) : null;
         }
 
-        $callerName = $request->filled('caller_name')
-            ? trim($request->caller_name)
-            : ($resident ? trim($resident->first_name.' '.$resident->last_name) : null);
+        $callerName = null;
+        if ($request->filled('caller_name')) {
+            $callerName = trim($request->caller_name);
+        } elseif ($resident) {
+            $callerName = trim($resident->first_name.' '.$resident->last_name);
+        } else {
+            // Fallback to latest known caller name from previous calls with this phone number
+            $previousNamed = Incident::where(function ($q) use ($phoneVariants) {
+                $q->whereIn('caller_phone_number', $phoneVariants);
+            })
+                ->whereNotNull('caller_name')
+                ->where('caller_name', '!=', '')
+                ->latest('id')
+                ->first();
+
+            if ($previousNamed && ! empty(trim($previousNamed->caller_name))) {
+                $callerName = trim($previousNamed->caller_name);
+            }
+        }
 
         $incidentDescription = ($request->chief_complaint || $request->reported_chief_complaint)
             ? (($request->description || $request->incident_description)
@@ -1260,6 +1344,15 @@ class IncidentController extends Controller
 
         $incident->load(['incidentType', 'resident.residentProfile.barangay']);
         $incident->reporter_prank_history = Incident::getPrankHistoryForReporter($residentId, $normalizedPhone);
+
+        // Enforce 1 Number = 1 Name: backfill past incidents from this phone number that had missing caller_name
+        if (! empty($callerName)) {
+            Incident::whereIn('caller_phone_number', $phoneVariants)
+                ->where(function ($q) {
+                    $q->whereNull('caller_name')->orWhere('caller_name', '');
+                })
+                ->update(['caller_name' => mb_substr($callerName, 0, 100)]);
+        }
 
         // Dispatch Log -> Incident Linkage Workflow
         if ($request->filled('dispatch_log_id')) {

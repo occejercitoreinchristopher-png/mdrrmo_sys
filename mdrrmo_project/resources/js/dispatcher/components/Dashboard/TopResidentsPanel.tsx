@@ -28,9 +28,10 @@ export interface CommunityInsights {
 
 interface TopResidentsPanelProps {
     community?: CommunityInsights;
+    linkPrefix?: string;
 }
 
-export default function TopResidentsPanel({ community = {} }: TopResidentsPanelProps) {
+export default function TopResidentsPanel({ community = {}, linkPrefix = '/dispatcher/residents' }: TopResidentsPanelProps) {
     const { theme } = useAppearance();
     const isDark = theme === 'dark';
 
@@ -213,7 +214,7 @@ export default function TopResidentsPanel({ community = {} }: TopResidentsPanelP
                                 return (
                                     <Link
                                         key={res.id}
-                                        href={`/dispatcher/residents/${res.id}`}
+                                        href={`${linkPrefix}/${res.id}`}
                                         className="block p-3.5 rounded-xl bg-slate-50/80 hover:bg-slate-100/90 dark:bg-white/[0.025] dark:hover:bg-white/[0.06] border border-slate-200/70 dark:border-white/[0.07] hover:border-amber-400/40 transition-all duration-200 group"
                                     >
                                         <div className="flex items-center justify-between gap-3">
@@ -318,7 +319,7 @@ export default function TopResidentsPanel({ community = {} }: TopResidentsPanelP
                         </div>
                     </div>
                     <Link
-                        href="/dispatcher/residents"
+                        href={linkPrefix}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors shrink-0"
                     >
                         View all <ArrowRight className="w-3.5 h-3.5" />

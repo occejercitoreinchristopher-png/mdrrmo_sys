@@ -1,97 +1,101 @@
 import { Link } from '@inertiajs/react';
-import { ArrowRight, AlertTriangle } from 'lucide-react';
-import Card from '@/shared/components/Card';
+import { ArrowRight, AlertTriangle, ExternalLink, Clock } from 'lucide-react';
 import StatusBadge from '@/shared/components/StatusBadge';
-import EmptyState from '@/shared/components/EmptyState';
 
 export default function RecentIncidentsTable({ incidents = [] }: { incidents?: any[] }) {
     return (
-        <Card padding={false} className="overflow-hidden">
-            <div className="flex items-center justify-between p-5 border-b border-slate-200/80 dark:border-white/10">
+        <div className="rounded-2xl bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-sm overflow-hidden flex flex-col h-full">
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 dark:border-white/5">
                 <div>
-                    <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
-                        Recent Incidents
+                    <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-500" />
+                        <span>Recent Emergency Incidents</span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        Latest reported emergency cases
+                        Latest reported emergency distress calls
                     </p>
                 </div>
                 <Link
                     href="/admin/reports"
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors"
                 >
-                    View all <ArrowRight className="w-3.5 h-3.5" />
+                    <span>View all</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
             </div>
 
             {incidents.length === 0 ? (
-                <EmptyState
-                    title="No recent incidents"
-                    description="There are currently no reported incidents."
-                    icon={AlertTriangle}
-                />
+                <div className="py-12 text-center text-sm text-slate-400 italic">
+                    No recent emergency incidents recorded.
+                </div>
             ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                <div className="overflow-x-auto flex-1">
+                    <table className="w-full text-left border-collapse text-xs">
                         <thead>
-                            <tr className="border-b border-slate-200/80 dark:border-white/5 bg-slate-50/70 dark:bg-white/[0.02]">
-                                <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                    ID
-                                </th>
-                                <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                    Type
-                                </th>
-                                <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                    Reporter
-                                </th>
-                                <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                    Status
-                                </th>
-                                <th className="text-left px-5 py-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                    Reported
-                                </th>
+                            <tr className="border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.02] text-[10px] uppercase font-bold text-slate-400">
+                                <th className="py-2.5 px-4"># ID</th>
+                                <th className="py-2.5 px-4">Type</th>
+                                <th className="py-2.5 px-4">Reporter</th>
+                                <th className="py-2.5 px-4">Status</th>
+                                <th className="py-2.5 px-4">Reported</th>
+                                <th className="py-2.5 px-4 text-right">Action</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200/80 dark:divide-white/5">
-                            {incidents.slice(0, 5).map((incident) => (
-                                <tr
-                                    key={incident.id}
-                                    className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors"
-                                >
-                                    <td className="px-5 py-3.5 text-slate-500 dark:text-slate-400 font-mono text-xs font-semibold">
-                                        #{incident.id}
-                                    </td>
-                                    <td className="px-5 py-3.5 font-medium text-slate-900 dark:text-white">
-                                        {incident.incident_type?.name ?? 'General'}
-                                    </td>
-                                    <td className="px-5 py-3.5 text-slate-600 dark:text-slate-300">
-                                        {incident.resident
-                                            ? `${incident.resident.first_name} ${incident.resident.last_name}`
-                                            : 'Anonymous'}
-                                    </td>
-                                    <td className="px-5 py-3.5">
-                                        <StatusBadge
-                                            status={incident.incident_status}
-                                        />
-                                    </td>
-                                    <td className="px-5 py-3.5 text-slate-500 dark:text-slate-400 text-xs">
-                                        {incident.reported_at || incident.created_at
-                                            ? new Date(
-                                                  incident.reported_at || incident.created_at,
-                                              ).toLocaleDateString('en-PH', {
-                                                  month: 'short',
-                                                  day: 'numeric',
-                                                  hour: '2-digit',
-                                                  minute: '2-digit',
-                                              })
-                                            : '—'}
-                                    </td>
-                                </tr>
-                            ))}
+                        <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                            {incidents.slice(0, 5).map((incident) => {
+                                const typeName =
+                                    incident.incident_type?.name ||
+                                    incident.incident_type?.incident_type_name ||
+                                    'General';
+                                const reporterName = incident.resident
+                                    ? `${incident.resident.first_name} ${incident.resident.last_name}`
+                                    : 'Anonymous / Phone Call';
+
+                                return (
+                                    <tr
+                                        key={incident.id}
+                                        className="hover:bg-slate-50/80 dark:hover:bg-white/[0.02] transition-colors"
+                                    >
+                                        <td className="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">
+                                            #{incident.id}
+                                        </td>
+                                        <td className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200">
+                                            {typeName}
+                                        </td>
+                                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
+                                            {reporterName}
+                                        </td>
+                                        <td className="py-3 px-4">
+                                            <StatusBadge status={incident.incident_status} />
+                                        </td>
+                                        <td className="py-3 px-4 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+                                            {incident.reported_at || incident.created_at
+                                                ? new Date(
+                                                      incident.reported_at || incident.created_at
+                                                  ).toLocaleDateString('en-PH', {
+                                                      month: 'short',
+                                                      day: 'numeric',
+                                                      hour: '2-digit',
+                                                      minute: '2-digit',
+                                                  })
+                                                : '—'}
+                                        </td>
+                                        <td className="py-3 px-4 text-right">
+                                            <a
+                                                href={`/dispatcher/incidents/${incident.id}`}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                                            >
+                                                <span>Inspect</span>
+                                                <ExternalLink className="w-3 h-3" />
+                                            </a>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
             )}
-        </Card>
+        </div>
     );
 }
