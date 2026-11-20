@@ -367,20 +367,6 @@ export default function DispatcherSidebar({ collapsed, onToggle }: { collapsed: 
                     />
                 ))}
             </div>
-
-            {/* Footer: Subtle Telemetry Status */}
-            <div className="border-t border-slate-200/80 dark:border-slate-800/80 shrink-0 p-2.5">
-                {collapsed ? (
-                    <div className="flex justify-center py-1">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500" title="CAD Telemetry Online" />
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-slate-100/70 dark:bg-slate-800/40 text-[12px] text-slate-500 dark:text-slate-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                        <span className="truncate font-normal">CAD Telemetry Online</span>
-                    </div>
-                )}
-            </div>
         </aside>
     );
 }
