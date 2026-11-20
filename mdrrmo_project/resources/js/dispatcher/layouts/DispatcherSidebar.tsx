@@ -7,11 +7,9 @@ import {
     Heart,
     ClipboardList,
     Siren,
-    ChevronRight,
     Users,
     User,
     ChevronDown,
-    MapPin,
     MapPinned,
     PanelLeft,
     PanelLeftClose,
@@ -19,12 +17,38 @@ import {
 import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
 
-function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl, collapsed }) {
+// Scoped load of Inter font for enterprise sidebar typography
+if (typeof document !== 'undefined' && !document.getElementById('inter-font-sidebar')) {
+    const link = document.createElement('link');
+    link.id = 'inter-font-sidebar';
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap';
+    document.head.appendChild(link);
+}
+
+interface SubItem {
+    label: string;
+    icon: any;
+    href: string;
+}
+
+interface NavItemProps {
+    icon: any;
+    label: string;
+    href: string;
+    active: boolean;
+    badge?: number;
+    subItems?: SubItem[];
+    currentUrl: string;
+    collapsed: boolean;
+}
+
+function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl, collapsed }: NavItemProps) {
     const checkSubActive = (subHref: string) => {
         if (!currentUrl) return false;
         if (currentUrl === subHref) return true;
         if (subHref.includes('?')) {
-            const [base, query] = subHref.split('?');
+            const [, query] = subHref.split('?');
             if (currentUrl.includes(query)) return true;
             if (subHref === '/dispatcher/incidents?status=active' && (currentUrl === '/dispatcher/incidents' || currentUrl === '/dispatcher/incidents/')) {
                 return true;
@@ -33,8 +57,8 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl,
         return false;
     };
 
-    const isSubActive = subItems?.some(sub => checkSubActive(sub.href));
-    const [isOpen, setIsOpen] = useState(isSubActive || false);
+    const isSubActive = subItems?.some(sub => checkSubActive(sub.href)) ?? false;
+    const [isOpen, setIsOpen] = useState(isSubActive);
 
     useEffect(() => {
         if (isSubActive) {
@@ -42,44 +66,56 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl,
         }
     }, [isSubActive]);
 
-    const isCurrentActive = active || (!subItems && isSubActive);
+    const isDirectActive = active;
 
     const content = (
         <>
-            {/* Active left bar */}
-            {(isCurrentActive || isSubActive) && !collapsed && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white/80 rounded-r-full" />
-            )}
             <Icon
                 className={clsx(
-                    'w-4 h-4 flex-shrink-0 transition-transform duration-200',
-                    isCurrentActive
-                        ? 'scale-110 text-white'
+                    'w-4 h-4 shrink-0 transition-colors',
+                    isDirectActive
+                        ? 'text-white'
                         : isSubActive
-                            ? 'text-[#F61509]'
-                            : 'text-slate-400 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white group-hover:scale-105',
+                            ? 'text-red-600 dark:text-red-400'
+                            : 'text-slate-400 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200'
                 )}
             />
             {!collapsed && (
                 <>
-                    <span className="truncate flex-1 text-left">{label}</span>
+                    <span
+                        className={clsx(
+                            'truncate flex-1 text-left text-[14px] leading-none transition-all',
+                            isDirectActive ? 'font-semibold' : 'font-medium'
+                        )}
+                    >
+                        {label}
+                    </span>
                     {badge !== undefined && badge > 0 && (
-                        <span className={clsx(
-                            'px-2 py-0.5 text-[10px] font-bold rounded-full ml-auto',
-                            isCurrentActive ? 'bg-white text-[#F61509] shadow-sm' : 'bg-[#F61509]/10 text-[#F61509] border border-[#F61509]/20'
-                        )}>
+                        <span
+                            className={clsx(
+                                'px-1.5 py-0.5 text-[11px] font-semibold rounded-full transition-colors leading-none',
+                                isDirectActive
+                                    ? 'bg-white text-red-600 shadow-xs'
+                                    : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+                            )}
+                        >
                             {badge}
                         </span>
                     )}
                     {subItems && (
-                        <ChevronDown className={clsx("w-3.5 h-3.5 ml-auto text-slate-400 transition-transform duration-200", isOpen ? "rotate-180" : "")} />
+                        <ChevronDown
+                            className={clsx(
+                                'w-3.5 h-3.5 text-slate-400 dark:text-slate-400 transition-transform duration-200 shrink-0 ml-1',
+                                isOpen ? 'rotate-180 text-slate-600 dark:text-slate-300' : ''
+                            )}
+                        />
                     )}
                 </>
             )}
 
             {/* Collapsed Tooltip */}
             {collapsed && (
-                <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-xs font-medium rounded-lg whitespace-nowrap shadow-xl z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 border border-slate-700/50">
+                <div className="absolute left-full ml-2.5 px-2.5 py-1.5 bg-slate-900 text-slate-100 text-xs font-medium rounded-md shadow-xl z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 border border-slate-800 whitespace-nowrap">
                     {label}
                     {badge !== undefined && badge > 0 && ` (${badge})`}
                     <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-900" />
@@ -89,15 +125,15 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl,
     );
 
     const btnClass = clsx(
-        'flex items-center rounded-xl text-xs sm:text-sm transition-all duration-200 group relative outline-none cursor-pointer select-none text-left',
+        'flex items-center transition-colors duration-150 group relative outline-none cursor-pointer select-none text-left',
         collapsed
-            ? 'w-10 h-10 mx-auto justify-center'
-            : 'w-full gap-3 px-3 py-2.5 overflow-hidden',
-        isCurrentActive
-            ? 'bg-[#F61509] text-white shadow-md shadow-[#F61509]/25 font-semibold'
+            ? 'w-9 h-9 mx-auto justify-center rounded-lg'
+            : 'w-full gap-2.5 px-2.5 py-2 rounded-lg',
+        isDirectActive
+            ? 'bg-red-600 text-white font-semibold shadow-xs'
             : isSubActive
-                ? 'bg-slate-100 text-slate-950 dark:bg-white/10 dark:text-white font-medium'
-                : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-white/8 dark:hover:text-white font-medium',
+                ? 'bg-slate-200/70 dark:bg-slate-800/60 text-slate-900 dark:text-white font-medium'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/40'
     );
 
     return (
@@ -123,15 +159,18 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl,
                 </button>
             )}
 
-            {/* SubItems (only shown when expanded) */}
+            {/* SubItems (Submenu tree when expanded) */}
             {subItems && !collapsed && (
-                <div className={clsx(
-                    "flex flex-col space-y-0.5 overflow-hidden transition-all duration-300 ease-in-out pl-4 pr-1 mt-0.5",
-                    isOpen ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
-                )}>
-                    <div className="border-l border-slate-200 dark:border-white/10 ml-2.5 pl-2.5 space-y-0.5 mt-1">
+                <div
+                    className={clsx(
+                        'flex flex-col overflow-hidden transition-all duration-200 ease-in-out pl-3.5 pr-1',
+                        isOpen ? 'max-h-60 opacity-100 mt-1' : 'max-h-0 opacity-0'
+                    )}
+                >
+                    <div className="border-l border-slate-200 dark:border-slate-800 ml-2 pl-2.5 space-y-1 py-0.5">
                         {subItems.map((subItem) => {
                             const subActive = checkSubActive(subItem.href);
+                            const SubIcon = subItem.icon;
                             return (
                                 <button
                                     type="button"
@@ -144,14 +183,19 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl,
                                         }
                                     }}
                                     className={clsx(
-                                        'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all duration-200 cursor-pointer text-left',
+                                        'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors duration-150 cursor-pointer text-left',
                                         subActive
-                                            ? 'bg-[#F61509]/10 text-[#F61509] font-semibold dark:bg-[#F61509]/20'
-                                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white font-medium'
+                                            ? 'bg-red-600 text-white font-semibold shadow-xs'
+                                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 font-normal'
                                     )}
                                 >
-                                    <subItem.icon className={clsx("w-3.5 h-3.5", subActive ? "text-[#F61509]" : "text-slate-400")} />
-                                    <span>{subItem.label}</span>
+                                    <SubIcon
+                                        className={clsx(
+                                            'w-3.5 h-3.5 shrink-0 transition-colors',
+                                            subActive ? 'text-white' : 'text-slate-400 dark:text-slate-500'
+                                        )}
+                                    />
+                                    <span className="truncate leading-none">{subItem.label}</span>
                                 </button>
                             );
                         })}
@@ -162,18 +206,18 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl,
     );
 }
 
-function NavGroup({ group, items, currentUrl, collapsed, index }) {
+function NavGroup({ group, items, currentUrl, collapsed, index }: any) {
     return (
-        <div className={clsx(collapsed ? 'mb-2' : 'mb-5')}>
+        <div className={clsx(collapsed ? 'mb-2' : 'mb-4', index === 0 ? 'mt-0.5' : '')}>
             {collapsed ? (
-                index > 0 && <div className="w-8 h-px bg-slate-200/80 dark:border-white/10 mx-auto my-2" />
+                index > 0 && <div className="w-6 h-px bg-slate-200 dark:bg-slate-800 mx-auto my-2" />
             ) : (
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-widest px-3 mb-2">
+                <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-2.5 mb-1.5 select-none">
                     {group}
                 </p>
             )}
-            <div className={clsx(collapsed ? 'space-y-1.5' : 'space-y-1')}>
-                {items.map((item) => (
+            <div className={clsx(collapsed ? 'space-y-1' : 'space-y-0.5')}>
+                {items.map((item: any) => (
                     <NavItem
                         key={item.label}
                         {...item}
@@ -191,7 +235,7 @@ function NavGroup({ group, items, currentUrl, collapsed, index }) {
     );
 }
 
-export default function DispatcherSidebar({ collapsed, onToggle }) {
+export default function DispatcherSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
     const { url, props } = usePage();
     const incidentCounts = (props.incident_counts as any) || { active: 0, history: 0 };
 
@@ -238,45 +282,49 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
     return (
         <aside
             className={clsx(
-                'h-full flex flex-col bg-white/95 dark:bg-[#090e1a]/95 backdrop-blur-2xl border-r border-slate-200/80 dark:border-white/10 transition-all duration-300 ease-in-out relative flex-shrink-0 shadow-[4px_0_24px_-4px_rgba(0,0,0,0.02)] dark:shadow-none z-30',
-                collapsed ? 'w-[72px]' : 'w-64',
+                "h-full flex flex-col bg-white dark:bg-[#080d1a] border-r border-slate-200 dark:border-slate-800/80 transition-all duration-200 ease-in-out relative shrink-0 z-30 select-none font-['Inter',-apple-system,BlinkMacSystemFont,sans-serif] antialiased",
+                collapsed ? 'w-[68px]' : 'w-[260px]'
             )}
         >
             {/* Header: Brand Seal & Collapse Button */}
             <div
                 className={clsx(
-                    'h-16 flex items-center border-b border-slate-200/80 dark:border-white/10 flex-shrink-0',
-                    collapsed ? 'justify-center px-2' : 'justify-between px-4',
+                    'h-15 flex items-center border-b border-slate-200/80 dark:border-slate-800/80 shrink-0',
+                    collapsed ? 'justify-center px-2' : 'justify-between px-3.5'
                 )}
             >
-                <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="w-9 h-9 flex items-center justify-center flex-shrink-0">
-                        <img src="/images/opol-logo.png" alt="MDRRMO Opol" className="w-full h-full object-contain drop-shadow-sm" />
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                    <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                        <img
+                            src="/images/opol-logo.png"
+                            alt="MDRRMO Opol"
+                            className="w-full h-full object-contain drop-shadow-xs"
+                        />
                     </div>
 
                     {!collapsed && (
-                        <div className="overflow-hidden">
+                        <div className="overflow-hidden min-w-0">
                             <div className="flex items-center gap-1.5">
-                                <h1 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
+                                <span className="text-[16px] font-semibold text-slate-900 dark:text-white tracking-tight uppercase leading-none">
                                     MDRRMO
-                                </h1>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F61509]/10 text-[#F61509] uppercase tracking-wider">
-                                    DISPATCH
+                                </span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 text-red-600 dark:text-red-400 font-mono uppercase tracking-wider">
+                                    CAD
                                 </span>
                             </div>
-                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold tracking-wider uppercase truncate">
+                            <p className="text-[12px] text-slate-500 dark:text-slate-400 font-normal tracking-normal truncate leading-none mt-1">
                                 Dispatcher Panel
                             </p>
                         </div>
                     )}
                 </div>
 
-                {/* Minimize Button INSIDE Sidebar Panel when Expanded */}
+                {/* Collapse Button INSIDE Sidebar Panel when Expanded */}
                 {!collapsed && (
                     <button
                         type="button"
                         onClick={onToggle}
-                        className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer shrink-0"
                         title="Collapse sidebar"
                     >
                         <PanelLeftClose className="w-4 h-4" />
@@ -284,17 +332,17 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
                 )}
             </div>
 
-            {/* Minimize / Expand Toggle Button INSIDE Sidebar Panel when Collapsed */}
+            {/* Expand Toggle Button INSIDE Sidebar Panel when Collapsed */}
             {collapsed && (
-                <div className="py-2.5 px-3 border-b border-slate-100 dark:border-white/5 flex justify-center">
+                <div className="py-2 px-2 border-b border-slate-100 dark:border-slate-800/50 flex justify-center">
                     <button
                         type="button"
                         onClick={onToggle}
-                        className="w-10 h-10 rounded-xl text-slate-600 hover:text-[#F61509] hover:bg-[#F61509]/10 dark:text-slate-300 dark:hover:text-[#F61509] dark:hover:bg-[#F61509]/15 flex items-center justify-center transition-all cursor-pointer group shadow-sm border border-slate-200/60 dark:border-white/10 relative"
+                        className="w-9 h-9 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer group relative"
                         title="Expand sidebar"
                     >
-                        <PanelLeft className="w-4 h-4 transition-transform group-hover:scale-110" />
-                        <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-xs font-medium rounded-lg whitespace-nowrap shadow-xl z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 border border-slate-700/50">
+                        <PanelLeft className="w-4 h-4" />
+                        <div className="absolute left-full ml-2.5 px-2.5 py-1.5 bg-slate-900 text-slate-100 text-xs font-medium rounded-md shadow-xl z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 border border-slate-800 whitespace-nowrap">
                             Expand sidebar
                             <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-900" />
                         </div>
@@ -302,11 +350,11 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
                 </div>
             )}
 
-            {/* Navigation */}
+            {/* Navigation Scrollable Body */}
             <div
                 className={clsx(
-                    'flex-1 overflow-y-auto space-y-0 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-white/10',
-                    collapsed ? 'px-2 py-4' : 'px-3 py-5',
+                    'flex-1 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800',
+                    collapsed ? 'px-2 py-3' : 'px-2.5 py-3.5'
                 )}
             >
                 {navigation.map((section, idx) => (
@@ -318,6 +366,20 @@ export default function DispatcherSidebar({ collapsed, onToggle }) {
                         index={idx}
                     />
                 ))}
+            </div>
+
+            {/* Footer: Subtle Telemetry Status */}
+            <div className="border-t border-slate-200/80 dark:border-slate-800/80 shrink-0 p-2.5">
+                {collapsed ? (
+                    <div className="flex justify-center py-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" title="CAD Telemetry Online" />
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-slate-100/70 dark:bg-slate-800/40 text-[12px] text-slate-500 dark:text-slate-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        <span className="truncate font-normal">CAD Telemetry Online</span>
+                    </div>
+                )}
             </div>
         </aside>
     );

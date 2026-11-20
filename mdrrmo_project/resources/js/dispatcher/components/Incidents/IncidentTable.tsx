@@ -18,9 +18,7 @@ import {
     Clock,
     Flame,
     ShieldAlert,
-    Layers,
-    FolderArchive,
-    Sparkles
+    FolderArchive
 } from 'lucide-react';
 import { toast } from 'sonner';
 import DataTable from '@/shared/components/DataTable';
@@ -577,12 +575,8 @@ export default function IncidentTable({
             key: 'id',
             header: '#',
             sortable: true,
-            render: (v, row) => (
-                <span className={`font-mono text-xs font-bold px-2 py-1 rounded-md border ${
-                    (viewing as any)?.id === row.id 
-                        ? 'bg-rose-500 text-white border-rose-500 shadow-sm' 
-                        : 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10'
-                }`}>
+            render: (v) => (
+                <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
                     #{v}
                 </span>
             ),
@@ -592,16 +586,14 @@ export default function IncidentTable({
             header: 'Date & Time',
             sortable: true,
             render: (v) => {
-                if (!v) return '—';
+                if (!v) return <span className="text-slate-400 text-xs">—</span>;
                 const date = new Date(v);
                 return (
-                    <div className="flex flex-col whitespace-nowrap space-y-0.5">
-                        <span className="font-bold text-slate-900 dark:text-slate-200 text-xs flex items-center gap-1.5">
-                            <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                    <div className="flex flex-col whitespace-nowrap leading-tight">
+                        <span className="text-xs font-medium text-slate-900 dark:text-slate-200">
                             {date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
-                        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                            <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
                             {date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true })}
                         </span>
                     </div>
@@ -610,55 +602,46 @@ export default function IncidentTable({
         },
         {
             key: 'place_of_incident',
-            header: 'Place & Barangay',
+            header: 'Place of Incident',
             render: (_, row) => {
                 const rawPlace = row.place_of_incident || row.incident_address || (typeof row.location === 'object' ? row.location?.location_name || row.location?.name : row.location) || 'Location Unavailable';
                 const cleanPlace = rawPlace.replace(/,?\s*Opol,?\s*Misamis\s*Oriental/gi, '').trim() || rawPlace;
-                const bgyName = typeof row.barangay === 'object' ? row.barangay?.barangay_name || row.barangay?.name : row.barangay;
 
                 return (
-                    <div className="flex flex-col max-w-sm">
-                        <span className="font-bold text-slate-900 dark:text-white text-xs line-clamp-1" title={rawPlace}>
-                            {cleanPlace}
-                        </span>
-                        {bgyName && (
-                            <div className="flex items-center gap-1 mt-0.5 text-[11px] font-bold text-rose-600 dark:text-rose-400">
-                                <MapPin className="w-3 h-3 flex-shrink-0" />
-                                <span>Brgy. {bgyName}</span>
-                            </div>
-                        )}
-                    </div>
+                    <span className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2 block max-w-xs" title={rawPlace}>
+                        {cleanPlace}
+                    </span>
+                );
+            },
+        },
+        {
+            key: 'barangay',
+            header: 'Barangay',
+            render: (_, row) => {
+                const bgyName = typeof row.barangay === 'object' ? row.barangay?.barangay_name || row.barangay?.name : row.barangay;
+
+                if (!bgyName) return <span className="text-slate-400 text-xs">—</span>;
+
+                return (
+                    <span className="text-xs text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        Brgy. {bgyName}
+                    </span>
                 );
             },
         },
         {
             key: 'incident_type',
             header: 'Category',
-            render: (v, row) => {
+            render: (_, row) => {
                 const complaint = getIncidentChiefComplaint(row);
                 const rawTypeName = row.incident_type?.name || row.incident_type?.incident_type_name || '';
                 const name = resolveAuthoritativeCategory(complaint, rawTypeName);
                 if (!name) {
-                    return <span className="text-slate-400 text-xs italic">Unclassified</span>;
+                    return <span className="text-slate-400 text-xs">—</span>;
                 }
-                const isFire = name.toLowerCase().includes('fire');
-                const isTrauma = name.toLowerCase().includes('trauma') || name.toLowerCase().includes('accident');
                 return (
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${
-                        isFire
-                            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30'
-                            : isTrauma
-                            ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30'
-                            : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30'
-                    }`}>
-                        {isFire ? (
-                            <Flame className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                        ) : isTrauma ? (
-                            <ShieldAlert className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                        ) : (
-                            <Activity className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                        )}
-                        <span>{name}</span>
+                    <span className="text-xs text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        {name}
                     </span>
                 );
             },
@@ -669,18 +652,12 @@ export default function IncidentTable({
             render: (_, row) => {
                 const complaint = getIncidentChiefComplaint(row);
                 if (!complaint) {
-                    return <span className="text-slate-400 text-xs italic">None Recorded</span>;
+                    return <span className="text-slate-400 text-xs">—</span>;
                 }
                 return (
-                    <div className="min-w-[170px] max-w-[210px]">
-                        <span 
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-500/20 max-w-full truncate shadow-2xs"
-                            title={complaint}
-                        >
-                            <HeartPulse className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                            <span className="truncate">{complaint}</span>
-                        </span>
-                    </div>
+                    <span className="text-xs text-slate-700 dark:text-slate-300 truncate block max-w-xs" title={complaint}>
+                        {complaint}
+                    </span>
                 );
             },
         },
@@ -688,16 +665,24 @@ export default function IncidentTable({
             key: 'incident_status',
             header: 'Status',
             sortable: true,
-            render: (v, row) => (
-                <div className="min-w-[110px] flex flex-col gap-1 items-start">
-                    <StatusBadge status={v} size="xs" />
-                    {(row.is_prank || row.rejection_category === 'prank') && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/50">
-                            🚨 Prank Call
+            render: (v, row) => {
+                const rawStatus = (v || '').toLowerCase();
+                const formatted = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+                const isPrank = row.is_prank || row.rejection_category === 'prank';
+
+                return (
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <span className="text-xs text-slate-700 dark:text-slate-300 capitalize">
+                            {formatted || '—'}
                         </span>
-                    )}
-                </div>
-            ),
+                        {isPrank && (
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                                (Prank)
+                            </span>
+                        )}
+                    </div>
+                );
+            },
         },
         {
             key: 'actions',
@@ -946,67 +931,6 @@ export default function IncidentTable({
                             </div>
                         </div>
 
-                        {/* Quick Presets Ribbon */}
-                        <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-200/60 dark:border-white/5 flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1 shrink-0 flex items-center gap-1">
-                                <Sparkles className="w-3 h-3 text-rose-500" /> Quick:
-                            </span>
-                            <button
-                                type="button"
-                                onClick={() => handlePresetSelect('all')}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                                    !hasActiveFilters
-                                        ? 'bg-red-600 text-white shadow-xs font-bold'
-                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5'
-                                }`}
-                            >
-                                All Records
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handlePresetSelect('medical')}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                                    selectedCategories.includes('Medical Emergency') && selectedCategories.length === 1
-                                        ? 'bg-indigo-600 text-white shadow-xs font-bold'
-                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5'
-                                }`}
-                            >
-                                ⚡ Medical Emergencies
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handlePresetSelect('trauma')}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                                    selectedCategories.includes('Trauma Emergency') && selectedCategories.length === 1
-                                        ? 'bg-rose-600 text-white shadow-xs font-bold'
-                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5'
-                                }`}
-                            >
-                                🚨 Trauma & Vehicular
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handlePresetSelect('fire')}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                                    selectedCategories.includes('Fire & Disaster') && selectedCategories.length === 1
-                                        ? 'bg-amber-600 text-white shadow-xs font-bold'
-                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5'
-                                }`}
-                            >
-                                🔥 Fire & Disaster
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handlePresetSelect('this_month')}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                                    selectedMonths.includes(new Date().getMonth().toString()) && selectedMonths.length === 1
-                                        ? 'bg-emerald-600 text-white shadow-xs font-bold'
-                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/5'
-                                }`}
-                            >
-                                📅 This Month
-                            </button>
-                        </div>
 
                         {/* Confirmation Notification Banner */}
                         {notificationMessage && (
@@ -1032,16 +956,50 @@ export default function IncidentTable({
                             </div>
                         )}
 
-                        {/* HORIZONTAL MULTI-SELECT FILTER ROW: 1. Category, 2. Chief Complaint, 3. Month, 4. Time, 5. Barangay */}
+                        {/* HORIZONTAL MULTI-SELECT FILTER ROW: Aligned to Table Columns (Date/Month, Time, Barangay, Category, Chief Complaint) */}
                         <div className="px-4 py-3 bg-slate-50/70 dark:bg-white/[0.02] border-b border-slate-200/80 dark:border-white/10">
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                                 
-                                {/* 1. Category (Multi-Select) */}
+                                {/* 1. Month (Multi-Select - aligns with Date & Time column) */}
                                 <div>
-                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                                        <Layers className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                                        Category
-                                    </label>
+                                    <MultiSelectFilterCombobox
+                                        values={selectedMonths}
+                                        onChange={setSelectedMonths}
+                                        options={MONTH_OPTIONS.filter((m) => m.value !== 'all')}
+                                        allLabel="All Months"
+                                        searchable={true}
+                                        searchPlaceholder="Search month..."
+                                    />
+                                </div>
+
+                                {/* 2. Time (Multi-Select - aligns with Date & Time column) */}
+                                <div>
+                                    <MultiSelectFilterCombobox
+                                        values={selectedTimes}
+                                        onChange={setSelectedTimes}
+                                        options={TIME_OPTIONS.filter((t) => t.value !== 'all')}
+                                        allLabel="All Times"
+                                        searchable={false}
+                                    />
+                                </div>
+
+                                {/* 3. Barangay (Multi-Select - aligns with Barangay column) */}
+                                <div>
+                                    <MultiSelectFilterCombobox
+                                        values={selectedZones}
+                                        onChange={setSelectedZones}
+                                        options={availableZones.map((z) => ({
+                                            value: z,
+                                            label: `Brgy. ${z}`,
+                                        }))}
+                                        allLabel="All Barangays"
+                                        searchable={true}
+                                        searchPlaceholder="Search barangay..."
+                                    />
+                                </div>
+
+                                {/* 4. Category (Multi-Select - aligns with Category column) */}
+                                <div>
                                     <MultiSelectFilterCombobox
                                         values={selectedCategories}
                                         onChange={handleCategoriesChange}
@@ -1055,12 +1013,8 @@ export default function IncidentTable({
                                     />
                                 </div>
 
-                                {/* 2. Chief Complaint (Multi-Select Searchable Combobox) */}
+                                {/* 5. Chief Complaint (Multi-Select Searchable Combobox - aligns with Chief Complaint column) */}
                                 <div>
-                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                                        <HeartPulse className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                                        Chief Complaint
-                                    </label>
                                     <MultiSelectFilterCombobox
                                         values={selectedIncidents}
                                         onChange={handleIncidentsChange}
@@ -1071,56 +1025,6 @@ export default function IncidentTable({
                                         allLabel="All Chief Complaints"
                                         searchable={true}
                                         searchPlaceholder="Type to search chief complaint..."
-                                    />
-                                </div>
-
-                                {/* 3. Month (Multi-Select) */}
-                                <div>
-                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                                        <Calendar className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                        Month
-                                    </label>
-                                    <MultiSelectFilterCombobox
-                                        values={selectedMonths}
-                                        onChange={setSelectedMonths}
-                                        options={MONTH_OPTIONS.filter((m) => m.value !== 'all')}
-                                        allLabel="All Months"
-                                        searchable={true}
-                                        searchPlaceholder="Search month..."
-                                    />
-                                </div>
-
-                                {/* 4. Time (Multi-Select) */}
-                                <div>
-                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                                        <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                                        Time
-                                    </label>
-                                    <MultiSelectFilterCombobox
-                                        values={selectedTimes}
-                                        onChange={setSelectedTimes}
-                                        options={TIME_OPTIONS.filter((t) => t.value !== 'all')}
-                                        allLabel="All Times"
-                                        searchable={false}
-                                    />
-                                </div>
-
-                                {/* 5. Barangay (Multi-Select) */}
-                                <div>
-                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                                        <MapPin className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                                        Barangay
-                                    </label>
-                                    <MultiSelectFilterCombobox
-                                        values={selectedZones}
-                                        onChange={setSelectedZones}
-                                        options={availableZones.map((z) => ({
-                                            value: z,
-                                            label: `Brgy. ${z}`,
-                                        }))}
-                                        allLabel="All Barangays"
-                                        searchable={true}
-                                        searchPlaceholder="Search barangay..."
                                     />
                                 </div>
 
