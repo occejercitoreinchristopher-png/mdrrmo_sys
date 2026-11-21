@@ -73,18 +73,6 @@ class DispatchController extends Controller
         $driverId = ! empty($validated['driver_id']) ? $validated['driver_id'] : null;
         $emtIds = ! empty($validated['emt_ids']) ? (array) $validated['emt_ids'] : [];
 
-        // Auto-select organic on-duty driver from the assigned team if not explicitly specified
-        if (! $driverId && ! empty($validated['team'])) {
-            $teamClean = preg_replace('/^team\s*/i', '', trim($validated['team']));
-            $teamDriver = ResponderProfile::whereRaw('LOWER(TRIM(team)) = ?', [strtolower($teamClean)])
-                ->where('position', 'driver')
-                ->where('availability', 'available')
-                ->first();
-            if ($teamDriver) {
-                $driverId = $teamDriver->user_id;
-            }
-        }
-
         if (! $driverId && empty($emtIds)) {
             abort(422, 'Please select at least one crew member (Driver or EMT) to deploy.');
         }
@@ -204,19 +192,28 @@ class DispatchController extends Controller
                 'assigned_at' => now(),
             ]);
 
-            // Attach all crew members to dispatch_crews
+            // Attach all crew members to dispatch_crews safely without duplicate integrity errors
             if ($driver) {
-                $dispatch->crew()->attach($driver->id, [
-                    'role' => $driver->responderProfile?->position === 'team_leader' ? 'team_leader' : 'driver',
-                    'is_reliever_assignment' => (bool) $driver->responderProfile?->is_reliever,
+                $dispatch->crew()->syncWithoutDetaching([
+                    $driver->id => [
+                        'role' => $driver->responderProfile?->position === 'team_leader' ? 'team_leader' : 'driver',
+                        'is_reliever_assignment' => (bool) $driver->responderProfile?->is_reliever,
+                    ]
                 ]);
             }
 
+            $emtSyncData = [];
             foreach ($emtUsers as $emtUser) {
-                $dispatch->crew()->attach($emtUser->id, [
+                if ($driver && $emtUser->id === $driver->id) {
+                    continue;
+                }
+                $emtSyncData[$emtUser->id] = [
                     'role' => $emtUser->responderProfile?->position === 'team_leader' ? 'team_leader' : 'emt',
                     'is_reliever_assignment' => (bool) $emtUser->responderProfile?->is_reliever,
-                ]);
+                ];
+            }
+            if (! empty($emtSyncData)) {
+                $dispatch->crew()->syncWithoutDetaching($emtSyncData);
             }
 
             // Update statuses
@@ -229,7 +226,11 @@ class DispatchController extends Controller
             return $dispatch;
         });
 
-        event(new DispatchCreated($dispatch));
+        try {
+            event(new DispatchCreated($dispatch));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('DispatchCreated broadcast notification error: ' . $e->getMessage());
+        }
 
         return back()->with('success', 'Dispatch created successfully and mission crew notified.');
     }

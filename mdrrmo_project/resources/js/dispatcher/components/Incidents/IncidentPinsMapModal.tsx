@@ -21,6 +21,7 @@ import StatusBadge from '@/shared/components/StatusBadge';
 export interface IncidentPinsMapFilters {
     categories: string[];
     incidents: string[];
+    years?: string[];
     months: string[];
     monthLabels: string[];
     times: string[];
@@ -127,6 +128,7 @@ export default function IncidentPinsMapModal({
 
     const categoriesKey = filters.categories.join('\x1f');
     const incidentsKey = filters.incidents.join('\x1f');
+    const yearsKey = (filters.years || []).join('\x1f');
     const monthsKey = filters.months.join('\x1f');
     const timesKey = filters.times.join('\x1f');
     const barangaysKey = filters.barangays.join('\x1f');
@@ -142,6 +144,7 @@ export default function IncidentPinsMapModal({
             {
                 categories: categoriesKey,
                 incidents: incidentsKey,
+                years: yearsKey,
                 months: monthsKey,
                 times: timesKey,
                 barangays: barangaysKey,
@@ -154,6 +157,7 @@ export default function IncidentPinsMapModal({
             if (filters.search.trim()) params.set('search', filters.search.trim());
             filters.categories.forEach((c) => params.append('category[]', c));
             filters.incidents.forEach((i) => params.append('incident[]', i));
+            (filters.years || []).forEach((y) => params.append('year[]', y));
             filters.months.forEach((m) => params.append('month[]', m));
             filters.times.forEach((t) => params.append('time[]', t));
             filters.barangays.forEach((b) => params.append('barangay[]', b));
@@ -354,7 +358,7 @@ export default function IncidentPinsMapModal({
             fitAllPins();
         }, 180);
         return () => clearTimeout(timer);
-    }, [open, mapLoaded, plottedIncidents.length, barangaysKey, categoriesKey, incidentsKey, monthsKey, timesKey, filters.search]);
+    }, [open, mapLoaded, plottedIncidents.length, barangaysKey, categoriesKey, incidentsKey, yearsKey, monthsKey, timesKey, filters.search]);
 
     // ResizeObserver for Mapbox canvas inside modal
     useEffect(() => {
@@ -375,6 +379,9 @@ export default function IncidentPinsMapModal({
     // Build active filter summary items
     const activeFilterChips = useMemo(() => {
         const chips: { label: string; value: string }[] = [];
+        if (filters.years && filters.years.length > 0) {
+            chips.push({ label: 'Year', value: filters.years.join(', ') });
+        }
         if (filters.categories.length > 0) {
             chips.push({ label: 'Category', value: filters.categories.join(', ') });
         }

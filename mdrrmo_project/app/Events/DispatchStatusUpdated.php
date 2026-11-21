@@ -103,8 +103,39 @@ class DispatchStatusUpdated implements ShouldBroadcastNow
             $message = "Emergency dispatch for {$rawTypeName} in Barangay {$cleanBarangay} has been completed.";
         }
 
+        $lightIncident = $inc ? [
+            'id' => $inc->id,
+            'place_of_incident' => $cleanLocation,
+            'barangay' => $cleanBarangay,
+            'incident_type' => $inc->incidentType ? [
+                'id' => $inc->incidentType->id,
+                'name' => $inc->incidentType->name,
+            ] : null,
+        ] : null;
+
+        $lightAmbulance = $dispatch->ambulance ? [
+            'id' => $dispatch->ambulance->id,
+            'plate_number' => $dispatch->ambulance->plate_number,
+            'ambulance_code' => $dispatch->ambulance->ambulance_code,
+            'vehicle_name' => $dispatch->ambulance->vehicle_name,
+        ] : null;
+
+        $cleanDispatch = [
+            'id' => $dispatch->id,
+            'incident_id' => $dispatch->incident_id,
+            'ambulance_id' => $dispatch->ambulance_id,
+            'team' => $dispatch->team,
+            'driver_id' => $dispatch->driver_id,
+            'emt_id' => $dispatch->emt_id,
+            'dispatch_status' => $status,
+            'acknowledgment_status' => $dispatch->acknowledgment_status ?? 'pending',
+            'assigned_at' => $dispatch->assigned_at ? $dispatch->assigned_at->toIso8601String() : null,
+            'incident' => $lightIncident,
+            'ambulance' => $lightAmbulance,
+        ];
+
         return [
-            'dispatch' => $dispatch,
+            'dispatch' => $cleanDispatch,
             'dispatch_id' => $dispatch->id,
             'incident_id' => $dispatch->incident_id,
             'event_type' => $eventType,

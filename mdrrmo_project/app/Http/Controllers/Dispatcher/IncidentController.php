@@ -171,6 +171,7 @@ class IncidentController extends Controller
 
         $selectedCategories = $parseMultiParam($request->query('category'));
         $selectedIncidents = $parseMultiParam($request->query('incident'));
+        $selectedYears = $parseMultiParam($request->query('year'));
         $selectedMonths = $parseMultiParam($request->query('month'));
         $selectedTimes = $parseMultiParam($request->query('time'));
         $selectedZones = $parseMultiParam($request->query('barangay'));
@@ -233,6 +234,21 @@ class IncidentController extends Controller
         ->where('incident_status', 'resolved')
         ->where('is_prank', false)
         ->latest();
+
+        // SQL-level Year filter (supports single or multiple years)
+        if (! empty($selectedYears)) {
+            $sqlYears = [];
+            foreach ($selectedYears as $y) {
+                if (is_numeric($y)) {
+                    $sqlYears[] = (int) $y;
+                }
+            }
+            $sqlYears = array_values(array_unique($sqlYears));
+            if (! empty($sqlYears)) {
+                $placeholders = implode(',', array_fill(0, count($sqlYears), '?'));
+                $query->whereRaw("YEAR(COALESCE(reported_at, created_at)) IN ({$placeholders})", $sqlYears);
+            }
+        }
 
         // SQL-level Month filter (JS sends 0..11; supports single or multiple months)
         if (! empty($selectedMonths)) {

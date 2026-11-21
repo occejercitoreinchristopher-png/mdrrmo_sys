@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 
 export interface IncidentRecordsResponse {
@@ -16,6 +16,7 @@ interface UseIncidentRecordsQueryOptions {
     enabled: boolean;
     categories: string[];
     incidents: string[];
+    years?: string[];
     months: string[];
     times: string[];
     barangays: string[];
@@ -30,6 +31,7 @@ export function useIncidentRecordsQuery({
     enabled,
     categories,
     incidents,
+    years = [],
     months,
     times,
     barangays,
@@ -71,6 +73,7 @@ export function useIncidentRecordsQuery({
 
     const categoriesKey = categories.join('\x1f');
     const incidentsKey = incidents.join('\x1f');
+    const yearsKey = years.join('\x1f');
     const monthsKey = months.join('\x1f');
     const timesKey = times.join('\x1f');
     const barangaysKey = barangays.join('\x1f');
@@ -78,13 +81,14 @@ export function useIncidentRecordsQuery({
     // Reset to page 1 whenever any dropdown filter or perPage changes
     useEffect(() => {
         setPage(1);
-    }, [categoriesKey, incidentsKey, monthsKey, timesKey, barangaysKey, perPage]);
+    }, [categoriesKey, incidentsKey, yearsKey, monthsKey, timesKey, barangaysKey, perPage]);
 
     const isDefaultUnfilteredPage1 =
         page === 1 &&
         !debouncedSearch &&
         categories.length === 0 &&
         incidents.length === 0 &&
+        years.length === 0 &&
         months.length === 0 &&
         times.length === 0 &&
         barangays.length === 0;
@@ -98,6 +102,7 @@ export function useIncidentRecordsQuery({
             search: debouncedSearch,
             categories: categoriesKey,
             incidents: incidentsKey,
+            years: yearsKey,
             months: monthsKey,
             times: timesKey,
             barangays: barangaysKey,
@@ -124,6 +129,7 @@ export function useIncidentRecordsQuery({
             if (debouncedSearch) params.set('search', debouncedSearch);
             categories.forEach((c) => params.append('category[]', c));
             incidents.forEach((i) => params.append('incident[]', i));
+            years.forEach((y) => params.append('year[]', y));
             months.forEach((m) => params.append('month[]', m));
             times.forEach((t) => params.append('time[]', t));
             barangays.forEach((b) => params.append('barangay[]', b));
@@ -153,13 +159,33 @@ export function useIncidentRecordsQuery({
 
     const isDebouncing = searchQuery.trim() !== debouncedSearch;
 
+    // Local client-side filtered fallback for initialIncidents (for instant zero-flash/local filtering)
+    const localFilteredFallback = useMemo(() => {
+        if (!initialIncidents || initialIncidents.length === 0) return [];
+        if (isDefaultUnfilteredPage1) return initialIncidents;
+
+        return initialIncidents.filter((row: any) => {
+            if (years.length > 0) {
+                const rawDate = row.reported_at || row.created_at || row.incident_date;
+                if (!rawDate) return false;
+                const d = new Date(rawDate);
+                if (isNaN(d.getTime())) return false;
+                const y = d.getFullYear().toString();
+                if (!years.includes(y)) return false;
+            }
+            return true;
+        });
+    }, [isDefaultUnfilteredPage1, initialIncidents, yearsKey]);
+
     // Immediate zero-flash fallback while initial query loads on unfiltered page 1
     const effectiveRecords =
         data?.data ??
-        (isDefaultUnfilteredPage1 ? initialIncidents.slice(0, perPage) : []);
+        (isDefaultUnfilteredPage1
+            ? initialIncidents.slice(0, perPage)
+            : localFilteredFallback.slice((page - 1) * perPage, page * perPage));
 
     const effectiveTotal =
-        data?.total ?? (isDefaultUnfilteredPage1 ? fallbackTotal : 0);
+        data?.total ?? (isDefaultUnfilteredPage1 ? fallbackTotal : localFilteredFallback.length);
 
     const effectiveOverallTotal = data?.overall_total ?? fallbackTotal;
     const effectiveCurrentPage = data?.current_page ?? page;

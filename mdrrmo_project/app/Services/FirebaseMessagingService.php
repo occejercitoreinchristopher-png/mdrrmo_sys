@@ -206,7 +206,7 @@ class FirebaseMessagingService
             }
         }
 
-        $cleanData['channelId'] = 'emergency_dispatch';
+        $cleanData['channelId'] = 'emergency_dispatch_v3';
 
         $payload = [
             'message' => [
@@ -219,12 +219,11 @@ class FirebaseMessagingService
                 'android' => [
                     'priority' => 'high',
                     'notification' => [
-                        'channel_id' => 'emergency_dispatch',
+                        'channel_id' => 'emergency_dispatch_v3',
                         'sound' => 'alarm',
                         'default_vibrate_timings' => true,
                         'notification_priority' => 'PRIORITY_MAX',
                         'visibility' => 'PUBLIC',
-                        'click_action' => 'OPEN_DISPATCH',
                     ],
                 ],
             ],

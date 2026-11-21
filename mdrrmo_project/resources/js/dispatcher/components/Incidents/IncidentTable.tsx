@@ -121,7 +121,8 @@ export default function IncidentTable({
     const [assigningIncident, setAssigningIncident] = useState<any | null>(null);
     const [phoneCallModalOpen, setPhoneCallModalOpen] = useState(false);
 
-    // Archive / History horizontal multi-select filtering states: Category, Chief Complaint, Month, Time, Barangay
+    // Archive / History horizontal multi-select filtering states: Year, Category, Chief Complaint, Month, Time, Barangay
+    const [selectedYears, setSelectedYears] = useState<string[]>([]);
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
     const [selectedIncidents, setSelectedIncidents] = useState<string[]>([]);
     const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
@@ -196,6 +197,7 @@ export default function IncidentTable({
         enabled: statusFilter === 'history',
         categories: selectedCategories,
         incidents: selectedIncidents,
+        years: selectedYears,
         months: selectedMonths,
         times: selectedTimes,
         barangays: selectedZones,
@@ -363,8 +365,33 @@ export default function IncidentTable({
         return Array.from(set).sort();
     }, [availableBarangays, archiveDataset]);
 
+    // Available Years (dynamically extracted from archived dataset + recent years)
+    const availableYears = useMemo(() => {
+        const yearsSet = new Set<string>();
+        const curY = new Date().getFullYear();
+        yearsSet.add(curY.toString());
+
+        (archiveDataset || []).forEach((row: any) => {
+            const rawDate = row.reported_at || row.created_at || row.incident_date;
+            if (rawDate) {
+                const d = new Date(rawDate);
+                if (!isNaN(d.getTime())) {
+                    yearsSet.add(d.getFullYear().toString());
+                }
+            }
+        });
+
+        // Ensure at least past 3 years are present for easy historical lookup
+        for (let y = curY - 3; y <= curY; y++) {
+            yearsSet.add(y.toString());
+        }
+
+        return Array.from(yearsSet).sort((a, b) => Number(b) - Number(a));
+    }, [archiveDataset]);
+
     // Check if any filters are active
     const hasActiveFilters = 
+        selectedYears.length > 0 ||
         selectedCategories.length > 0 || 
         selectedIncidents.length > 0 || 
         selectedMonths.length > 0 || 
@@ -496,6 +523,7 @@ export default function IncidentTable({
     };
 
     const handleResetFilters = () => {
+        setSelectedYears([]);
         setSelectedCategories([]);
         setSelectedIncidents([]);
         setSelectedMonths([]);
@@ -956,11 +984,23 @@ export default function IncidentTable({
                             </div>
                         )}
 
-                        {/* HORIZONTAL MULTI-SELECT FILTER ROW: Aligned to Table Columns (Date/Month, Time, Barangay, Category, Chief Complaint) */}
+                        {/* HORIZONTAL MULTI-SELECT FILTER ROW: Aligned to Table Columns (Year, Month, Time, Barangay, Category, Chief Complaint) */}
                         <div className="px-4 py-3 bg-slate-50/70 dark:bg-white/[0.02] border-b border-slate-200/80 dark:border-white/10">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                                 
-                                {/* 1. Month (Multi-Select - aligns with Date & Time column) */}
+                                {/* 1. Year (Multi-Select - aligns with Date & Time column) */}
+                                <div>
+                                    <MultiSelectFilterCombobox
+                                        values={selectedYears}
+                                        onChange={setSelectedYears}
+                                        options={availableYears.map((y) => ({ value: y, label: y }))}
+                                        allLabel="All Years"
+                                        searchable={true}
+                                        searchPlaceholder="Search year..."
+                                    />
+                                </div>
+
+                                {/* 2. Month (Multi-Select - aligns with Date & Time column) */}
                                 <div>
                                     <MultiSelectFilterCombobox
                                         values={selectedMonths}
@@ -972,7 +1012,7 @@ export default function IncidentTable({
                                     />
                                 </div>
 
-                                {/* 2. Time (Multi-Select - aligns with Date & Time column) */}
+                                {/* 3. Time (Multi-Select - aligns with Date & Time column) */}
                                 <div>
                                     <MultiSelectFilterCombobox
                                         values={selectedTimes}
@@ -983,7 +1023,7 @@ export default function IncidentTable({
                                     />
                                 </div>
 
-                                {/* 3. Barangay (Multi-Select - aligns with Barangay column) */}
+                                {/* 4. Barangay (Multi-Select - aligns with Barangay column) */}
                                 <div>
                                     <MultiSelectFilterCombobox
                                         values={selectedZones}
@@ -998,7 +1038,7 @@ export default function IncidentTable({
                                     />
                                 </div>
 
-                                {/* 4. Category (Multi-Select - aligns with Category column) */}
+                                {/* 5. Category (Multi-Select - aligns with Category column) */}
                                 <div>
                                     <MultiSelectFilterCombobox
                                         values={selectedCategories}
@@ -1013,7 +1053,7 @@ export default function IncidentTable({
                                     />
                                 </div>
 
-                                {/* 5. Chief Complaint (Multi-Select Searchable Combobox - aligns with Chief Complaint column) */}
+                                {/* 6. Chief Complaint (Multi-Select Searchable Combobox - aligns with Chief Complaint column) */}
                                 <div>
                                     <MultiSelectFilterCombobox
                                         values={selectedIncidents}
@@ -1037,6 +1077,25 @@ export default function IncidentTable({
                                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mr-1">
                                     Active:
                                 </span>
+
+                                {selectedYears.map((yearVal) => (
+                                    <span
+                                        key={`year-${yearVal}`}
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-500/20"
+                                    >
+                                        <span>Year: {yearVal}</span>
+                                        <button
+                                            onClick={() =>
+                                                setSelectedYears(
+                                                    selectedYears.filter((y) => y !== yearVal),
+                                                )
+                                            }
+                                            className="hover:opacity-75 cursor-pointer"
+                                        >
+                                            <X className="w-3 h-3 ml-0.5" />
+                                        </button>
+                                    </span>
+                                ))}
 
                                 {selectedCategories.map((cat) => (
                                     <span
@@ -1170,7 +1229,7 @@ export default function IncidentTable({
                                     No Incidents Found
                                 </h4>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-                                    No historical incident records match the active Category, Chief Complaint, Month, Time, Barangay, or Search criteria.
+                                    No historical incident records match the active Year, Category, Chief Complaint, Month, Time, Barangay, or Search criteria.
                                 </p>
                                 <Button 
                                     variant="secondary" 
@@ -1353,6 +1412,7 @@ export default function IncidentTable({
                 filters={{
                     categories: selectedCategories,
                     incidents: selectedIncidents,
+                    years: selectedYears,
                     months: selectedMonths,
                     monthLabels: selectedMonths.map(
                         (mv) => MONTH_OPTIONS.find((m) => m.value === mv)?.label || mv,
