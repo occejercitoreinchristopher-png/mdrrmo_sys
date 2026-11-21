@@ -139,9 +139,26 @@ export default function PatientCareRecordDetailsModal({
                                     </span>
                                 )}
                             </div>
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-1">
-                                {record.chief_complaint || 'No Chief Complaint Specified'}
-                            </h3>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5 items-center">
+                                {record.chief_complaint ? (
+                                    record.chief_complaint.split(',').map((c: string, idx: number) => {
+                                        const item = c.trim();
+                                        if (!item) return null;
+                                        return (
+                                            <span
+                                                key={idx}
+                                                className="inline-flex items-center px-2.5 py-1 rounded-lg text-sm font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-900/40"
+                                            >
+                                                {item}
+                                            </span>
+                                        );
+                                    })
+                                ) : (
+                                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                                        No Chief Complaint Specified
+                                    </h3>
+                                )}
+                            </div>
                             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                 <MapPin className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                                 <span>{record.place_of_incident || 'Scene location not specified'}</span>

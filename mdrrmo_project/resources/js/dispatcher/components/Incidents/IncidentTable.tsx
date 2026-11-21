@@ -678,14 +678,72 @@ export default function IncidentTable({
             key: 'chief_complaint',
             header: 'Chief Complaint',
             render: (_, row) => {
-                const complaint = getIncidentChiefComplaint(row);
-                if (!complaint) {
+                const rawComplaint = getIncidentChiefComplaint(row);
+                if (!rawComplaint) {
                     return <span className="text-slate-400 text-xs">—</span>;
                 }
+                const complaints = rawComplaint
+                    .split(',')
+                    .map((s: string) => s.trim())
+                    .filter(Boolean);
+
+                if (complaints.length === 0) {
+                    return <span className="text-slate-400 text-xs">—</span>;
+                }
+
+                if (complaints.length === 1) {
+                    return (
+                        <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200/70 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/40 max-w-[210px] truncate"
+                            title={complaints[0]}
+                        >
+                            {complaints[0]}
+                        </span>
+                    );
+                }
+
                 return (
-                    <span className="text-xs text-slate-700 dark:text-slate-300 truncate block max-w-xs" title={complaint}>
-                        {complaint}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-nowrap" title={rawComplaint}>
+                        <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200/70 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/40 max-w-[140px] truncate"
+                            title={complaints[0]}
+                        >
+                            {complaints[0]}
+                        </span>
+                        {complaints.length === 2 ? (
+                            <span
+                                className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200/70 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/40 max-w-[130px] truncate"
+                                title={complaints[1]}
+                            >
+                                {complaints[1]}
+                            </span>
+                        ) : (
+                            <div className="relative group inline-block">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 cursor-help hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                                    +{complaints.length - 1} more
+                                </span>
+                                {/* Hover Tooltip / Popover */}
+                                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:flex flex-col z-50 min-w-[190px] max-w-xs bg-slate-900 dark:bg-slate-950 text-white text-xs rounded-xl p-2.5 shadow-2xl border border-slate-800 pointer-events-none">
+                                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800">
+                                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                                            Chief Complaints
+                                        </span>
+                                        <span className="text-[10px] font-bold bg-rose-500/20 text-rose-400 px-1.5 py-0.2 rounded-full border border-rose-500/30">
+                                            {complaints.length} Total
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        {complaints.map((c: string, idx: number) => (
+                                            <div key={idx} className="flex items-center gap-1.5 text-slate-200 text-xs">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                                                <span className="truncate">{c}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 );
             },
         },

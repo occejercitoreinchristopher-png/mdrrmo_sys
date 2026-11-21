@@ -383,12 +383,23 @@ export default function IncidentDetails({
                     <div className="space-y-4">
                         {incident.chief_complaint && (
                             <div>
-                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                                    Chief Complaint
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                                    Chief Complaint{incident.chief_complaint.includes(',') ? 's' : ''}
                                 </p>
-                                <p className="text-sm font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-3 rounded-xl border border-rose-200 dark:border-rose-900/30 shadow-sm dark:shadow-none">
-                                    {incident.chief_complaint}
-                                </p>
+                                <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/30">
+                                    {incident.chief_complaint.split(',').map((c: string, idx: number) => {
+                                        const item = c.trim();
+                                        if (!item) return null;
+                                        return (
+                                            <span
+                                                key={idx}
+                                                className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 shadow-sm"
+                                            >
+                                                {item}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         )}
 

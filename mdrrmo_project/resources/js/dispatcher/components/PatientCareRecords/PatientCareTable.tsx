@@ -66,16 +66,57 @@ export default function PatientCareTable({ records = [], pagination = null }: Pa
         {
             key: 'nature_of_call',
             header: 'Nature / Complaint',
-            render: (_, row) => (
-                <div className="space-y-0.5">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-[#F61509] border border-rose-500/20 inline-block">
-                        {toPascalCase(row.nature_of_call || 'Emergency')}
-                    </span>
-                    <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px] capitalize">
-                        {row.chief_complaint ? toPascalCase(row.chief_complaint) : '—'}
-                    </p>
-                </div>
-            ),
+            render: (_, row) => {
+                const complaints = (row.chief_complaint || '')
+                    .split(',')
+                    .map((s: string) => s.trim())
+                    .filter(Boolean);
+
+                return (
+                    <div className="space-y-1">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-[#F61509] border border-rose-500/20 inline-block">
+                            {toPascalCase(row.nature_of_call || 'Emergency')}
+                        </span>
+                        {complaints.length === 0 ? (
+                            <p className="text-xs text-slate-400 dark:text-slate-500">—</p>
+                        ) : complaints.length === 1 ? (
+                            <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px]" title={complaints[0]}>
+                                {toPascalCase(complaints[0])}
+                            </p>
+                        ) : (
+                            <div className="flex items-center gap-1.5 flex-nowrap" title={row.chief_complaint}>
+                                <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate max-w-[130px]">
+                                    {toPascalCase(complaints[0])}
+                                </span>
+                                <div className="relative group inline-block">
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-help hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                                        +{complaints.length - 1} more
+                                    </span>
+                                    {/* Hover Tooltip / Popover */}
+                                    <div className="absolute left-0 bottom-full mb-1.5 hidden group-hover:flex flex-col z-50 min-w-[180px] max-w-xs bg-slate-900 text-white text-xs rounded-xl p-2.5 shadow-2xl border border-slate-800 pointer-events-none">
+                                        <div className="flex items-center justify-between pb-1 mb-1 border-b border-slate-800">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                                                All Complaints
+                                            </span>
+                                            <span className="text-[10px] font-bold bg-rose-500/20 text-rose-400 px-1.5 py-0.2 rounded-full border border-rose-500/30">
+                                                {complaints.length} Total
+                                            </span>
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            {complaints.map((c: string, idx: number) => (
+                                                <div key={idx} className="flex items-center gap-1.5 text-slate-200 text-xs">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                                                    <span className="truncate">{toPascalCase(c)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            },
         },
         {
             key: 'transported',

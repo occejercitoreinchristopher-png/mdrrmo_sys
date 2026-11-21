@@ -437,11 +437,28 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-1">
                                             <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider block">
-                                                Chief Complaint
+                                                Chief Complaint{r.chief_complaint?.includes(',') ? 's' : ''}
                                             </span>
-                                            <p className="text-sm font-bold text-slate-900 dark:text-white capitalize">
-                                                {chiefComplaintDisplay}
-                                            </p>
+                                            {r.chief_complaint ? (
+                                                <div className="flex flex-wrap gap-1.5 mt-1">
+                                                    {r.chief_complaint.split(',').map((c: string, idx: number) => {
+                                                        const item = c.trim();
+                                                        if (!item) return null;
+                                                        return (
+                                                            <span
+                                                                key={idx}
+                                                                className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/70 dark:border-rose-900/40 capitalize"
+                                                            >
+                                                                {toPascalCase(item)}
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm font-bold text-slate-900 dark:text-white capitalize">
+                                                    No Chief Complaint Recorded
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div className="space-y-1">
