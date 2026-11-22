@@ -307,54 +307,87 @@ export default function IncidentCard({
                     </div>
                 )}
 
-                {(incident.incident_status === 'assigned' || incident.incident_status === 'responding') && incident.dispatches?.length > 0 && (
-                    <div className="pt-2 border-t border-slate-200/80 dark:border-white/10 space-y-2">
-                        {/* Assigned Team / Ambulance badge */}
-                        <div className="flex items-center justify-between gap-1 p-2 rounded-xl bg-indigo-500/10 dark:bg-indigo-950/40 border border-indigo-500/20 text-xs">
-                            <div className="flex items-center gap-2 truncate">
-                                <Truck className="w-4 h-4 text-indigo-500 dark:text-indigo-400 shrink-0" />
-                                <div className="truncate">
-                                    <span className="font-bold text-indigo-700 dark:text-indigo-300">
-                                        {incident.dispatches[0].team ? `Unit ${incident.dispatches[0].team}` : 'Response Unit'}
-                                    </span>
-                                    {(incident.dispatches[0].ambulance?.vehicle_name || incident.dispatches[0].ambulance?.plate_number) && (
-                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate font-mono">
-                                            {incident.dispatches[0].ambulance?.vehicle_name || incident.dispatches[0].ambulance?.plate_number}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30 shrink-0">
-                                {incident.dispatches[0].dispatch_status?.replace(/_/g, ' ') || incident.incident_status}
-                            </span>
-                        </div>
+                {(incident.incident_status === 'assigned' || incident.incident_status === 'responding') && incident.dispatches?.length > 0 && (() => {
+                    const activeDispatch = incident.dispatches.find(
+                        (d: any) => !['completed', 'cancelled'].includes(d.dispatch_status)
+                    ) || incident.dispatches[incident.dispatches.length - 1];
 
-                        <div className="flex items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onLocate?.(incident);
-                                }}
-                                className="flex-1 py-1.5 px-3 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                            >
-                                <MapPin className="w-3.5 h-3.5 text-indigo-500" />
-                                Track Run
-                            </button>
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onClick?.();
-                                }}
-                                className="flex-1 py-1.5 px-3 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                            >
-                                <span>Details</span>
-                                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                            </button>
+                    const isCancelled = activeDispatch?.dispatch_status === 'cancelled';
+
+                    return (
+                        <div className="pt-2 border-t border-slate-200/80 dark:border-white/10 space-y-2">
+                            {/* Assigned Team / Ambulance badge */}
+                            <div className={clsx(
+                                "flex items-center justify-between gap-1 p-2 rounded-xl border text-xs",
+                                isCancelled
+                                    ? "bg-rose-500/10 dark:bg-rose-950/40 border-rose-500/30"
+                                    : "bg-indigo-500/10 dark:bg-indigo-950/40 border-indigo-500/20"
+                            )}>
+                                <div className="flex items-center gap-2 truncate">
+                                    <Truck className={clsx("w-4 h-4 shrink-0", isCancelled ? "text-rose-500" : "text-indigo-500 dark:text-indigo-400")} />
+                                    <div className="truncate">
+                                        <span className={clsx("font-bold", isCancelled ? "text-rose-700 dark:text-rose-300" : "text-indigo-700 dark:text-indigo-300")}>
+                                            {activeDispatch?.team ? `Unit ${activeDispatch.team}` : 'Response Unit'}
+                                        </span>
+                                        {(activeDispatch?.ambulance?.vehicle_name || activeDispatch?.ambulance?.plate_number) && (
+                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate font-mono">
+                                                {activeDispatch.ambulance?.vehicle_name || activeDispatch.ambulance?.plate_number}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <span className={clsx(
+                                    "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border shrink-0",
+                                    isCancelled
+                                        ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                                        : "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30"
+                                )}>
+                                    {activeDispatch?.dispatch_status?.replace(/_/g, ' ') || incident.incident_status}
+                                </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                {isCancelled ? (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onAssign?.(incident);
+                                        }}
+                                        className="flex-1 py-1.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white border border-rose-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                                        title="Assign a new ambulance unit to replace cancelled dispatch"
+                                    >
+                                        <Truck className="w-3.5 h-3.5" />
+                                        Reassign Unit
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onLocate?.(incident);
+                                        }}
+                                        className="flex-1 py-1.5 px-3 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                                    >
+                                        <MapPin className="w-3.5 h-3.5 text-indigo-500" />
+                                        Track Run
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onClick?.();
+                                    }}
+                                    className="flex-1 py-1.5 px-3 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                                >
+                                    <span>Details</span>
+                                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                )}
+                    );
+                })()}
             </div>
         </div>
     );
