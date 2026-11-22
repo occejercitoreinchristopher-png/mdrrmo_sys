@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useContext, useRef, useMemo } from 'react';
 import { router } from '@inertiajs/react';
 import { 
-    AlertCircle, MapPin, Truck, User as UserIcon, Clock, Search, ShieldAlert, 
+    AlertCircle, MapPin, Truck, User as UserIcon, Users, Clock, Search, ShieldAlert, 
     Activity, Stethoscope, FileText, ChevronDown, Maximize2, X, CheckCircle, 
     XCircle, Compass, Navigation, AlertTriangle, ExternalLink, Radio, Shield, 
     Flame, Car, Phone, Eye, Sparkles, Filter, Check, HeartPulse, Send, Building2,
@@ -36,6 +36,7 @@ export default function ActiveDispatchWorkspace({
     const [selectedDispatch, setSelectedDispatch] = useState<any | null>(null);
     const [activeTab, setActiveTab] = useState('incident');
     const [isExpanded, setIsExpanded] = useState(false);
+    const [isOverlayMinimized, setIsOverlayMinimized] = useState(false);
     const [assigningIncident, setAssigningIncident] = useState<any | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
     const { activeAlarm, acknowledgeAlarm } = useContext(AlarmContext);
@@ -260,6 +261,7 @@ export default function ActiveDispatchWorkspace({
         if (!dispatch) {
             setSelectedDispatch(null);
             setIsExpanded(false);
+            setIsOverlayMinimized(false);
             return;
         }
 
@@ -267,9 +269,11 @@ export default function ActiveDispatchWorkspace({
             // Clicking the active responder again clears selection
             setSelectedDispatch(null);
             setIsExpanded(false);
+            setIsOverlayMinimized(false);
         } else {
             setSelectedDispatch(dispatch);
             setIsExpanded(false);
+            setIsOverlayMinimized(false);
             setActiveTab('incident');
         }
     };
@@ -974,6 +978,18 @@ export default function ActiveDispatchWorkspace({
                                                         </div>
                                                     )}
                                                 </div>
+
+                                                {/* Co-responding ambulances indicator if multiple units assigned to same incident */}
+                                                {(() => {
+                                                    const coResponders = filtered.filter(d => d.incident_id === dispatch.incident_id && d.id !== dispatch.id);
+                                                    if (coResponders.length === 0) return null;
+                                                    return (
+                                                        <div className="mt-2 pt-2 border-t border-slate-100 dark:border-white/5 flex items-center gap-1.5 text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold bg-indigo-50/70 dark:bg-indigo-950/30 px-2 py-1 rounded-lg border border-indigo-200/60 dark:border-indigo-800/30">
+                                                            <Users className="w-3 h-3 shrink-0 text-indigo-500" />
+                                                            <span className="truncate">Co-responding: {coResponders.map(c => c.ambulance?.plate_number || `Unit #${c.id}`).join(', ')}</span>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
                                         </div>
                                     );
@@ -1082,146 +1098,187 @@ export default function ActiveDispatchWorkspace({
 
                     {/* Floating Dispatch Overlay (Bottom Right) */}
                     {selectedDispatch && (
-                        <div className={`absolute bottom-5 right-5 z-20 transition-all duration-300 ease-out flex flex-col bg-white/95 dark:bg-[#090e1a]/95 backdrop-blur-2xl border border-slate-200/80 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden pointer-events-auto ${
-                            isExpanded ? 'w-[540px] sm:w-[580px] h-[620px] max-h-[85vh]' : 'w-[420px] sm:w-[450px] h-auto max-h-[85vh]'
-                        }`}>
-                            
-                            {/* Compact Summary Header (Always visible) */}
-                            <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-white/10 shrink-0 bg-slate-50/70 dark:bg-white/[0.02]">
-                                {/* Top Meta Row: ID, Priority, Status Badge & Close */}
-                                <div className="flex items-center justify-between gap-2 mb-2.5">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="font-mono text-xs font-bold text-[#F61509] bg-[#F61509]/10 px-2 py-0.5 rounded-md border border-[#F61509]/20">
-                                            #{selectedDispatch.id}
-                                        </span>
-                                        {selectedDispatch.incident?.priority && (
-                                            <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${getPriorityColor(selectedDispatch.incident.priority)}`}>
-                                                {selectedDispatch.incident.priority}
-                                            </span>
-                                        )}
-                                        <StatusBadge status={selectedDispatch.dispatch_status} size="xs" />
-                                    </div>
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                        {(() => {
-                                            const conn = getConnectionStatus(selectedDispatch);
-                                            return (
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1.5 ${conn.color}`}>
-                                                    {conn.isLive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                                                    {conn.status === 'stale' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
-                                                    {conn.isOffline && <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
-                                                    <span>{conn.status === 'online' ? 'Live' : (conn.status === 'stale' ? 'Stale' : `Offline (${Math.floor(conn.elapsedSeconds / 60)}m)`)}</span>
-                                                </span>
-                                            );
-                                        })()}
-                                        <button 
-                                            onClick={() => {
-                                                setSelectedDispatch(null);
-                                                setIsExpanded(false);
-                                            }}
-                                            className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                                            title="Close overlay"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Incident Title & Location */}
-                                <div className="mb-3">
-                                    <h3 className="text-slate-900 dark:text-white font-bold flex items-center gap-2 text-base leading-snug">
-                                        <AlertCircle className="w-4 h-4 text-[#F61509] shrink-0" />
-                                        <span className="truncate">{selectedDispatch.incident?.incident_type?.name || 'Emergency Incident'}</span>
-                                    </h3>
-                                    <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                        <span className="truncate">
-                                            {(typeof selectedDispatch.incident?.barangay === 'object' 
-                                                ? selectedDispatch.incident?.barangay?.barangay_name || selectedDispatch.incident?.barangay?.name 
-                                                : selectedDispatch.incident?.barangay) 
-                                                || selectedDispatch.incident?.place_of_incident 
-                                                || 'Opol, Misamis Oriental'}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Unit & Telemetry Status Box */}
-                                <div className="flex items-center justify-between text-xs mb-3 p-2.5 rounded-xl bg-slate-100/80 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/5">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-1.5">
-                                            <Truck className="w-4 h-4 text-slate-400" />
-                                            <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                                                {selectedDispatch.ambulance?.plate_number || 'Unit Unassigned'}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5 border-l border-slate-200 dark:border-white/10 pl-3">
-                                            <UserIcon className="w-3.5 h-3.5 text-slate-400" />
-                                            <span className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[130px]" title={selectedDispatch.driver ? `Driver: ${selectedDispatch.driver.first_name} ${selectedDispatch.driver.last_name || ''}` : 'Driver: N/A'}>
-                                                {selectedDispatch.driver?.first_name ? `${selectedDispatch.driver.first_name} ${selectedDispatch.driver.last_name || ''}`.trim() : 'Driver: N/A'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    {selectedDispatch.dispatch_status === 'arrived_on_scene' ? (
-                                        <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-lg text-xs">
-                                            <CheckCircle className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                                            <span>On Scene</span>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg text-xs">
-                                            <Clock className="w-3 h-3" />
-                                            <span>
-                                                {routeTelemetry[selectedDispatch.id]?.formattedEta 
-                                                    ? `ETA ${routeTelemetry[selectedDispatch.id].formattedEta}` 
-                                                    : 'ETA Live'}
-                                            </span>
-                                            {routeTelemetry[selectedDispatch.id]?.formattedDistance && (
-                                                <span className="text-[10px] text-amber-500/80 border-l border-amber-500/30 pl-1">
-                                                    {routeTelemetry[selectedDispatch.id].formattedDistance}
-                                                </span>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                                
-                                {/* Offline Notice in Floating Overlay */}
-                                {(() => {
-                                    const conn = getConnectionStatus(selectedDispatch);
-                                    if (conn.isOffline && conn.status === 'offline') {
-                                        const mins = Math.floor(conn.elapsedSeconds / 60);
-                                        return (
-                                            <div className="mb-3 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-xs text-rose-500 font-medium">
-                                                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                                                <div className="leading-snug">
-                                                    <span className="font-semibold">Responder Device Offline ({mins}m ago)</span>
-                                                    <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                                        Local mission cached on unit. Offline mode active & will sync automatically on reconnect.
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                })()}
-
-                                {/* Action Buttons ("Easy to Access") */}
-                                <div className="grid grid-cols-2 gap-2">
+                        isOverlayMinimized ? (
+                            /* 1. Tactical Floating Capsule (Minimized Pill Mode - Zero Obstruction) */
+                            <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2 px-3 py-1.5 bg-white/95 dark:bg-[#090e1a]/95 backdrop-blur-xl border border-slate-200/80 dark:border-white/10 rounded-full shadow-2xl pointer-events-auto text-xs animate-in fade-in duration-200">
+                                <span className="w-2 h-2 rounded-full bg-[#F61509] animate-pulse" />
+                                <span className="font-mono font-bold text-[#F61509]">#{selectedDispatch.id}</span>
+                                <span className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[120px]">
+                                    {selectedDispatch.incident?.incident_type?.name || 'Mission'}
+                                </span>
+                                <span className="text-slate-300 dark:text-slate-700">•</span>
+                                <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                                    {selectedDispatch.ambulance?.plate_number || 'Unit'}
+                                </span>
+                                {routeTelemetry[selectedDispatch.id]?.formattedEta && (
+                                    <span className="text-amber-600 dark:text-amber-400 font-bold text-[11px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                        ETA {routeTelemetry[selectedDispatch.id].formattedEta}
+                                    </span>
+                                )}
+                                <div className="flex items-center gap-1 border-l border-slate-200 dark:border-white/10 pl-1.5 ml-0.5">
                                     <button 
-                                        onClick={() => setIsExpanded(!isExpanded)}
-                                        className="py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200/80 dark:border-white/10 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-[0.98]"
-                                        title={isExpanded ? 'Collapse mission tabs' : 'View full mission tabs, crew list, and logs'}
+                                        type="button"
+                                        onClick={() => setIsOverlayMinimized(false)} 
+                                        className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded transition-colors cursor-pointer"
+                                        title="Expand mission card"
                                     >
-                                        {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                                        <span>{isExpanded ? 'Collapse Details' : 'Mission Details'}</span>
+                                        <ChevronUp className="w-3.5 h-3.5" />
                                     </button>
                                     <button 
-                                        onClick={() => router.get(`/dispatcher/incidents?incident_id=${selectedDispatch.incident_id}`)}
-                                        className="py-2 px-3 bg-slate-100/60 hover:bg-slate-200/80 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] border border-slate-200/80 dark:border-white/10 rounded-xl text-xs text-slate-700 dark:text-slate-300 font-medium transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-[0.98]"
-                                        title="Open complete incident record in Incidents board"
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedDispatch(null);
+                                            setIsExpanded(false);
+                                        }} 
+                                        className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded transition-colors cursor-pointer"
+                                        title="Close"
                                     >
-                                        <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                                        <span>Incident File</span>
+                                        <X className="w-3.5 h-3.5" />
                                     </button>
                                 </div>
                             </div>
+                        ) : (
+                            /* 2. Compact Tactical HUD Card (Normal & Expanded Mode) */
+                            <div className={`absolute bottom-4 right-4 z-20 transition-all duration-300 ease-out flex flex-col bg-white/95 dark:bg-[#090e1a]/95 backdrop-blur-2xl border border-slate-200/80 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden pointer-events-auto ${
+                                isExpanded ? 'w-[440px] sm:w-[480px] h-[580px] max-h-[80vh]' : 'w-[310px] sm:w-[330px] h-auto'
+                            }`}>
+                                
+                                {/* Compact Summary Header */}
+                                <div className="p-3 border-b border-slate-200/80 dark:border-white/10 shrink-0 bg-slate-50/70 dark:bg-white/[0.02]">
+                                    {/* Top Meta Row: ID, Priority, Status Badge & Close */}
+                                    <div className="flex items-center justify-between gap-1.5 mb-2">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="font-mono text-[11px] font-bold text-[#F61509] bg-[#F61509]/10 px-1.5 py-0.5 rounded border border-[#F61509]/20">
+                                                #{selectedDispatch.id}
+                                            </span>
+                                            {selectedDispatch.incident?.priority && (
+                                                <span className={`text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border ${getPriorityColor(selectedDispatch.incident.priority)}`}>
+                                                    {selectedDispatch.incident.priority}
+                                                </span>
+                                            )}
+                                            <StatusBadge status={selectedDispatch.dispatch_status} size="xs" />
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            {(() => {
+                                                const conn = getConnectionStatus(selectedDispatch);
+                                                return (
+                                                    <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border flex items-center gap-1 ${conn.color}`}>
+                                                        {conn.isLive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                                                        {conn.status === 'stale' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                                                        {conn.isOffline && <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
+                                                        <span>{conn.status === 'online' ? 'Live' : (conn.status === 'stale' ? 'Stale' : 'Offline')}</span>
+                                                    </span>
+                                                );
+                                            })()}
+                                            <button 
+                                                type="button"
+                                                onClick={() => setIsOverlayMinimized(true)}
+                                                className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                                                title="Minimize to floating pill"
+                                            >
+                                                <ChevronDown className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedDispatch(null);
+                                                    setIsExpanded(false);
+                                                }}
+                                                className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                                                title="Close overlay"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Incident Title & Location */}
+                                    <div className="mb-2">
+                                        <h3 className="text-slate-900 dark:text-white font-bold flex items-center gap-1.5 text-xs leading-snug">
+                                            <AlertCircle className="w-3.5 h-3.5 text-[#F61509] shrink-0" />
+                                            <span className="truncate">{selectedDispatch.incident?.incident_type?.name || 'Emergency Incident'}</span>
+                                        </h3>
+                                        <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                            <span className="truncate">
+                                                {(typeof selectedDispatch.incident?.barangay === 'object' 
+                                                    ? selectedDispatch.incident?.barangay?.barangay_name || selectedDispatch.incident?.barangay?.name 
+                                                    : selectedDispatch.incident?.barangay) 
+                                                    || selectedDispatch.incident?.place_of_incident 
+                                                    || 'Opol, Misamis Oriental'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Unit & Telemetry Status Box */}
+                                    <div className="flex items-center justify-between text-xs mb-2 p-2 rounded-xl bg-slate-100/80 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/5">
+                                        <div className="flex items-center gap-1.5">
+                                            <Truck className="w-3.5 h-3.5 text-slate-400" />
+                                            <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-xs">
+                                                {selectedDispatch.ambulance?.plate_number || 'Unit Unassigned'}
+                                            </span>
+                                        </div>
+                                        {selectedDispatch.dispatch_status === 'arrived_on_scene' ? (
+                                            <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded text-[11px]">
+                                                <CheckCircle className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                                <span>On Scene</span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded text-[11px]">
+                                                <Clock className="w-3 h-3" />
+                                                <span>
+                                                    {routeTelemetry[selectedDispatch.id]?.formattedEta 
+                                                        ? `ETA ${routeTelemetry[selectedDispatch.id].formattedEta}` 
+                                                        : 'ETA Live'}
+                                                </span>
+                                                {routeTelemetry[selectedDispatch.id]?.formattedDistance && (
+                                                    <span className="text-[10px] text-amber-500/80 border-l border-amber-500/30 pl-1">
+                                                        {routeTelemetry[selectedDispatch.id].formattedDistance}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    {/* Offline Notice in Floating Overlay */}
+                                    {(() => {
+                                        const conn = getConnectionStatus(selectedDispatch);
+                                        if (conn.isOffline && conn.status === 'offline') {
+                                            const mins = Math.floor(conn.elapsedSeconds / 60);
+                                            return (
+                                                <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-start gap-1.5 text-xs text-rose-500 font-medium">
+                                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                                    <span className="text-[11px] leading-snug">
+                                                        Responder Offline ({mins}m ago). Local mission cached.
+                                                    </span>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
+
+                                    {/* Action Buttons ("Easy to Access") */}
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        <button 
+                                            type="button"
+                                            onClick={() => setIsExpanded(!isExpanded)}
+                                            className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200/80 dark:border-white/10 rounded-xl text-[11px] text-slate-800 dark:text-slate-200 font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
+                                            title={isExpanded ? 'Collapse mission tabs' : 'View full mission tabs'}
+                                        >
+                                            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <Maximize2 className="w-3 h-3 text-blue-500" />}
+                                            <span>{isExpanded ? 'Hide Tabs' : 'Mission Tabs'}</span>
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            onClick={() => router.get(`/dispatcher/incidents?incident_id=${selectedDispatch.incident_id}`)}
+                                            className="py-1.5 px-2 bg-slate-100/60 hover:bg-slate-200/80 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] border border-slate-200/80 dark:border-white/10 rounded-xl text-[11px] text-slate-700 dark:text-slate-300 font-medium transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
+                                            title="Open complete incident record"
+                                        >
+                                            <ExternalLink className="w-3 h-3 text-slate-400" />
+                                            <span>Incident File</span>
+                                        </button>
+                                    </div>
+                                </div>
 
                             {/* Expanded Tabbed Content */}
                             {isExpanded && (
@@ -1363,6 +1420,7 @@ export default function ActiveDispatchWorkspace({
                             </div>
                             )}
                         </div>
+                        )
                     )}
                 </div>
 

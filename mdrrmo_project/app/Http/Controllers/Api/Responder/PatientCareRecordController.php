@@ -381,12 +381,18 @@ class PatientCareRecordController extends Controller
                 'last_location_updated_at' => now(),
             ]);
 
-            // Mark the overall incident as resolved and ensure authoritative category alignment with responder's PCR
+            // Mark the overall incident as resolved if all dispatches for this incident are completed
             if ($dispatch->incident) {
-                $incidentUpdates = [
-                    'incident_status' => 'resolved',
-                    'resolved_at' => $dispatch->incident->resolved_at ?? now(),
-                ];
+                $otherActiveCount = \App\Models\Dispatch::where('incident_id', $dispatch->incident_id)
+                    ->where('id', '!=', $dispatch->id)
+                    ->whereNotIn('dispatch_status', ['completed', 'cancelled'])
+                    ->count();
+
+                $incidentUpdates = [];
+                if ($otherActiveCount === 0) {
+                    $incidentUpdates['incident_status'] = 'resolved';
+                    $incidentUpdates['resolved_at'] = $dispatch->incident->resolved_at ?? now();
+                }
 
                 $complaint = trim($pcr->clinical_chief_complaint ?? $pcr->chief_complaint ?? '');
                 if (!empty($complaint)) {
@@ -397,7 +403,9 @@ class PatientCareRecordController extends Controller
                     }
                 }
 
-                $dispatch->incident->update($incidentUpdates);
+                if (!empty($incidentUpdates)) {
+                    $dispatch->incident->update($incidentUpdates);
+                }
             }
 
             if ($dispatch->ambulance_id) {

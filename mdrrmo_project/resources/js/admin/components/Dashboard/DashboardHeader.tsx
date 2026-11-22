@@ -35,7 +35,7 @@ export default function DashboardHeader() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-6 border-b border-slate-200/80 dark:border-white/10">
             <div>
                 <div className="flex items-center gap-2 mb-1.5">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-red-600/10 text-red-600 dark:text-red-400 border border-red-500/25">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wider uppercase bg-red-600/10 text-red-600 dark:text-red-400 border border-red-500/25">
                         <Shield className="w-3 h-3 text-red-500" />
                         Executive Admin Command
                     </span>
@@ -44,13 +44,13 @@ export default function DashboardHeader() {
                         Municipality of Opol
                     </span>
                 </div>
-                <h1 suppressHydrationWarning className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                <h1 suppressHydrationWarning className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
                     {greeting},{' '}
                     <span className="text-red-600 dark:text-red-500">
                         {adminName}
                     </span>
                 </h1>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                     Command-level municipal emergency monitoring, operational fleet analytics, and community governance.
                 </p>
             </div>

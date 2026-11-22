@@ -134,11 +134,11 @@ export default function StatusBadge({
     }
 
     const sizeClasses = {
-        xs: 'px-1.5 py-0.5 text-[10px] gap-1',
-        sm: 'px-2 py-0.5 text-xs gap-1',
-        md: 'px-2.5 py-1 text-xs gap-1.5',
-        lg: 'px-3 py-1.5 text-sm gap-2',
-    }[size] || 'px-2.5 py-1 text-xs gap-1.5';
+        xs: 'px-2 py-0.5 text-[11px] font-semibold gap-1',
+        sm: 'px-2.5 py-0.5 text-[11px] font-semibold gap-1',
+        md: 'px-2.5 py-1 text-xs font-semibold gap-1.5',
+        lg: 'px-3 py-1 text-xs sm:text-[13px] font-semibold gap-2',
+    }[size] || 'px-2.5 py-1 text-xs font-semibold gap-1.5';
 
     const iconSizes = {
         xs: 'w-2.5 h-2.5',

@@ -605,7 +605,7 @@ export default function LiveMonitoringMap({
                 const camera = mapRef.current.cameraForBounds(
                     [[minLng, minLat], [maxLng, maxLat]],
                     {
-                        padding: { top: 90, bottom: 120, left: 90, right: 90 },
+                        padding: { top: 90, bottom: 200, left: 80, right: 140 },
                         maxZoom: 15
                     }
                 );
@@ -629,7 +629,7 @@ export default function LiveMonitoringMap({
             mapRef.current.fitBounds(
                 [[minLng, minLat], [maxLng, maxLat]],
                 {
-                    padding: { top: 90, bottom: 120, left: 90, right: 90 },
+                    padding: { top: 90, bottom: 200, left: 80, right: 140 },
                     duration: 1800,
                     essential: true,
                     maxZoom: 15

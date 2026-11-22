@@ -771,17 +771,28 @@ export default function IncidentDetails({
                     )}
 
                     {(incident.incident_status === 'assigned' || incident.incident_status === 'responding') && (
-                        <div>
+                        <div className="flex gap-2">
                             <Button
                                 variant="secondary"
-                                className="w-full"
+                                className="flex-1"
                                 onClick={() => {
                                     router.get(`/dispatcher/dispatches?incident_id=${incident.id}`);
                                 }}
                             >
                                 <Truck className="w-4 h-4 mr-1.5" />
-                                View Active Dispatch
+                                View Live Map
                             </Button>
+                            {onAssignUnit && (
+                                <Button
+                                    variant="primary"
+                                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md text-xs font-bold"
+                                    onClick={() => onAssignUnit(incident)}
+                                    title="Deploy an additional ambulance or backup team to this incident"
+                                >
+                                    <Send className="w-4 h-4 mr-1.5" />
+                                    + Add Unit
+                                </Button>
+                            )}
                         </div>
                     )}
                 </div>

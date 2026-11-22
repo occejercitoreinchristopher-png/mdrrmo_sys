@@ -72,25 +72,29 @@ function NavItem({
             }}
             title={collapsed ? label : undefined}
             className={clsx(
-                'flex items-center rounded-xl text-xs sm:text-sm transition-all duration-200 group relative text-left cursor-pointer select-none',
+                'flex items-center rounded-xl text-xs sm:text-sm transition-all duration-150 group relative text-left cursor-pointer select-none',
                 collapsed
                     ? 'w-10 h-10 mx-auto justify-center'
-                    : 'w-full gap-3 px-3 py-2.5',
+                    : 'w-full gap-3 px-3.5 py-2.5',
                 active
-                    ? 'bg-[#F61509] text-white shadow-md shadow-[#F61509]/25 font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-white/8 dark:hover:text-white font-medium',
+                    ? 'bg-[#F61509] text-white shadow-sm font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-white font-medium',
             )}
         >
-            {active && !collapsed && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white/80 rounded-r-full" />
-            )}
             <Icon
                 className={clsx(
-                    'w-4 h-4 flex-shrink-0 transition-transform duration-200',
-                    active ? 'scale-110 text-white' : 'text-slate-400 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white group-hover:scale-105',
+                    'w-4 h-4 shrink-0 transition-colors',
+                    active
+                        ? 'text-white'
+                        : 'text-slate-400 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white',
                 )}
             />
-            {!collapsed && <span className="truncate">{label}</span>}
+
+            {!collapsed && (
+                <span className={clsx('truncate text-[14px]', active ? 'font-semibold text-white' : 'font-medium')}>
+                    {label}
+                </span>
+            )}
 
             {/* Tooltip on hover when collapsed */}
             {collapsed && (
@@ -117,11 +121,11 @@ function NavGroup({
     index: number;
 }) {
     return (
-        <div className={clsx(collapsed ? 'mb-2' : 'mb-5')}>
+        <div className={clsx(collapsed ? 'mb-2' : 'mb-4')}>
             {collapsed ? (
                 index > 0 && <div className="w-8 h-px bg-slate-200/80 dark:border-white/10 mx-auto my-2" />
             ) : (
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-widest px-3 mb-2">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] px-3 mb-1.5">
                     {group}
                 </p>
             )}
@@ -145,7 +149,7 @@ export default function AdminSidebar({ collapsed, onToggle }: { collapsed: boole
     return (
         <aside
             className={clsx(
-                'h-full flex flex-col bg-white/95 dark:bg-[#090e1a]/95 backdrop-blur-2xl border-r border-slate-200/80 dark:border-white/10 transition-all duration-300 ease-in-out relative flex-shrink-0 shadow-[4px_0_24px_-4px_rgba(0,0,0,0.02)] dark:shadow-none z-30',
+                'h-full flex flex-col bg-white/95 dark:bg-[#080d19]/95 backdrop-blur-2xl border-r border-slate-200/80 dark:border-white/10 transition-all duration-300 ease-in-out relative flex-shrink-0 shadow-[4px_0_24px_-4px_rgba(0,0,0,0.02)] dark:shadow-none z-30',
                 collapsed ? 'w-[72px]' : 'w-64',
             )}
         >
@@ -153,11 +157,11 @@ export default function AdminSidebar({ collapsed, onToggle }: { collapsed: boole
             <div
                 className={clsx(
                     'h-16 flex items-center border-b border-slate-200/80 dark:border-white/10 flex-shrink-0',
-                    collapsed ? 'justify-center px-2' : 'justify-between px-4',
+                    collapsed ? 'justify-center px-2' : 'justify-between px-3.5',
                 )}
             >
-                <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="w-9 h-9 flex items-center justify-center flex-shrink-0">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent border border-red-500/20 p-1 flex items-center justify-center flex-shrink-0 shadow-xs">
                         <img src="/images/opol-logo.png" alt="MDRRMO Opol" className="w-full h-full object-contain drop-shadow-sm" />
                     </div>
                     {!collapsed && (
@@ -166,13 +170,16 @@ export default function AdminSidebar({ collapsed, onToggle }: { collapsed: boole
                                 <h1 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
                                     MDRRMO
                                 </h1>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F61509]/10 text-[#F61509] uppercase tracking-wider">
+                                <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-md bg-[#F61509] text-white uppercase tracking-wider shadow-xs">
                                     HQ
                                 </span>
                             </div>
-                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold tracking-wider uppercase truncate">
-                                Executive Admin
-                            </p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold tracking-wider uppercase truncate">
+                                    Executive Admin
+                                </p>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -182,7 +189,7 @@ export default function AdminSidebar({ collapsed, onToggle }: { collapsed: boole
                     <button
                         type="button"
                         onClick={onToggle}
-                        className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10 transition-colors cursor-pointer"
                         title="Collapse sidebar"
                     >
                         <PanelLeftClose className="w-4 h-4" />

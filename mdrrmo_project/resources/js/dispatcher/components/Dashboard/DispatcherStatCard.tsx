@@ -196,25 +196,25 @@ export default function DispatcherStatCard({
             <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between">
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
                             {title}
                         </p>
                         {loading ? (
                             <div className="h-8 w-20 bg-slate-200 dark:bg-white/10 rounded-lg animate-pulse mt-2" />
                         ) : (
                             <div className="flex items-baseline gap-1.5 mt-1.5">
-                                <p className={clsx('text-2xl sm:text-3xl font-extrabold tabular-nums tracking-tight', c.number)}>
+                                <p className={clsx('text-2xl sm:text-3xl font-bold tabular-nums tracking-tight', c.number)}>
                                     {displayValue}
                                 </p>
                                 {valueSuffix && (
-                                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-400">
+                                    <span className="text-xs font-medium text-slate-400 dark:text-slate-400">
                                         {valueSuffix}
                                     </span>
                                 )}
                             </div>
                         )}
                         {highlightName && (
-                            <p className="text-xs font-bold text-slate-800 dark:text-white truncate mt-1 capitalize">
+                            <p className="text-xs font-semibold text-slate-800 dark:text-white truncate mt-1 capitalize">
                                 {highlightName}
                             </p>
                         )}
@@ -235,7 +235,7 @@ export default function DispatcherStatCard({
                 {(subtitle || (trendLabel !== undefined && trend !== null && trend !== undefined)) && (
                     <div className="flex items-center justify-between gap-2 mt-3.5 pt-3 border-t border-slate-100 dark:border-white/[0.06]">
                         {subtitle ? (
-                            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+                            <span className="text-xs font-normal text-slate-500 dark:text-slate-400 truncate">
                                 {subtitle}
                             </span>
                         ) : (

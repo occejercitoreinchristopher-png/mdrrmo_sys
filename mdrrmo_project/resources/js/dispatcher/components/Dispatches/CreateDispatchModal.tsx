@@ -181,6 +181,11 @@ export default function CreateDispatchModal({
     const selectedPersonnelCount = (selectedDriverId ? 1 : 0) + selectedEmtIds.length;
     const hasAtLeastOneMember = selectedPersonnelCount >= 1;
     const isFormValid = Boolean(ambulanceId && team && hasAtLeastOneMember);
+    const isAdditionalUnit = Boolean(
+        incident?.incident_status === 'assigned' || 
+        incident?.incident_status === 'responding' || 
+        incident?.dispatches?.length
+    );
 
     const handleSubmit = () => {
         if (!isFormValid) return;
@@ -301,8 +306,12 @@ export default function CreateDispatchModal({
         <Modal 
             open={open} 
             onClose={onClose} 
-            title={`Deploy Response Unit — Incident #${incident.id}`} 
-            description="Manually select which available personnel will respond to this emergency incident."
+            title={isAdditionalUnit 
+                ? `Deploy Additional Unit / Backup — Incident #${incident.id}` 
+                : `Deploy Response Unit — Incident #${incident.id}`} 
+            description={isAdditionalUnit
+                ? "Deploy a second ambulance and backup crew to this exact same active incident."
+                : "Manually select which available personnel will respond to this emergency incident."}
             size="lg"
             footer={
                 <div className="flex items-center justify-between w-full">
@@ -327,10 +336,15 @@ export default function CreateDispatchModal({
                             onClick={handleSubmit} 
                             disabled={!isFormValid}
                             variant="primary"
-                            className="bg-gradient-to-r from-orange-500 to-rose-600 hover:from-orange-600 hover:to-rose-700 text-white min-w-[170px]"
+                            className={clsx(
+                                "text-white min-w-[170px]",
+                                isAdditionalUnit 
+                                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md shadow-blue-500/20"
+                                    : "bg-gradient-to-r from-orange-500 to-rose-600 hover:from-orange-600 hover:to-rose-700"
+                            )}
                         >
                             <Send className="w-4 h-4 mr-1.5" />
-                            Deploy Unit Now
+                            {isAdditionalUnit ? 'Deploy Backup Unit' : 'Deploy Unit Now'}
                         </Button>
                     </div>
                 </div>
@@ -350,6 +364,11 @@ export default function CreateDispatchModal({
                     <div className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-white flex items-center gap-1.5">
                             {incident.incident_type?.name || 'Emergency Incident'}
+                            {isAdditionalUnit && (
+                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400 flex items-center gap-1">
+                                    <Truck className="w-3 h-3 text-blue-400" /> + Backup Ambulance
+                                </span>
+                            )}
                         </span>
                         <span className="text-[11px] font-mono text-primary">
                             {incident.location_code ? `Code: ${typeof incident.location_code === 'object' ? incident.location_code?.location_code || incident.location_code?.code : incident.location_code}` : (typeof incident.barangay === 'object' ? incident.barangay?.barangay_name || incident.barangay?.name : incident.barangay)}

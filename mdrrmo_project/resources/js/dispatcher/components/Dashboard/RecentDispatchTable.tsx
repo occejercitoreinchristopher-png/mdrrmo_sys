@@ -9,10 +9,10 @@ export default function RecentDispatchTable({ dispatches = [] }: { dispatches?: 
         <Card padding={false}>
             <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-white/10">
                 <div>
-                    <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
+                    <h3 className="font-semibold text-slate-900 dark:text-white text-[15px]">
                         Recent Dispatches
                     </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-0.5">
                         Latest ambulance dispatches
                     </p>
                 </div>

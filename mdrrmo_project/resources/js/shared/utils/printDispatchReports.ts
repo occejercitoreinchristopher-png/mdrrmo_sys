@@ -896,8 +896,8 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
             </div>
             <div class="sig-block">
                 <div class="sig-line"></div>
-                <div class="sig-name">MDRRMO OPERATIONS HEAD</div>
-                <div class="sig-title">Municipal Disaster Risk Reduction &amp; Management Office</div>
+                <div class="sig-name">&nbsp;</div>
+                <div class="sig-title">MDRRMO Operations Head / Officer-in-Charge</div>
             </div>
         </div>
 
@@ -1031,16 +1031,47 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
     printWindow.focus();
 }
 
-export function printDispatchLogsSummaryReport(incidents: any[], filters: { search?: string; status?: string; date?: string; preparedBy?: string } = {}): void {
+export function printDispatchLogsSummaryReport(
+    incidents: any[],
+    filters: {
+        search?: string;
+        status?: string;
+        priority?: string;
+        barangay?: string;
+        date?: string;
+        startDate?: string;
+        endDate?: string;
+        reportSource?: string;
+        hasDispatches?: string;
+        preparedBy?: string;
+        preparedByTitle?: string;
+        approvedBy?: string;
+        approvedByTitle?: string;
+    } = {}
+): void {
     if (!incidents || incidents.length === 0) {
         alert('No dispatch log records available to print.');
         return;
     }
 
     const currentDate = new Date().toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
-    const statusFilterText = filters.status ? filters.status.toUpperCase() : 'ALL INCIDENT STATUSES';
-    const searchText = filters.search ? `"${filters.search}"` : 'None (All Records)';
-    const preparedBy = filters.preparedBy || 'MDRRMO Admin / Dispatcher';
+    const preparedByName = filters.preparedBy ? filters.preparedBy.trim() : '';
+    const preparedByTitle = filters.preparedByTitle || 'Prepared by / Operations Officer';
+    const approvedByName = filters.approvedBy ? filters.approvedBy.trim() : '';
+    const approvedByTitle = filters.approvedByTitle || 'Approved by / MDRRMO Officer-in-Charge';
+
+    // Build descriptive filter summary label for report header
+    const filterParts: string[] = [];
+    if (filters.status) filterParts.push(`STATUS: ${filters.status.toUpperCase()}`);
+    if (filters.priority) filterParts.push(`PRIORITY: ${filters.priority.toUpperCase()}`);
+    if (filters.barangay) filterParts.push(`BARANGAY: ${filters.barangay.toUpperCase()}`);
+    if (filters.date && filters.date !== 'custom') filterParts.push(`TIMEFRAME: ${filters.date.replace('_', ' ').toUpperCase()}`);
+    if (filters.startDate || filters.endDate) filterParts.push(`DATE RANGE: ${filters.startDate || 'ANY'} TO ${filters.endDate || 'NOW'}`);
+    if (filters.reportSource) filterParts.push(`SOURCE: ${filters.reportSource.toUpperCase()}`);
+    if (filters.hasDispatches) filterParts.push(`AMBULANCE: ${filters.hasDispatches === 'yes' ? 'DISPATCHED' : 'NONE'}`);
+    if (filters.search) filterParts.push(`SEARCH: "${filters.search}"`);
+
+    const filterSummaryText = filterParts.length > 0 ? filterParts.join(' | ') : 'ALL INCIDENT STATUSES & RECORDS';
 
     // Summary counts
     const totalCount = incidents.length;
@@ -1216,28 +1247,38 @@ export function printDispatchLogsSummaryReport(incidents: any[], filters: { sear
         .badge-rejected { background: #ffe4e6; color: #be123c; }
 
         .signatures {
-            margin-top: 18px;
+            margin-top: 24px;
             display: flex;
             justify-content: space-between;
             page-break-inside: avoid;
+            padding: 0 16px;
         }
         .sig-block {
-            width: 220px;
+            width: 240px;
             text-align: center;
+        }
+        .sig-header {
+            font-size: 8px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            margin-bottom: 30px;
         }
         .sig-line {
             border-bottom: 1.5px solid #0f172a;
-            margin-top: 24px;
-            margin-bottom: 3px;
+            margin-bottom: 4px;
         }
         .sig-name {
             font-weight: bold;
             font-size: 9.5px;
             text-transform: uppercase;
+            min-height: 14px;
+            color: #0f172a;
         }
         .sig-title {
-            font-size: 8.5px;
-            color: #64748b;
+            font-size: 8px;
+            color: #475569;
         }
     </style>
 </head>
@@ -1262,7 +1303,7 @@ export function printDispatchLogsSummaryReport(incidents: any[], filters: { sear
         <!-- Meta Bar -->
         <div class="meta-bar">
             <span>DISPATCH LOGS &amp; INCIDENT AUDIT TRAIL SUMMARY</span>
-            <span>FILTER: ${statusFilterText} | SEARCH: ${searchText} | GENERATED: ${currentDate}</span>
+            <span>FILTER: ${filterSummaryText} | GENERATED: ${currentDate}</span>
         </div>
 
         <!-- Stats Grid -->
@@ -1365,14 +1406,16 @@ export function printDispatchLogsSummaryReport(incidents: any[], filters: { sear
         <!-- Sign-off Block -->
         <div class="signatures">
             <div class="sig-block">
+                <div class="sig-header">Prepared &amp; Certified By:</div>
                 <div class="sig-line"></div>
-                <div class="sig-name">${preparedBy}</div>
-                <div class="sig-title">Prepared by / Reporting Officer</div>
+                <div class="sig-name">${preparedByName || '&nbsp;'}</div>
+                <div class="sig-title">${preparedByTitle}</div>
             </div>
             <div class="sig-block">
+                <div class="sig-header">Approved &amp; Noted By:</div>
                 <div class="sig-line"></div>
-                <div class="sig-name">MDRRMO EXECUTIVE HEAD</div>
-                <div class="sig-title">Municipal Disaster Risk Reduction &amp; Management Office</div>
+                <div class="sig-name">${approvedByName || '&nbsp;'}</div>
+                <div class="sig-title">${approvedByTitle}</div>
             </div>
         </div>
     </div>

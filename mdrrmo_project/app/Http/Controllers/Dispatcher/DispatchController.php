@@ -216,8 +216,10 @@ class DispatchController extends Controller
                 $dispatch->crew()->syncWithoutDetaching($emtSyncData);
             }
 
-            // Update statuses
-            $incident->update(['incident_status' => 'assigned']);
+            // Update statuses (Do not demote if incident is already actively being responded to)
+            if (in_array($incident->incident_status, ['verified', 'pending'])) {
+                $incident->update(['incident_status' => 'assigned']);
+            }
             $ambulance->update(['status' => 'dispatched']);
 
             ResponderProfile::whereIn('user_id', $assignedCrewIds)
@@ -246,10 +248,18 @@ class DispatchController extends Controller
             ]);
 
             if ($dispatch->incident) {
-                $dispatch->incident->update([
-                    'incident_status' => 'resolved',
-                    'resolved_at' => now(),
-                ]);
+                // Safeguard: Only mark incident as resolved if all other dispatched units for this incident are finished
+                $otherActiveCount = Dispatch::where('incident_id', $dispatch->incident_id)
+                    ->where('id', '!=', $dispatch->id)
+                    ->whereNotIn('dispatch_status', ['completed', 'cancelled'])
+                    ->count();
+
+                if ($otherActiveCount === 0) {
+                    $dispatch->incident->update([
+                        'incident_status' => 'resolved',
+                        'resolved_at' => now(),
+                    ]);
+                }
             }
 
             if ($dispatch->ambulance_id) {
@@ -304,10 +314,18 @@ class DispatchController extends Controller
             ]);
 
             if ($dispatch->incident) {
-                $dispatch->incident->update([
-                    'incident_status' => $revertIncident ? 'verified' : 'cancelled',
-                    'resolved_at' => $revertIncident ? null : now(),
-                ]);
+                // Safeguard: Only revert or cancel incident if all other dispatched units are finished
+                $otherActiveCount = Dispatch::where('incident_id', $dispatch->incident_id)
+                    ->where('id', '!=', $dispatch->id)
+                    ->whereNotIn('dispatch_status', ['completed', 'cancelled'])
+                    ->count();
+
+                if ($otherActiveCount === 0) {
+                    $dispatch->incident->update([
+                        'incident_status' => $revertIncident ? 'verified' : 'cancelled',
+                        'resolved_at' => $revertIncident ? null : now(),
+                    ]);
+                }
             }
 
             if ($dispatch->ambulance_id) {

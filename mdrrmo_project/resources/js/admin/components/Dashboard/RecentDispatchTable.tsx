@@ -7,17 +7,17 @@ export default function RecentDispatchTable({ dispatches = [] }: { dispatches?: 
         <div className="rounded-2xl bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-sm overflow-hidden flex flex-col h-full">
             <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 dark:border-white/5">
                 <div>
-                    <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+                    <h3 className="font-semibold text-slate-900 dark:text-white text-[15px] flex items-center gap-2">
                         <Truck className="w-4 h-4 text-emerald-500" />
                         <span>Recent Dispatches & Deployments</span>
                     </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-0.5">
                         Latest ambulance missions and responder teams
                     </p>
                 </div>
                 <Link
                     href="/admin/dispatch-logs"
-                    className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
                 >
                     <span>View all</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -30,9 +30,9 @@ export default function RecentDispatchTable({ dispatches = [] }: { dispatches?: 
                 </div>
             ) : (
                 <div className="overflow-x-auto flex-1">
-                    <table className="w-full text-left border-collapse text-xs">
+                    <table className="w-full text-left border-collapse text-sm">
                         <thead>
-                            <tr className="border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.02] text-[10px] uppercase font-bold text-slate-400">
+                            <tr className="border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.02] text-xs uppercase font-semibold text-slate-500 dark:text-slate-400 tracking-wider">
                                 <th className="py-2.5 px-4"># ID</th>
                                 <th className="py-2.5 px-4">Ambulance</th>
                                 <th className="py-2.5 px-4">Lead Crew</th>

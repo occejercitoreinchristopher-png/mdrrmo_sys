@@ -17,7 +17,7 @@ export default function DashboardExtraCards({ extraData = {} }: { extraData?: an
             {/* Incident Status Overview */}
             <Card padding={false} className="flex flex-col h-full">
                 <div className="p-4 border-b border-slate-200 dark:border-white/10">
-                    <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
+                    <h3 className="font-semibold text-slate-900 dark:text-white text-[15px]">
                         Incident Status Overview
                     </h3>
                 </div>
@@ -42,7 +42,7 @@ export default function DashboardExtraCards({ extraData = {} }: { extraData?: an
             {/* Incidents by Barangay */}
             <Card padding={false} className="flex flex-col h-full">
                 <div className="p-4 border-b border-slate-200 dark:border-white/10">
-                    <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
+                    <h3 className="font-semibold text-slate-900 dark:text-white text-[15px]">
                         Incidents by Barangay
                     </h3>
                 </div>
@@ -67,7 +67,7 @@ export default function DashboardExtraCards({ extraData = {} }: { extraData?: an
             {/* Ambulance Status */}
             <Card padding={false} className="flex flex-col h-full">
                 <div className="p-4 border-b border-slate-200 dark:border-white/10">
-                    <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
+                    <h3 className="font-semibold text-slate-900 dark:text-white text-[15px]">
                         Ambulance Status
                     </h3>
                 </div>

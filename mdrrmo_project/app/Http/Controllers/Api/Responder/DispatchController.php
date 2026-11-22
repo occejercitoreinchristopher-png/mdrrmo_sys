@@ -508,10 +508,17 @@ class DispatchController extends Controller
         // If completed or cancelled, free responders and ambulance
         if (in_array($validated['status'], ['completed', 'cancelled'])) {
             if ($dispatch->incident) {
-                $dispatch->incident->update([
-                    'incident_status' => $validated['status'] === 'completed' ? 'resolved' : 'verified',
-                    'resolved_at' => $validated['status'] === 'completed' ? ($dispatch->completed_at ?? now()) : null,
-                ]);
+                $otherActiveCount = Dispatch::where('incident_id', $dispatch->incident_id)
+                    ->where('id', '!=', $dispatch->id)
+                    ->whereNotIn('dispatch_status', ['completed', 'cancelled'])
+                    ->count();
+
+                if ($otherActiveCount === 0) {
+                    $dispatch->incident->update([
+                        'incident_status' => $validated['status'] === 'completed' ? 'resolved' : 'verified',
+                        'resolved_at' => $validated['status'] === 'completed' ? ($dispatch->completed_at ?? now()) : null,
+                    ]);
+                }
             }
             if ($dispatch->ambulance_id) {
                 Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);

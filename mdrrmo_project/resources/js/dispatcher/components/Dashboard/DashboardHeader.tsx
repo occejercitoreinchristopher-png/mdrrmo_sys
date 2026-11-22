@@ -43,13 +43,13 @@ export default function DashboardHeader() {
                             Dispatch Central
                         </span>
                     </div>
-                    <h2 suppressHydrationWarning className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                    <h2 suppressHydrationWarning className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
                         {greeting},{' '}
                         <span className="text-[#F61509]">
                             {dispatcherName}
                         </span>
                     </h2>
-                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                         Live command center for MDRRMO emergency responses and dispatches.
                     </p>
                 </div>

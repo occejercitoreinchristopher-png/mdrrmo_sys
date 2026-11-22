@@ -13,7 +13,9 @@ class DispatchLogController extends Controller
 {
     public function index()
     {
-        return Inertia::render('admin/DispatchLogs/Index');
+        return Inertia::render('admin/DispatchLogs/Index', [
+            'barangays' => \App\Models\Incident::OPOL_BARANGAYS,
+        ]);
     }
 
     public function fetchLogs(Request $request)
@@ -61,6 +63,69 @@ class DispatchLogController extends Controller
 
         if ($request->filled('status')) {
             $query->where('incident_status', $request->input('status'));
+        }
+
+        if ($request->filled('priority')) {
+            $priority = $request->input('priority');
+            $query->whereRaw('LOWER(priority) = ?', [strtolower($priority)]);
+        }
+
+        if ($request->filled('barangay')) {
+            $barangay = trim($request->input('barangay'));
+            $query->where(function ($bq) use ($barangay) {
+                $bq->where('incident_address', 'like', "%{$barangay}%")
+                   ->orWhere('place_of_incident', 'like', "%{$barangay}%")
+                   ->orWhereHas('resident.residentProfile.barangay', function ($rq) use ($barangay) {
+                       $rq->where('barangay_name', 'like', "%{$barangay}%");
+                   })
+                   ->orWhereHas('locationCode.barangay', function ($lq) use ($barangay) {
+                       $lq->where('barangay_name', 'like', "%{$barangay}%");
+                   });
+            });
+        }
+
+        if ($request->filled('report_source')) {
+            $source = $request->input('report_source');
+            if ($source === 'mobile_app') {
+                $query->where(function ($sq) {
+                    $sq->where('report_source', 'resident_app')
+                       ->orWhere('report_source', 'mobile_app')
+                       ->orWhere('report_source', 'like', '%app%');
+                });
+            } elseif ($source === 'phone_call') {
+                $query->where(function ($sq) {
+                    $sq->where('report_source', 'phone_call')
+                       ->orWhere('report_source', 'hotline')
+                       ->orWhere('report_source', 'like', '%call%');
+                });
+            } elseif ($source === 'walk_in') {
+                $query->where(function ($sq) {
+                    $sq->where('report_source', 'walk_in')
+                       ->orWhere('report_source', 'like', '%walk%');
+                });
+            } else {
+                $query->where('report_source', $source);
+            }
+        }
+
+        if ($request->filled('has_dispatches')) {
+            $hasDispatches = $request->input('has_dispatches');
+            if ($hasDispatches === 'yes') {
+                $query->has('dispatches');
+            } elseif ($hasDispatches === 'no') {
+                $query->doesntHave('dispatches');
+            }
+        }
+
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $query->whereBetween('created_at', [
+                \Carbon\Carbon::parse($request->input('start_date'))->startOfDay(),
+                \Carbon\Carbon::parse($request->input('end_date'))->endOfDay(),
+            ]);
+        } elseif ($request->filled('start_date')) {
+            $query->where('created_at', '>=', \Carbon\Carbon::parse($request->input('start_date'))->startOfDay());
+        } elseif ($request->filled('end_date')) {
+            $query->where('created_at', '<=', \Carbon\Carbon::parse($request->input('end_date'))->endOfDay());
         }
 
         if ($request->filled('date')) {

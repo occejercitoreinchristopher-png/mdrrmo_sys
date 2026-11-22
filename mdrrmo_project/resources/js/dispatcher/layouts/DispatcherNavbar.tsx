@@ -134,7 +134,7 @@ export default function DispatcherNavbar({ collapsed, onToggle }) {
                         <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white group-hover:text-[#F61509] transition-colors leading-tight">
                             {user ? `${user.first_name} ${user.last_name}` : 'Dispatcher'}
                         </p>
-                        <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 leading-tight capitalize font-medium mt-0.5">
+                        <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 leading-tight capitalize font-medium mt-0.5">
                             {String(user?.role ?? 'Dispatcher')}
                         </p>
                     </div>

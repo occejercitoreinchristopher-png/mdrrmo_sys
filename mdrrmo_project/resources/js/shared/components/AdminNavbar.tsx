@@ -48,7 +48,7 @@ export default function AdminNavbar({ collapsed, onToggle }: { collapsed: boolea
                                 ? `${user.first_name} ${user.last_name}`
                                 : 'Administrator'}
                         </p>
-                        <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 leading-tight capitalize font-medium mt-0.5">
+                        <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 leading-tight capitalize font-medium mt-0.5">
                             {String(user?.role ?? 'Administrator')}
                         </p>
                     </div>

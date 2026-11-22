@@ -525,10 +525,10 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                                 <TrendingUp className="w-4 h-4" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                                <h3 className="font-semibold text-slate-900 dark:text-white text-[15px]">
                                     Incident &amp; Dispatch Performance (6 Months)
                                 </h3>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-0.5">
                                     {sixMonthReported} reported • {sixMonthResolved} resolved ({sixMonthRate}% clearance)
                                 </p>
                             </div>
@@ -539,7 +539,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                             <button
                                 type="button"
                                 onClick={() => setTrendStyle('bar')}
-                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                                     trendStyle === 'bar'
                                         ? 'bg-[#F61509] text-white shadow-xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -551,7 +551,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                             <button
                                 type="button"
                                 onClick={() => setTrendStyle('area')}
-                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                                     trendStyle === 'area'
                                         ? 'bg-blue-600 text-white shadow-xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -582,10 +582,10 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                                 <PieChart className="w-4 h-4" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                                <h3 className="font-semibold text-slate-900 dark:text-white text-[15px]">
                                     Incidents by Type
                                 </h3>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-0.5">
                                     Live emergency distribution
                                 </p>
                             </div>
@@ -596,7 +596,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                             <button
                                 type="button"
                                 onClick={() => setPieStyle('donut')}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                                     pieStyle === 'donut'
                                         ? 'bg-violet-600 text-white shadow-xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -607,7 +607,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                             <button
                                 type="button"
                                 onClick={() => setPieStyle('polarArea')}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                                     pieStyle === 'polarArea'
                                         ? 'bg-violet-600 text-white shadow-xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -677,10 +677,10 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                                 <MapPin className="w-4 h-4" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                                <h3 className="font-semibold text-slate-900 dark:text-white text-[15px]">
                                     Top Barangays by Incident Volume
                                 </h3>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-0.5">
                                     Highest reported emergency locations in Opol
                                 </p>
                             </div>
@@ -711,10 +711,10 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                                 <Radar className="w-4 h-4" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                                <h3 className="font-semibold text-slate-900 dark:text-white text-[15px]">
                                     {opsTab === 'dispatch' ? 'Dispatch Status Pipeline' : 'Report Intake Channels'}
                                 </h3>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-0.5">
                                     {opsTab === 'dispatch'
                                         ? `${totalDispatchCount} total ambulance dispatches tracked`
                                         : `${totalSourceReports} reports across app, phone & walk-in`}
