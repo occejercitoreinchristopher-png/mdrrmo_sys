@@ -72,14 +72,15 @@ class DispatchLogController extends Controller
 
         if ($request->filled('barangay')) {
             $barangay = trim($request->input('barangay'));
-            $query->where(function ($bq) use ($barangay) {
-                $bq->where('incident_address', 'like', "%{$barangay}%")
-                   ->orWhere('place_of_incident', 'like', "%{$barangay}%")
-                   ->orWhereHas('resident.residentProfile.barangay', function ($rq) use ($barangay) {
-                       $rq->where('barangay_name', 'like', "%{$barangay}%");
+            $cleanBarangay = preg_replace('/^brgy\.?\s+/i', '', $barangay);
+            $query->where(function ($bq) use ($barangay, $cleanBarangay) {
+                $bq->where('incident_address', 'like', "%{$cleanBarangay}%")
+                   ->orWhere('incident_address', 'like', "%{$barangay}%")
+                   ->orWhereHas('resident.residentProfile.barangay', function ($rq) use ($cleanBarangay) {
+                       $rq->where('barangay_name', 'like', "%{$cleanBarangay}%");
                    })
-                   ->orWhereHas('locationCode.barangay', function ($lq) use ($barangay) {
-                       $lq->where('barangay_name', 'like', "%{$barangay}%");
+                   ->orWhereHas('locationCode.barangay', function ($lq) use ($cleanBarangay) {
+                       $lq->where('barangay_name', 'like', "%{$cleanBarangay}%");
                    });
             });
         }
