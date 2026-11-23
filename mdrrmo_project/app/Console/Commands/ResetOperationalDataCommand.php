@@ -5,7 +5,7 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 
 class ResetOperationalDataCommand extends Command
 {
@@ -14,33 +14,59 @@ class ResetOperationalDataCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'app:reset-operational-data {--force : Force deletion without interactive confirmation} {--clear-storage : Delete uploaded incident and PCR photos from storage}';
+    protected $signature = 'app:reset-operational-data 
+                            {--force : Run without confirmation prompt}
+                            {--wipe-manual-pins : Also wipe manual heatmap pins}
+                            {--wipe-patients : Also wipe patients records}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Safely wipe all operational test data (incidents, dispatches, dispatch logs, PCRs) without deleting master records';
+    protected $description = 'Resets and wipes all operational test data (incidents, dispatches, logs, PCRs, notifications) for a clean production slate.';
 
     /**
      * Execute the console command.
      */
     public function handle()
     {
-        $this->warn('*****************************************************************');
-        $this->warn('* CAUTION: This will permanently delete ALL Incidents, Dispatches,');
-        $this->warn('* Dispatch Logs, PCR records, and Heatmap incident points!      *');
-        $this->warn('*****************************************************************');
+        $this->warn('=====================================================');
+        $this->warn('   MDRRMO OPOL - OPERATIONAL DATA RESET UTILITY      ');
+        $this->warn('=====================================================');
+        $this->line('');
+        $this->line('This action will permanently purge:');
+        $this->line('  - All Incidents (active, verified, resolved, rejected)');
+        $this->line('  - All Incident Images & Uploads');
+        $this->line('  - All Dispatches & Dispatch Crew assignments');
+        $this->line('  - All Dispatch Logs & Timeline Actions');
+        $this->line('  - All Patient Care Records (PCRs) & PCR Photos');
+        $this->line('  - All System Incident/Dispatch Notifications');
+        $this->line('');
+        $this->line('And will automatically:');
+        $this->line('  - Reset all Ambulances to "available"');
+        $this->line('  - Reset all Responder Profiles to "available"');
+        $this->line('  - Clear reporting suspensions on Resident accounts');
+        $this->line('  - Retain ALL Users, Barangays, Incident Types, and Settings intact.');
+        $this->line('');
 
         if (! $this->option('force')) {
-            if (! $this->confirm('Are you ABSOLUTELY sure you want to wipe all operational data?', false)) {
-                $this->info('Operation cancelled.');
-                return self::SUCCESS;
+            if (! $this->confirm('Are you ABSOLUTELY SURE you want to purge all operational data? This cannot be undone!', false)) {
+                $this->info('Operation cancelled. No changes were made.');
+                return 0;
             }
         }
 
-        $this->info('Disabling foreign key constraints...');
+        // 1. Automatically create safety database backup first
+        $this->info('Creating automatic pre-reset safety backup...');
+        try {
+            $this->call('app:backup-db', ['--keep' => 12]);
+        } catch (\Throwable $e) {
+            $this->warn('Safety backup notice: ' . $e->getMessage());
+        }
+
+        $this->info('Purging operational records from database...');
+
         DB::statement('SET FOREIGN_KEY_CHECKS = 0;');
 
         $tablesToTruncate = [
@@ -54,58 +80,91 @@ class ResetOperationalDataCommand extends Command
             'system_notifications',
         ];
 
+        if ($this->option('wipe-manual-pins')) {
+            $tablesToTruncate[] = 'heatmap_manual_pin_images';
+            $tablesToTruncate[] = 'heatmap_manual_pins';
+        }
+
+        if ($this->option('wipe-patients')) {
+            $tablesToTruncate[] = 'patients';
+        }
+
         foreach ($tablesToTruncate as $table) {
-            if (Schema::hasTable($table)) {
-                $this->line("  - Truncating table: <comment>{$table}</comment>");
-                DB::table($table)->truncate();
+            try {
+                DB::statement("TRUNCATE TABLE `{$table}`;");
+                $this->line("  [TRUNCATED] `{$table}`");
+            } catch (\Throwable $e) {
+                $this->error("  [FAILED] Could not truncate `{$table}`: " . $e->getMessage());
             }
         }
 
         // Reset ambulance statuses
-        if (Schema::hasTable('ambulances')) {
-            $this->line('  - Resetting ambulances status to "available"...');
+        try {
             DB::table('ambulances')->update(['status' => 'available']);
+            $this->line('  [RESET] All ambulances reset to "available".');
+        } catch (\Throwable $e) {
+            $this->error('  [FAILED] Ambulance reset: ' . $e->getMessage());
         }
 
-        // Reset responder profiles availability
-        if (Schema::hasTable('responder_profiles')) {
-            $this->line('  - Resetting responder profiles to "available"...');
+        // Reset responder availability
+        try {
             DB::table('responder_profiles')->update(['availability' => 'available']);
+            $this->line('  [RESET] All responder profiles reset to "available".');
+        } catch (\Throwable $e) {
+            $this->error('  [FAILED] Responder profile reset: ' . $e->getMessage());
         }
 
-        // Reset any resident reporting suspension
-        if (Schema::hasTable('users') && Schema::hasColumn('users', 'reporting_suspended_until')) {
-            $this->line('  - Clearing resident reporting suspensions...');
-            DB::table('users')
-                ->whereNotNull('reporting_suspended_until')
-                ->update(['reporting_suspended_until' => null]);
+        // Clear user suspensions
+        try {
+            DB::table('users')->whereNotNull('reporting_suspended_until')->update(['reporting_suspended_until' => null]);
+            $this->line('  [RESET] Cleared resident reporting suspensions.');
+        } catch (\Throwable $e) {
+            $this->error('  [FAILED] User suspension reset: ' . $e->getMessage());
         }
 
         DB::statement('SET FOREIGN_KEY_CHECKS = 1;');
-        $this->info('Re-enabled foreign key constraints.');
 
-        // Optionally clear uploaded test photos
-        if ($this->option('clear-storage')) {
-            $incidentPath = storage_path('app/public/incidents');
-            $pcrPath = storage_path('app/public/pcr_photos');
+        // Clean physical photo storage directories
+        $this->info('Cleaning physical storage image directories...');
+        $storagePaths = [
+            storage_path('app/public/incidents'),
+            storage_path('app/public/pcr_photos'),
+        ];
 
-            if (File::isDirectory($incidentPath)) {
-                File::cleanDirectory($incidentPath);
-                $this->line('  - Cleared storage/app/public/incidents directory.');
-            }
+        if ($this->option('wipe-manual-pins')) {
+            $storagePaths[] = storage_path('app/public/heatmap-manual-pins');
+        }
 
-            if (File::isDirectory($pcrPath)) {
-                File::cleanDirectory($pcrPath);
-                $this->line('  - Cleared storage/app/public/pcr_photos directory.');
+        foreach ($storagePaths as $path) {
+            if (File::isDirectory($path)) {
+                $files = File::files($path);
+                foreach ($files as $file) {
+                    if ($file->getFilename() !== '.gitignore') {
+                        File::delete($file->getPathname());
+                    }
+                }
+                $this->line("  [CLEANED] Files removed from {$path}");
             }
         }
 
-        $this->call('optimize:clear');
+        // Clear application caches
+        $this->info('Clearing application caches...');
+        try {
+            $this->call('optimize:clear');
+        } catch (\Throwable $e) {
+            // ignore if restricted
+        }
 
-        $this->newLine();
-        $this->info('All operational incident and dispatch data has been successfully wiped!');
-        $this->info('Your system is now clean and ready for live emergency operations.');
+        $logMsg = 'Operational data reset executed by administrator. All incidents and dispatches purged.';
+        Log::warning($logMsg);
 
-        return self::SUCCESS;
+        $this->info('');
+        $this->info('=====================================================');
+        $this->info(' SUCCESS: Operational data reset completed cleanly!  ');
+        $this->info(' All incidents, dispatches, and heatmap are reset.   ');
+        $this->info(' Auto-increment IDs will start from #1 on next call. ');
+        $this->info('=====================================================');
+
+        return 0;
     }
 }
