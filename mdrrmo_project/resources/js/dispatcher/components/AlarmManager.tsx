@@ -42,6 +42,18 @@ export default function AlarmManager() {
                     duration: 10000,
                 });
 
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(
+                        new CustomEvent('dispatcher-notification', {
+                            detail: {
+                                title: '🚨 New Emergency Report',
+                                message: `${incident.incident_number ? incident.incident_number + ' • ' : ''}${incident.incident_type?.name || incident.incidentType?.name || 'Emergency Request'} (${incident.place_of_incident || incident.barangay || 'Opol'})`,
+                                type: 'emergency',
+                            },
+                        })
+                    );
+                }
+
                 triggerAlarm(incident);
                 
                 // Still reload the router so the new incident appears in the lists

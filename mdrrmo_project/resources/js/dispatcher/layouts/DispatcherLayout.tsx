@@ -15,31 +15,47 @@ export default function DispatcherLayout({ children, title }) {
             // @ts-ignore
             const channel = window.Echo.private('dispatcher');
 
-            const handleEvent = (message: string) => {
+            const dispatchNotification = (title: string, message: string, type = 'info') => {
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(
+                        new CustomEvent('dispatcher-notification', {
+                            detail: { title, message, type },
+                        })
+                    );
+                }
+            };
+
+            const handleEvent = (message: string, title?: string, type = 'info') => {
                 toast.success(message);
+                dispatchNotification(title || 'System Notification', message, type);
                 router.reload();
             };
 
             const events = [
-                { name: 'IncidentVerified', msg: 'Incident has been verified.' },
-                { name: 'IncidentCancelled', msg: 'An emergency report was cancelled by the resident.' },
-                { name: 'IncidentRejected', msg: 'An incident report was rejected or cancelled.' },
-                { name: 'DispatchCreated', msg: 'New dispatch created successfully.' },
-                { name: 'DispatchAccepted', msg: 'A responder has accepted the dispatch.' },
-                { name: 'DispatchStatusUpdated', msg: 'Dispatch status updated.' },
-                { name: 'ResponderStatusUpdated', msg: 'A responder updated their status.' },
-                { name: 'LeaveRequestSubmitted', msg: 'New leave request submitted.' },
-                { name: 'LeaveApproved', msg: 'Leave request approved.' },
-                { name: 'PatientCareRecordSubmitted', msg: 'New Patient Care Record submitted.' },
-                { name: 'DispatchCompleted', msg: 'A dispatch has been completed.' },
+                { name: 'IncidentVerified', title: 'Incident Verified', msg: 'Incident has been verified.', type: 'verified' },
+                { name: 'IncidentCancelled', title: 'Report Cancelled', msg: 'An emergency report was cancelled by the resident.', type: 'cancelled' },
+                { name: 'IncidentRejected', title: 'Report Closed', msg: 'An incident report was rejected or cancelled.', type: 'rejected' },
+                { name: 'DispatchCreated', title: 'New Dispatch', msg: 'New dispatch created successfully.', type: 'dispatch' },
+                { name: 'DispatchAccepted', title: 'Dispatch Accepted', msg: 'A responder has accepted the dispatch.', type: 'dispatch' },
+                { name: 'DispatchStatusUpdated', title: 'Dispatch Updated', msg: 'Dispatch status updated.', type: 'dispatch' },
+                { name: 'ResponderStatusUpdated', title: 'Responder Update', msg: 'A responder updated their status.', type: 'responder' },
+                { name: 'LeaveRequestSubmitted', title: 'Leave Request', msg: 'New leave request submitted.', type: 'leave' },
+                { name: 'LeaveApproved', title: 'Leave Approved', msg: 'Leave request approved.', type: 'leave' },
+                { name: 'PatientCareRecordSubmitted', title: 'PCR Submitted', msg: 'New Patient Care Record submitted.', type: 'pcr' },
+                { name: 'DispatchCompleted', title: 'Dispatch Complete', msg: 'A dispatch has been completed.', type: 'dispatch' },
             ];
 
-            events.forEach(({ name, msg }) => {
-                channel.listen(name, () => handleEvent(msg));
-                channel.listen(`.${name}`, () => handleEvent(msg));
+            events.forEach(({ name, title, msg, type }) => {
+                channel.listen(name, () => handleEvent(msg, title, type));
+                channel.listen(`.${name}`, () => handleEvent(msg, title, type));
             });
 
-            const handleResidentCallResponder = (e: any) => handleEvent(`Resident ${e?.resident_name || ''} is calling the responder for Incident #${e?.incident_id || 'Unknown'}! Location updated.`);
+            const handleResidentCallResponder = (e: any) =>
+                handleEvent(
+                    `Resident ${e?.resident_name || ''} is calling the responder for Incident #${e?.incident_id || 'Unknown'}! Location updated.`,
+                    'Resident Call',
+                    'call'
+                );
             channel.listen('ResidentCalledResponder', handleResidentCallResponder);
             channel.listen('.ResidentCalledResponder', handleResidentCallResponder);
 
@@ -58,7 +74,11 @@ export default function DispatcherLayout({ children, title }) {
                         window.dispatchEvent(new CustomEvent('active-hotline-call-updated', { detail: callData }));
                     } catch {}
                 }
-                handleEvent(`Resident ${e?.resident_name || ''} is calling the MDRRMO Hotline! Location: [${e?.latitude}, ${e?.longitude}]`);
+                handleEvent(
+                    `Resident ${e?.resident_name || ''} is calling the MDRRMO Hotline! Location: [${e?.latitude}, ${e?.longitude}]`,
+                    '📞 Hotline Call',
+                    'hotline'
+                );
             };
             channel.listen('ResidentCalledHotline', handleResidentCallHotline);
             channel.listen('.ResidentCalledHotline', handleResidentCallHotline);
