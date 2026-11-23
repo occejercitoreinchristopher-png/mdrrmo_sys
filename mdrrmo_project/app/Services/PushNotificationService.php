@@ -125,12 +125,37 @@ class PushNotificationService
     public static function notifyIncidentRejected(Incident $incident): void
     {
         $resident = $incident->resident;
-        $reason = $incident->rejection_reason ? " Reason: {$incident->rejection_reason}" : '';
+        $category = $incident->rejection_category ?? 'other';
+        $reason = $incident->rejection_reason ? " Note: {$incident->rejection_reason}" : '';
+
+        $title = match ($category) {
+            'duplicate' => '📋 Duplicate Incident Report',
+            'out_of_jurisdiction' => '🗺️ Incident Outside Opol Coverage',
+            'false_alarm' => '⚠️ Report Closed as False Alarm',
+            'prank' => '🚨 Report Flagged as Prank Call',
+            'test_drill' => '🧪 System Test / Drill Completed',
+            default => '❌ Incident Report Not Approved',
+        };
+
+        $body = match ($category) {
+            'duplicate' => "Your emergency report was marked as a duplicate of an existing incident. Emergency teams are already handling this area.{$reason}",
+            'out_of_jurisdiction' => "The reported location is outside the coverage area of MDRRMO Opol. Please contact your local municipal hotline.{$reason}",
+            'false_alarm' => "Your emergency report was verified and recorded as a false alarm or accidental call.{$reason}",
+            'prank' => "Your emergency report was verified as unfounded or a prank call.{$reason}",
+            'test_drill' => "Your emergency report was logged as part of a scheduled drill or system test.{$reason}",
+            default => "Your emergency report was reviewed by the Dispatcher and was not approved for dispatch.{$reason}",
+        };
+
         self::sendToUser(
             $resident,
-            '❌ Incident Report Not Approved',
-            "Your emergency report was reviewed by the Dispatcher and was not approved for dispatch.{$reason}",
-            ['type' => 'incident_rejected', 'incident_id' => $incident->id, 'reason' => $incident->rejection_reason]
+            $title,
+            $body,
+            [
+                'type' => 'incident_rejected',
+                'incident_id' => $incident->id,
+                'category' => $category,
+                'reason' => $incident->rejection_reason,
+            ]
         );
     }
 

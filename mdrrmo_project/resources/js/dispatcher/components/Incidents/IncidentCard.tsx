@@ -1,21 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
+import { router } from '@inertiajs/react';
 import { clsx } from 'clsx';
 import { 
-    Clock, 
-    MapPin, 
-    AlertTriangle, 
-    Activity, 
-    User, 
-    Truck, 
-    ShieldAlert,
-    Phone,
-    Smartphone,
-    Send,
-    Rocket,
-    ShieldCheck,
-    Navigation,
-    ChevronRight,
-    Copy,
+    Copy, 
     Check
 } from 'lucide-react';
 import StatusBadge from '@/shared/components/StatusBadge';
@@ -28,9 +15,9 @@ interface IncidentCardProps {
     onLocate?: (incident: any) => void;
 }
 
-export default function IncidentCard({ 
-    incident, 
-    onClick, 
+export default function IncidentCard({
+    incident,
+    onClick,
     selected = false,
     onAssign,
     onLocate,
@@ -122,9 +109,9 @@ export default function IncidentCard({
         setTimeout(() => setCopiedPhone(false), 2000);
     };
 
-    const locationText = incident.place_of_incident 
-        || incident.incident_address 
-        || (incident.location_code ? `Marker: ${typeof incident.location_code === 'object' ? incident.location_code?.location_code || incident.location_code?.code : incident.location_code}` : null) 
+    const locationText = incident.place_of_incident
+        || incident.incident_address
+        || (incident.location_code ? `Marker: ${typeof incident.location_code === 'object' ? incident.location_code?.location_code || incident.location_code?.code : incident.location_code}` : null)
         || (typeof incident.location === 'object' ? incident.location?.location_name || incident.location?.name : incident.location)
         || 'Location unavailable';
 
@@ -145,13 +132,11 @@ export default function IncidentCard({
                         </span>
 
                         {isHotlineCall ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                                <Phone className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
                                 Hotline Call
                             </span>
                         ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
-                                <Smartphone className="w-2.5 h-2.5 text-sky-600 dark:text-sky-400" />
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
                                 Mobile App
                             </span>
                         )}
@@ -161,12 +146,11 @@ export default function IncidentCard({
                         <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
                             {timeInfo.display}
                         </span>
-                        <span className={`text-[10px] font-semibold flex items-center gap-1 mt-0.5 ${
+                        <span className={`text-[10px] font-semibold mt-0.5 ${
                             timeInfo.isUrgent 
                                 ? 'text-amber-600 dark:text-amber-400 font-bold animate-pulse'
                                 : 'text-slate-500 dark:text-slate-400'
                         }`}>
-                            <Clock className={`w-3 h-3 ${timeInfo.isUrgent ? 'text-amber-500' : 'text-slate-400'}`} />
                             {timeInfo.elapsed}
                         </span>
                     </div>
@@ -182,19 +166,17 @@ export default function IncidentCard({
                         <StatusBadge status={incident.priority ?? 'Moderate'} size="xs" showDot={true} />
 
                         {incident.incident_status === 'responding' && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30 animate-pulse">
-                                <Truck className="w-3 h-3" />
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30 animate-pulse">
                                 Responding
                             </span>
                         )}
 
                         {(incident.reporter_prank_count > 0 || incident.is_prank) && (
-                            <span 
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                            <span
+                                className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
                                 title={incident.is_prank ? "Confirmed Prank Call" : `Reporter has ${incident.reporter_prank_count} prior prank call record(s)`}
                             >
-                                <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
-                                {incident.is_prank ? 'Prank Call' : `⚠️ Prank Record (${incident.reporter_prank_count})`}
+                                {incident.is_prank ? 'Prank Call' : `Prank Record (${incident.reporter_prank_count})`}
                             </span>
                         )}
                     </div>
@@ -202,22 +184,17 @@ export default function IncidentCard({
 
                 {/* Reporter / Caller Info */}
                 <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200/60 dark:border-white/5 text-xs">
-                    <div className="flex items-center gap-2 truncate">
-                        <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-500 dark:text-blue-400 flex items-center justify-center shrink-0">
-                            <User className="w-3.5 h-3.5" />
+                    <div className="truncate">
+                        <div className="font-bold text-slate-900 dark:text-white truncate text-xs">
+                            {incident.resident
+                                ? `${incident.resident.first_name} ${incident.resident.last_name}`
+                                : (incident.caller_name || 'Resident / Caller')}
                         </div>
-                        <div className="truncate">
-                            <div className="font-bold text-slate-900 dark:text-white truncate text-xs">
-                                {incident.resident
-                                    ? `${incident.resident.first_name} ${incident.resident.last_name}`
-                                    : (incident.caller_name || 'Resident / Caller')}
+                        {callerPhone && (
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                                {callerPhone}
                             </div>
-                            {callerPhone && (
-                                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                                    {callerPhone}
-                                </div>
-                            )}
-                        </div>
+                        )}
                     </div>
 
                     {callerPhone && (
@@ -237,9 +214,8 @@ export default function IncidentCard({
                 </div>
 
                 {/* Incident Location */}
-                <div className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300">
-                    <MapPin className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
-                    <span className="line-clamp-2 font-medium leading-relaxed">
+                <div className="text-xs text-slate-600 dark:text-slate-300">
+                    <span className="line-clamp-2 font-medium leading-relaxed" title={locationText}>
                         {locationText}
                     </span>
                 </div>
@@ -262,9 +238,8 @@ export default function IncidentCard({
                                 e.stopPropagation();
                                 onAssign?.(incident);
                             }}
-                            className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white font-bold text-xs tracking-wide shadow-md shadow-rose-600/25 flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                            className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white font-bold text-xs tracking-wide shadow-md shadow-rose-600/25 flex items-center justify-center transition-all active:scale-95 cursor-pointer"
                         >
-                            <Rocket className="w-3.5 h-3.5" />
                             Dispatch Ambulance
                         </button>
                         <button
@@ -274,9 +249,9 @@ export default function IncidentCard({
                                 onLocate?.(incident);
                             }}
                             title="Locate Incident on Map"
-                            className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 transition-colors cursor-pointer"
+                            className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold transition-colors cursor-pointer"
                         >
-                            <MapPin className="w-4 h-4 text-rose-500" />
+                            Locate
                         </button>
                     </div>
                 )}
@@ -289,9 +264,8 @@ export default function IncidentCard({
                                 e.stopPropagation();
                                 onClick?.();
                             }}
-                            className="flex-1 py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-500/30 font-bold text-xs tracking-wide flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                            className="flex-1 py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-500/30 font-bold text-xs tracking-wide flex items-center justify-center transition-all cursor-pointer"
                         >
-                            <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                             Verify & Triage Details
                         </button>
                         <button
@@ -301,9 +275,9 @@ export default function IncidentCard({
                                 onLocate?.(incident);
                             }}
                             title="Locate Incident on Map"
-                            className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 transition-colors cursor-pointer"
+                            className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold transition-colors cursor-pointer"
                         >
-                            <MapPin className="w-4 h-4 text-amber-500" />
+                            Locate
                         </button>
                     </div>
                 )}
@@ -324,18 +298,15 @@ export default function IncidentCard({
                                     ? "bg-rose-500/10 dark:bg-rose-950/40 border-rose-500/30"
                                     : "bg-indigo-500/10 dark:bg-indigo-950/40 border-indigo-500/20"
                             )}>
-                                <div className="flex items-center gap-2 truncate">
-                                    <Truck className={clsx("w-4 h-4 shrink-0", isCancelled ? "text-rose-500" : "text-indigo-500 dark:text-indigo-400")} />
-                                    <div className="truncate">
-                                        <span className={clsx("font-bold", isCancelled ? "text-rose-700 dark:text-rose-300" : "text-indigo-700 dark:text-indigo-300")}>
-                                            {activeDispatch?.team ? `Unit ${activeDispatch.team}` : 'Response Unit'}
+                                <div className="truncate">
+                                    <span className={clsx("font-bold", isCancelled ? "text-rose-700 dark:text-rose-300" : "text-indigo-700 dark:text-indigo-300")}>
+                                        {activeDispatch?.team ? `Unit ${activeDispatch.team}` : 'Response Unit'}
+                                    </span>
+                                    {(activeDispatch?.ambulance?.vehicle_name || activeDispatch?.ambulance?.plate_number) && (
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate font-mono">
+                                            {activeDispatch.ambulance?.vehicle_name || activeDispatch.ambulance?.plate_number}
                                         </span>
-                                        {(activeDispatch?.ambulance?.vehicle_name || activeDispatch?.ambulance?.plate_number) && (
-                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate font-mono">
-                                                {activeDispatch.ambulance?.vehicle_name || activeDispatch.ambulance?.plate_number}
-                                            </span>
-                                        )}
-                                    </div>
+                                    )}
                                 </div>
                                 <span className={clsx(
                                     "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border shrink-0",
@@ -355,10 +326,9 @@ export default function IncidentCard({
                                             e.stopPropagation();
                                             onAssign?.(incident);
                                         }}
-                                        className="flex-1 py-1.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white border border-rose-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                                        className="flex-1 py-1.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white border border-rose-600 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer shadow-sm"
                                         title="Assign a new ambulance unit to replace cancelled dispatch"
                                     >
-                                        <Truck className="w-3.5 h-3.5" />
                                         Reassign Unit
                                     </button>
                                 ) : (
@@ -366,11 +336,11 @@ export default function IncidentCard({
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            onLocate?.(incident);
+                                            router.visit(`/dispatcher/dispatches?incident_id=${incident.id}`);
                                         }}
-                                        className="flex-1 py-1.5 px-3 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                                        className="flex-1 py-1.5 px-3 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer"
+                                        title="Track live run in Dispatch Center"
                                     >
-                                        <MapPin className="w-3.5 h-3.5 text-indigo-500" />
                                         Track Run
                                     </button>
                                 )}
@@ -380,10 +350,9 @@ export default function IncidentCard({
                                         e.stopPropagation();
                                         onClick?.();
                                     }}
-                                    className="flex-1 py-1.5 px-3 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                                    className="flex-1 py-1.5 px-3 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer"
                                 >
-                                    <span>Details</span>
-                                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                                    Details
                                 </button>
                             </div>
                         </div>

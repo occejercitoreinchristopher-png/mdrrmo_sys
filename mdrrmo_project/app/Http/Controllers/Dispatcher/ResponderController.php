@@ -14,12 +14,31 @@ class ResponderController extends Controller
     public function index(Request $request)
     {
         $search = trim((string) $request->input('search', $request->input('q', '')));
+        $status = strtolower(trim((string) $request->input('status', '')));
+        $role = strtolower(trim((string) $request->input('role', '')));
+        $team = trim((string) $request->input('team', ''));
 
-        // Only fetch users with responder roles
+        // 1. Fetch active dispatches first to accurately classify deployed responders
+        $activeDispatches = Dispatch::whereNotIn('dispatch_status', ['completed', 'cancelled'])
+            ->with(['incident.incidentType', 'ambulance', 'crew'])
+            ->get();
+
+        $assignedUserIds = collect();
+        foreach ($activeDispatches as $d) {
+            if ($d->driver_id) $assignedUserIds->push((int) $d->driver_id);
+            if ($d->emt_id) $assignedUserIds->push((int) $d->emt_id);
+            foreach ($d->crew as $c) {
+                $assignedUserIds->push((int) $c->id);
+            }
+        }
+        $assignedUserIds = $assignedUserIds->unique()->values()->toArray();
+
+        // 2. Base Query for responders
         $query = User::whereIn('role', ['responder', 'team_leader', 'emt', 'driver'])
             ->with(['responderProfile'])
             ->withCount('tokens');
 
+        // Search Filter
         if (! empty($search)) {
             $query->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
@@ -39,21 +58,57 @@ class ResponderController extends Controller
             });
         }
 
+        // Status Filter (Only 3 canonical statuses: available, assigned, offline)
+        if (! empty($status)) {
+            if ($status === 'assigned') {
+                $query->whereIn('id', $assignedUserIds);
+            } elseif ($status === 'available') {
+                $query->whereNotIn('id', $assignedUserIds)
+                    ->whereHas('responderProfile', fn ($rq) => $rq->where('availability', 'available'));
+            } elseif ($status === 'offline') {
+                $query->whereNotIn('id', $assignedUserIds)
+                    ->where(function ($sub) {
+                        $sub->whereDoesntHave('responderProfile')
+                            ->orWhereHas('responderProfile', fn ($rq) => $rq->where('availability', '!=', 'available'));
+                    });
+            }
+        }
+
+        // Role Filter
+        if (! empty($role)) {
+            $query->where(function ($q) use ($role) {
+                if ($role === 'team_leader') {
+                    $q->where('role', 'team_leader')
+                        ->orWhereHas('responderProfile', fn ($rq) => $rq->where('position', 'like', '%leader%'));
+                } else {
+                    $q->where('role', $role)
+                        ->orWhereHas('responderProfile', fn ($rq) => $rq->where('position', 'like', "%{$role}%"));
+                }
+            });
+        }
+
+        // Team Filter
+        if (! empty($team)) {
+            if (strtolower($team) === 'reliever') {
+                $query->whereHas('responderProfile', fn ($rq) => $rq->where('is_reliever', true));
+            } elseif (strtolower($team) === 'unassigned') {
+                $query->whereHas('responderProfile', fn ($rq) => $rq->whereNull('team')->orWhere('team', ''));
+            } else {
+                $query->whereHas('responderProfile', function ($rq) use ($team) {
+                    $rq->where('team', 'like', "%{$team}%")
+                        ->where(function ($sub) {
+                            $sub->where('is_reliever', false)
+                                ->orWhereNull('is_reliever');
+                        });
+                });
+            }
+        }
+
         $users = $query->orderBy('id', 'asc')
             ->paginate(25)
             ->withQueryString();
 
-        // Fetch active dispatches for these users
-        $userIds = $users->pluck('id')->toArray();
-        $activeDispatches = Dispatch::whereNotIn('dispatch_status', ['completed', 'cancelled'])
-            ->with(['incident.incidentType', 'ambulance', 'crew'])
-            ->where(function ($q) use ($userIds) {
-                $q->whereIn('driver_id', $userIds)
-                    ->orWhereIn('emt_id', $userIds)
-                    ->orWhereHas('crew', fn ($cq) => $cq->whereIn('users.id', $userIds));
-            })->get();
-
-        // Attach active dispatch and reliever mission info to users
+        // 3. Attach active dispatch and reliever mission info to users
         $users->getCollection()->transform(function ($user) use ($activeDispatches) {
             $dispatch = $activeDispatches->first(function ($d) use ($user) {
                 return $d->driver_id === $user->id 
@@ -107,12 +162,45 @@ class ResponderController extends Controller
             $user->permanent_crew = $permanentCrew;
             $user->temporary_mission = $temporaryMission;
             $user->is_borrowed = $isBorrowed;
-            $user->current_status = $dispatch ? 'assigned' : ($user->responderProfile?->availability ?? 'offline');
+            $user->current_status = $dispatch ? 'assigned' : (($user->responderProfile?->availability === 'available') ? 'available' : 'offline');
             $user->is_logged_in = (int) ($user->tokens_count ?? 0) > 0;
             $user->dispatches = $dispatch ? [$dispatch] : [];
 
             return $user;
         });
+
+        // 4. Compute overall KPI metrics (Total, Assigned, Available, Offline)
+        $allResponders = User::whereIn('role', ['responder', 'team_leader', 'emt', 'driver'])
+            ->with(['responderProfile'])
+            ->get();
+
+        $summary = [
+            'total' => $allResponders->count(),
+            'assigned' => $allResponders->filter(fn ($u) => in_array($u->id, $assignedUserIds))->count(),
+            'available' => $allResponders->filter(fn ($u) => ! in_array($u->id, $assignedUserIds) && ($u->responderProfile?->availability === 'available'))->count(),
+            'offline' => $allResponders->filter(fn ($u) => ! in_array($u->id, $assignedUserIds) && ($u->responderProfile?->availability !== 'available'))->count(),
+            'relievers' => $allResponders->filter(fn ($u) => (bool) $u->responderProfile?->is_reliever)->count(),
+        ];
+
+        // 5. JSON Response for TanStack Query / AJAX (do not intercept Inertia visits)
+        if (! $request->header('X-Inertia') && ($request->wantsJson() || $request->expectsJson())) {
+            return response()->json([
+                'users' => $users->items(),
+                'pagination' => [
+                    'current_page' => $users->currentPage(),
+                    'last_page' => $users->lastPage(),
+                    'per_page' => $users->perPage(),
+                    'total' => $users->total(),
+                ],
+                'filters' => [
+                    'search' => $search,
+                    'status' => $status,
+                    'role' => $role,
+                    'team' => $team,
+                ],
+                'summary' => $summary,
+            ]);
+        }
 
         return Inertia::render('dispatcher/Responders', [
             'users' => $users->items(),
@@ -124,14 +212,18 @@ class ResponderController extends Controller
             ],
             'filters' => [
                 'search' => $search,
+                'status' => $status,
+                'role' => $role,
+                'team' => $team,
             ],
+            'summary' => $summary,
         ]);
     }
 
     public function updateStatus(Request $request, User $user)
     {
         $validated = $request->validate([
-            'availability' => 'required|string|in:available,off_duty,on_leave,sick',
+            'availability' => 'required|string|in:available,offline,off_duty',
         ]);
 
         // Check if user is currently assigned to an active mission
@@ -148,20 +240,16 @@ class ResponderController extends Controller
             ]);
         }
 
+        $newAvailability = $validated['availability'] === 'available' ? 'available' : 'offline';
+
         if ($user->responderProfile) {
-            $user->responderProfile->update(['availability' => $validated['availability']]);
+            $user->responderProfile->update(['availability' => $newAvailability]);
             try {
                 broadcast(new ResponderStatusUpdated($user));
             } catch (\Throwable $e) {}
         }
 
-        $statusLabel = match ($validated['availability']) {
-            'available' => 'Available (Returned)',
-            'off_duty' => 'Off Duty',
-            'on_leave' => 'On Leave',
-            'sick' => 'Sick',
-            default => ucfirst($validated['availability']),
-        };
+        $statusLabel = $newAvailability === 'available' ? 'Available' : 'Offline';
 
         return back()->with('success', "{$user->first_name} {$user->last_name} marked as {$statusLabel}.");
     }

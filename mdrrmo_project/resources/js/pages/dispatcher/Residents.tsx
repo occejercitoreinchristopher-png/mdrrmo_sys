@@ -1,34 +1,22 @@
-import React, { useState, useTransition } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import { router } from '@inertiajs/react';
 import {
-    Users,
-    Search,
-    MapPin,
-    Phone,
-    Mail,
-    Calendar,
-    AlertTriangle,
-    Eye,
-    Copy,
-    Check,
-    X,
-    Filter,
-    ArrowUpDown,
     ChevronUp,
     ChevronDown,
-    ShieldCheck,
-    UserCheck,
-    PhoneCall,
-    UserX,
-    FileQuestion,
-    Activity,
+    ArrowUpDown,
+    ChevronRight,
+    RotateCcw,
+    Copy,
+    Check,
+    Search,
+    X,
 } from 'lucide-react';
 import DispatcherLayout from '@/dispatcher/layouts/DispatcherLayout';
 import PageHeader from '@/shared/components/PageHeader';
 import Card from '@/shared/components/Card';
 import Button from '@/shared/components/Button';
-import StatusBadge from '@/shared/components/StatusBadge';
 import Pagination from '@/shared/components/Pagination';
+import Select from '@/shared/components/Select';
 import { toPascalCase } from '@/shared/utils/utils';
 
 interface Barangay {
@@ -79,6 +67,13 @@ interface SimCallerIncident {
     incident_type?: { incident_type_name?: string; name?: string } | null;
 }
 
+interface ResidentSummary {
+    total_registered: number;
+    total_active: number;
+    total_anonymous: number;
+    total_reports: number;
+}
+
 interface ResidentsPageProps {
     residents: {
         data: ResidentUser[];
@@ -102,21 +97,68 @@ interface ResidentsPageProps {
         direction?: 'asc' | 'desc';
         sim_search?: string;
     };
+    summary?: ResidentSummary;
 }
 
-export default function ResidentsPage({ residents, simCallers, barangays = [], filters = {} }: ResidentsPageProps) {
+export default function ResidentsPage({
+    residents,
+    simCallers,
+    barangays = [],
+    filters = {},
+    summary,
+}: ResidentsPageProps) {
     const [activeTab, setActiveTab] = useState<'registered' | 'sim_callers'>('registered');
     const [search, setSearch] = useState(filters.search || '');
+    const [debouncedSearch, setDebouncedSearch] = useState(search);
     const [barangay, setBarangay] = useState(filters.barangay || '');
     const [simSearch, setSimSearch] = useState(filters.sim_search || '');
-    const [copiedId, setCopiedId] = useState<number | null>(null);
+    const [debouncedSimSearch, setDebouncedSimSearch] = useState(simSearch);
+    const [copiedId, setCopiedId] = useState<number | string | null>(null);
     const [isPending, startTransition] = useTransition();
 
     const residentList = residents?.data || [];
+    const simCallerList = simCallers?.data || [];
     const currentSort = filters.sort || 'created_at';
     const currentDirection = filters.direction || 'desc';
 
-    const handleApplyFilters = (newSearch?: string, newBarangay?: string, newSort?: string, newDirection?: string) => {
+    // Debounce Registered Residents search input (350ms)
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(search);
+        }, 350);
+        return () => clearTimeout(timer);
+    }, [search]);
+
+    useEffect(() => {
+        if (debouncedSearch === (filters.search || '')) return;
+        applyFilters(debouncedSearch, barangay);
+    }, [debouncedSearch]);
+
+    // Debounce SIM Callers search input (350ms)
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSimSearch(simSearch);
+        }, 350);
+        return () => clearTimeout(timer);
+    }, [simSearch]);
+
+    useEffect(() => {
+        if (debouncedSimSearch === (filters.sim_search || '')) return;
+        startTransition(() => {
+            router.get(
+                '/dispatcher/residents',
+                { ...(debouncedSimSearch ? { sim_search: debouncedSimSearch } : {}) },
+                { preserveState: true, preserveScroll: true }
+            );
+        });
+    }, [debouncedSimSearch]);
+
+    const applyFilters = (
+        newSearch?: string,
+        newBarangay?: string,
+        newSort?: string,
+        newDirection?: string
+    ) => {
         const queryParams: Record<string, any> = {};
 
         const s = newSearch !== undefined ? newSearch : search;
@@ -137,19 +179,33 @@ export default function ResidentsPage({ residents, simCallers, barangays = [], f
         });
     };
 
-    const handleSearchSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        handleApplyFilters(search, barangay);
+    const handleBarangayChange = (value: string) => {
+        setBarangay(value);
+        applyFilters(search, value);
     };
 
-    const handleClearFilters = () => {
+    const handleClearRegisteredFilters = () => {
         setSearch('');
+        setDebouncedSearch('');
         setBarangay('');
         startTransition(() => {
-            router.get('/dispatcher/residents', {}, {
-                preserveState: true,
-                preserveScroll: true,
-            });
+            router.get(
+                '/dispatcher/residents',
+                {},
+                { preserveState: true, preserveScroll: true }
+            );
+        });
+    };
+
+    const handleClearSimFilters = () => {
+        setSimSearch('');
+        setDebouncedSimSearch('');
+        startTransition(() => {
+            router.get(
+                '/dispatcher/residents',
+                {},
+                { preserveState: true, preserveScroll: true }
+            );
         });
     };
 
@@ -158,29 +214,30 @@ export default function ResidentsPage({ residents, simCallers, barangays = [], f
         if (currentSort === key) {
             newDir = currentDirection === 'asc' ? 'desc' : 'asc';
         }
-        handleApplyFilters(undefined, undefined, key, newDir);
+        applyFilters(undefined, undefined, key, newDir);
     };
 
-    const handleCopyPhone = (e: React.MouseEvent, id: number, phone: string) => {
+    const handleCopyText = (e: React.MouseEvent, id: number | string, text: string) => {
         e.stopPropagation();
-        if (!phone) return;
+        if (!text) return;
         try {
             if (navigator?.clipboard?.writeText) {
-                navigator.clipboard.writeText(phone).then(() => {
-                    setCopiedId(id);
-                    setTimeout(() => setCopiedId(null), 2000);
-                }).catch(() => {
-                    fallbackCopy(phone, id);
-                });
+                navigator.clipboard
+                    .writeText(text)
+                    .then(() => {
+                        setCopiedId(id);
+                        setTimeout(() => setCopiedId(null), 2000);
+                    })
+                    .catch(() => fallbackCopy(text, id));
             } else {
-                fallbackCopy(phone, id);
+                fallbackCopy(text, id);
             }
         } catch {
-            fallbackCopy(phone, id);
+            fallbackCopy(text, id);
         }
     };
 
-    const fallbackCopy = (text: string, id: number) => {
+    const fallbackCopy = (text: string, id: number | string) => {
         try {
             const textarea = document.createElement('textarea');
             textarea.value = text;
@@ -202,14 +259,14 @@ export default function ResidentsPage({ residents, simCallers, barangays = [], f
             <button
                 type="button"
                 onClick={() => handleSort(sortKey)}
-                className="flex items-center gap-1.5 uppercase font-semibold text-xs text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-white transition-colors group text-left cursor-pointer"
+                className="flex items-center gap-1.5 uppercase font-semibold text-[11px] tracking-wider text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors group cursor-pointer"
             >
                 <span>{label}</span>
                 {isActive ? (
                     currentDirection === 'asc' ? (
-                        <ChevronUp className="w-3.5 h-3.5 text-[#F61509]" />
+                        <ChevronUp className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                     ) : (
-                        <ChevronDown className="w-3.5 h-3.5 text-[#F61509]" />
+                        <ChevronDown className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                     )
                 ) : (
                     <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-600 group-hover:text-slate-600 dark:group-hover:text-slate-400 transition-colors" />
@@ -218,550 +275,622 @@ export default function ResidentsPage({ residents, simCallers, barangays = [], f
         );
     };
 
-    const handleSimSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        startTransition(() => {
-            router.get('/dispatcher/residents', { sim_search: simSearch.trim() }, {
-                preserveState: true,
-                preserveScroll: true,
-            });
-        });
-    };
+    const barangayOptions = [
+        { value: '', label: 'All Barangays' },
+        ...barangays.map((b) => ({
+            value: String(b.id),
+            label: `Brgy. ${toPascalCase(b.barangay_name)}`,
+        })),
+    ];
 
-    const simCallerList = simCallers?.data || [];
+    const isRegisteredFiltered = Boolean(search || barangay || currentSort !== 'created_at');
+    const isSimFiltered = Boolean(simSearch);
 
     return (
-        <DispatcherLayout title="Residents">
-            <div className="space-y-5 max-w-7xl mx-auto pb-12">
-                {/* Header */}
+        <DispatcherLayout title="Resident Directory">
+            <div className="space-y-4 max-w-7xl mx-auto pb-10">
+                {/* 1. Page Header */}
                 <PageHeader
                     title="Resident Directory"
                     subtitle="View registered community residents, demographic data, verified contact information, and reported incident records."
                 />
 
-                {/* Tab Switcher */}
-                <div className="flex items-center gap-2 border-b border-slate-200/80 dark:border-white/10">
+                {/* 2. Sleek Segmented Tab Switcher */}
+                <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-white/[0.04] border border-slate-200/80 dark:border-white/10 rounded-2xl w-fit">
                     <button
                         type="button"
                         onClick={() => setActiveTab('registered')}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all cursor-pointer -mb-px ${
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                             activeTab === 'registered'
-                                ? 'border-[#F61509] text-[#F61509]'
-                                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs border border-slate-200/60 dark:border-white/10'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                     >
-                        <Users className="w-4 h-4" />
-                        Registered Residents
-                        <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                            activeTab === 'registered' ? 'bg-[#F61509]/15 text-[#F61509]' : 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400'
-                        }`}>{residents?.total ?? 0}</span>
+                        <span>Registered Residents</span>
+                        <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                activeTab === 'registered'
+                                    ? 'bg-slate-100 dark:bg-white/10 text-slate-900 dark:text-white'
+                                    : 'bg-slate-200/60 dark:bg-white/5 text-slate-500'
+                            }`}
+                        >
+                            {residents?.total ?? residentList.length}
+                        </span>
                     </button>
                     <button
                         type="button"
                         onClick={() => setActiveTab('sim_callers')}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all cursor-pointer -mb-px ${
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                             activeTab === 'sim_callers'
-                                ? 'border-amber-500 text-amber-600 dark:text-amber-400'
-                                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs border border-slate-200/60 dark:border-white/10'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                     >
-                        <PhoneCall className="w-4 h-4" />
-                        SIM / Anonymous Callers
-                        <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                            activeTab === 'sim_callers' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400'
-                        }`}>{simCallers?.total ?? 0}</span>
+                        <span>SIM / Anonymous Callers</span>
+                        <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                activeTab === 'sim_callers'
+                                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/20'
+                                    : 'bg-slate-200/60 dark:bg-white/5 text-slate-500'
+                            }`}
+                        >
+                            {simCallers?.total ?? simCallerList.length}
+                        </span>
                     </button>
                 </div>
 
-                {/* Registered Residents Tab */}
+                {/* 4. Tab 1: Registered Residents View */}
                 {activeTab === 'registered' && (
-                <Card padding={false} className="border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#090e1a] shadow-sm rounded-2xl overflow-hidden">
-                    <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
-                        <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
-                                {/* Search input */}
-                                <div className="relative flex-1 min-w-[260px]">
-                                    <input
-                                        type="text"
-                                        value={search}
-                                        onChange={(e) => setSearch(e.target.value)}
-                                        placeholder="Search by name (e.g. 'ren'), email, phone..."
-                                        className="w-full bg-white dark:bg-[#070b14]/70 border border-slate-200/80 dark:border-white/10 rounded-xl pl-9 pr-10 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#F61509]/30 focus:border-[#F61509] transition-all"
-                                    />
-                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                        <Search className="w-4 h-4" />
+                    <Card padding={false}>
+                        {/* Toolbar */}
+                        <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] flex flex-col gap-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+                                    {/* Debounced Search Input */}
+                                    <div className="relative w-full sm:w-72">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                        <input
+                                            type="text"
+                                            value={search}
+                                            onChange={(e) => setSearch(e.target.value)}
+                                            placeholder="Search name, email, phone..."
+                                            className="w-full bg-white dark:bg-[#070b14] border border-slate-200/80 dark:border-white/10 rounded-xl pl-9 pr-9 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all shadow-xs"
+                                        />
+                                        {search && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSearch('');
+                                                    setDebouncedSearch('');
+                                                    applyFilters('', barangay);
+                                                }}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
                                     </div>
-                                    {search && (
+
+                                    {/* Barangay Dropdown */}
+                                    <div className="w-48 sm:w-56">
+                                        <Select
+                                            id="resident-barangay-filter"
+                                            value={barangay}
+                                            onChange={handleBarangayChange}
+                                            options={barangayOptions}
+                                            placeholder={null}
+                                            className="text-xs h-9 py-1.5"
+                                        />
+                                    </div>
+
+                                    {/* Reset Button (Only visible when filtered) */}
+                                    {isRegisteredFiltered && (
                                         <button
                                             type="button"
-                                            onClick={() => {
-                                                setSearch('');
-                                                handleApplyFilters('', barangay);
-                                            }}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+                                            onClick={handleClearRegisteredFilters}
+                                            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                                            title="Reset all search and dropdown filters"
                                         >
-                                            <X className="w-3.5 h-3.5" />
+                                            <RotateCcw className="w-3 h-3" />
+                                            <span>Reset</span>
                                         </button>
                                     )}
                                 </div>
 
-                                {/* Barangay Dropdown Filter */}
-                                <div className="relative min-w-[180px]">
-                                    <select
-                                        value={barangay}
-                                        onChange={(e) => {
-                                            setBarangay(e.target.value);
-                                            handleApplyFilters(search, e.target.value);
-                                        }}
-                                        className="w-full bg-white dark:bg-[#070b14]/70 border border-slate-200/80 dark:border-white/10 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F61509]/30 focus:border-[#F61509] transition-all appearance-none cursor-pointer"
-                                    >
-                                        <option value="" className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300">All Barangays</option>
-                                        {barangays.map((b) => (
-                                            <option key={b.id} value={b.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                                                Brgy. {toPascalCase(b.barangay_name)}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
-                                        ▼
-                                    </div>
+                                {/* Live Sync / Status */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {isPending && (
+                                        <span className="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
+                                            Updating...
+                                        </span>
+                                    )}
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                                        Showing {residentList.length} of {residents?.total ?? residentList.length}
+                                    </span>
                                 </div>
-
-                                {/* Search button */}
-                                <Button type="submit" variant="primary" size="sm" className="whitespace-nowrap">
-                                    <Search className="w-3.5 h-3.5 mr-1" />
-                                    Search
-                                </Button>
-
-                                {/* Reset Filter Button */}
-                                {(search || barangay || currentSort !== 'created_at') && (
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        size="sm"
-                                        onClick={handleClearFilters}
-                                        className="whitespace-nowrap"
-                                    >
-                                        <X className="w-3.5 h-3.5 mr-1" />
-                                        Clear
-                                    </Button>
-                                )}
                             </div>
+                        </div>
 
-                            {/* Count summary */}
-                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 self-end md:self-center">
-                                <span>Showing <strong className="text-slate-900 dark:text-white">{residents?.total ?? residentList.length}</strong> registered residents</span>
-                            </div>
-                        </form>
-                    </div>
+                        {/* Table */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead>
+                                    <tr className="border-b border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
+                                        <th className="px-5 py-3.5">
+                                            {renderSortHeader('Resident Name', 'name')}
+                                        </th>
+                                        <th className="px-5 py-3.5">
+                                            {renderSortHeader('Email', 'email')}
+                                        </th>
+                                        <th className="px-5 py-3.5">
+                                            {renderSortHeader('Phone Number', 'phone_number')}
+                                        </th>
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                            Barangay
+                                        </th>
+                                        <th className="px-5 py-3.5">
+                                            {renderSortHeader('Registration Date', 'created_at')}
+                                        </th>
+                                        <th className="px-5 py-3.5">
+                                            {renderSortHeader('Status', 'status')}
+                                        </th>
+                                        <th className="px-5 py-3.5 text-center">
+                                            {renderSortHeader('Incidents', 'reported_incidents_count')}
+                                        </th>
+                                        <th className="px-5 py-3.5 text-right text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                            Actions
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200/80 dark:divide-white/5">
+                                    {residentList.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={8} className="py-12 text-center text-slate-500 dark:text-slate-400">
+                                                <div className="flex flex-col items-center justify-center gap-1.5">
+                                                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                                        No Residents Found
+                                                    </p>
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
+                                                        {search || barangay
+                                                            ? 'No registered residents matched your search or barangay filter.'
+                                                            : 'There are no residents registered in the database yet.'}
+                                                    </p>
+                                                    {isRegisteredFiltered && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleClearRegisteredFilters}
+                                                            className="mt-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                                                        >
+                                                            Clear all filters
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        residentList.map((res) => {
+                                            const profile = res.resident_profile;
+                                            const barangayName = profile?.barangay?.barangay_name;
+                                            const fullName = `${res.first_name} ${res.last_name}`;
+                                            const initials = `${res.first_name?.[0] || ''}${res.last_name?.[0] || ''}`.toUpperCase();
+                                            const formattedName = toPascalCase(fullName);
+                                            const displayGender = res.gender || profile?.gender || null;
+                                            const rawBirthdate = res.birthdate || res.birthday || profile?.birthdate || null;
+                                            const displayAge = (() => {
+                                                if (rawBirthdate) {
+                                                    const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(rawBirthdate));
+                                                    const d = isoMatch
+                                                        ? new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]))
+                                                        : new Date(rawBirthdate);
+                                                    if (!isNaN(d.getTime())) {
+                                                        const today = new Date();
+                                                        let years = today.getFullYear() - d.getFullYear();
+                                                        const m = today.getMonth() - d.getMonth();
+                                                        if (m < 0 || (m === 0 && today.getDate() < d.getDate())) years--;
+                                                        if (years >= 0 && years <= 120) return years;
+                                                    }
+                                                }
+                                                return typeof res.age === 'number' && res.age > 0 ? res.age : null;
+                                            })();
 
-                    {/* Table View */}
-                    <div className="overflow-x-auto relative">
-                        {isPending && (
-                            <div className="absolute inset-0 bg-white/60 dark:bg-slate-950/40 backdrop-blur-[1px] z-10 flex items-center justify-center">
-                                <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-700 dark:text-rose-300 shadow-lg">
-                                    <div className="w-3.5 h-3.5 border-2 border-[#F61509] border-t-transparent rounded-full animate-spin" />
-                                    Loading residents...
-                                </div>
+                                            const formattedDate = res.created_at
+                                                ? new Date(res.created_at).toLocaleDateString('en-PH', {
+                                                      month: 'short',
+                                                      day: 'numeric',
+                                                      year: 'numeric',
+                                                  })
+                                                : '—';
+
+                                            const status = (res.status || 'active').toLowerCase();
+
+                                            return (
+                                                <tr
+                                                    key={res.id}
+                                                    onClick={() => router.get(`/dispatcher/residents/${res.id}`)}
+                                                    className="hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors cursor-pointer group"
+                                                >
+                                                    {/* Resident Name & Demographics */}
+                                                    <td className="px-5 py-3.5">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 border border-slate-200/80 dark:border-white/10 flex items-center justify-center shrink-0 shadow-xs font-bold text-xs">
+                                                                {initials || 'R'}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-semibold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors capitalize">
+                                                                    {formattedName}
+                                                                </p>
+                                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 capitalize">
+                                                                    {displayGender ? displayGender : 'Gender not set'}
+                                                                    {displayAge !== null ? ` • ${displayAge} yrs` : ''}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Email */}
+                                                    <td className="px-5 py-3.5 text-xs text-slate-600 dark:text-slate-300 font-mono">
+                                                        <span className="truncate max-w-[200px] block">
+                                                            {res.email || '—'}
+                                                        </span>
+                                                    </td>
+
+                                                    {/* Phone Number with subtle Copy */}
+                                                    <td className="px-5 py-3.5 text-xs font-mono">
+                                                        {res.phone_number ? (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-slate-900 dark:text-slate-200">
+                                                                    {res.phone_number}
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) =>
+                                                                        handleCopyText(e, res.id, res.phone_number!)
+                                                                    }
+                                                                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                                                                    title="Copy phone number"
+                                                                >
+                                                                    {copiedId === res.id ? (
+                                                                        <Check className="w-3 h-3 text-emerald-500" />
+                                                                    ) : (
+                                                                        <Copy className="w-3 h-3" />
+                                                                    )}
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-400 dark:text-slate-500">—</span>
+                                                        )}
+                                                    </td>
+
+                                                    {/* Barangay */}
+                                                    <td className="px-5 py-3.5 text-xs">
+                                                        {barangayName ? (
+                                                            <span className="font-medium text-slate-900 dark:text-slate-200 capitalize">
+                                                                Brgy. {toPascalCase(barangayName)}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-slate-400 dark:text-slate-500">
+                                                                Unassigned
+                                                            </span>
+                                                        )}
+                                                    </td>
+
+                                                    {/* Registration Date */}
+                                                    <td className="px-5 py-3.5 text-xs text-slate-600 dark:text-slate-400 font-mono">
+                                                        {formattedDate}
+                                                    </td>
+
+                                                    {/* Status Badge */}
+                                                    <td className="px-5 py-3.5">
+                                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                                            <span className="capitalize">{status}</span>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Reported Incidents */}
+                                                    <td className="px-5 py-3.5 text-center">
+                                                        <span
+                                                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                                                res.reported_incidents_count > 0
+                                                                    ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'
+                                                                    : 'bg-slate-100 dark:bg-white/5 text-slate-500 border border-slate-200/60 dark:border-white/5'
+                                                            }`}
+                                                        >
+                                                            {res.reported_incidents_count}{' '}
+                                                            {res.reported_incidents_count === 1 ? 'report' : 'reports'}
+                                                        </span>
+                                                    </td>
+
+                                                    {/* Actions */}
+                                                    <td className="px-5 py-3.5 text-right">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                router.get(`/dispatcher/residents/${res.id}`);
+                                                            }}
+                                                            className="text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                                                        >
+                                                            <span>Details</span>
+                                                            <ChevronRight className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Pagination */}
+                        {residents && residents.last_page > 1 && (
+                            <div className="p-4 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
+                                <Pagination
+                                    currentPage={residents.current_page}
+                                    lastPage={residents.last_page}
+                                    total={residents.total}
+                                    perPage={residents.per_page}
+                                    onPageChange={(page) => {
+                                        startTransition(() => {
+                                            router.get(
+                                                '/dispatcher/residents',
+                                                {
+                                                    ...(search ? { search } : {}),
+                                                    ...(barangay ? { barangay } : {}),
+                                                    sort: currentSort,
+                                                    direction: currentDirection,
+                                                    page,
+                                                },
+                                                { preserveState: true, preserveScroll: true }
+                                            );
+                                        });
+                                    }}
+                                />
                             </div>
                         )}
-
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="border-b border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.03]">
-                                    <th className="px-5 py-3.5">
-                                        {renderSortHeader('Resident Name', 'name')}
-                                    </th>
-                                    <th className="px-5 py-3.5">
-                                        {renderSortHeader('Email', 'email')}
-                                    </th>
-                                    <th className="px-5 py-3.5">
-                                        {renderSortHeader('Phone Number', 'phone_number')}
-                                    </th>
-                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">
-                                        Barangay
-                                    </th>
-                                    <th className="px-5 py-3.5">
-                                        {renderSortHeader('Registration Date', 'created_at')}
-                                    </th>
-                                    <th className="px-5 py-3.5">
-                                        {renderSortHeader('Status', 'status')}
-                                    </th>
-                                    <th className="px-5 py-3.5 text-center">
-                                        {renderSortHeader('Incidents', 'reported_incidents_count')}
-                                    </th>
-                                    <th className="px-5 py-3.5 text-right text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">
-                                        Actions
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200/80 dark:divide-white/5">
-                                {residentList.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={8} className="py-12 text-center text-slate-500 dark:text-slate-400">
-                                            <div className="flex flex-col items-center justify-center gap-2">
-                                                <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-white/10 flex items-center justify-center text-slate-400 mb-1">
-                                                    <Users className="w-6 h-6" />
-                                                </div>
-                                                <p className="text-sm font-semibold text-slate-900 dark:text-white">No Residents Found</p>
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
-                                                    {search || barangay
-                                                        ? 'No residents match your search criteria. Try clearing filters.'
-                                                        : 'There are no residents registered in the system yet.'}
-                                                </p>
-                                                {(search || barangay) && (
-                                                    <Button
-                                                        variant="secondary"
-                                                        size="xs"
-                                                        onClick={handleClearFilters}
-                                                        className="mt-2"
-                                                    >
-                                                        Clear Filters
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    residentList.map((res) => {
-                                        const profile = res.resident_profile;
-                                        const barangayName = profile?.barangay?.barangay_name || 'Unassigned';
-                                        const fullName = `${res.first_name} ${res.last_name}`;
-                                        const initials = `${res.first_name?.[0] || ''}${res.last_name?.[0] || ''}`.toUpperCase();
-                                        const formattedName = toPascalCase(fullName);
-                                        const formattedBarangay = toPascalCase(barangayName);
-                                        const displayGender = res.gender || profile?.gender || null;
-                                        const rawBirthdate = res.birthdate || res.birthday || profile?.birthdate || null;
-                                        const displayAge = (() => {
-                                            if (rawBirthdate) {
-                                                const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(rawBirthdate));
-                                                const d = isoMatch
-                                                    ? new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]))
-                                                    : new Date(rawBirthdate);
-                                                if (!isNaN(d.getTime())) {
-                                                    const today = new Date();
-                                                    let years = today.getFullYear() - d.getFullYear();
-                                                    const m = today.getMonth() - d.getMonth();
-                                                    if (m < 0 || (m === 0 && today.getDate() < d.getDate())) years--;
-                                                    if (years >= 0 && years <= 120) return years;
-                                                }
-                                            }
-                                            return typeof res.age === 'number' && res.age > 0 ? res.age : null;
-                                        })();
-
-                                        const formattedDate = res.created_at
-                                            ? new Date(res.created_at).toLocaleDateString('en-PH', {
-                                                  month: 'short',
-                                                  day: 'numeric',
-                                                  year: 'numeric',
-                                              })
-                                            : '—';
-
-                                        return (
-                                            <tr
-                                                key={res.id}
-                                                onClick={() => router.get(`/dispatcher/residents/${res.id}`)}
-                                                className="hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors cursor-pointer group"
-                                            >
-                                                {/* Resident Name */}
-                                                <td className="px-5 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-9 h-9 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 border border-slate-200/80 dark:border-white/10 flex items-center justify-center flex-shrink-0 shadow-sm font-bold text-xs ring-1 ring-slate-900/10 dark:ring-white/20">
-                                                            {initials || 'R'}
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-semibold text-slate-900 dark:text-white group-hover:text-[#F61509] transition-colors capitalize">
-                                                                {formattedName}
-                                                            </p>
-                                                            <p className="text-[11px] text-slate-500 dark:text-slate-400 capitalize">
-                                                                {displayGender ? displayGender : 'Gender not set'}
-                                                                {displayAge !== null ? ` • ${displayAge} yrs` : ''}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-
-                                                {/* Email */}
-                                                <td className="px-5 py-4 text-xs text-slate-600 dark:text-slate-300">
-                                                    <div className="flex items-center gap-1.5 max-w-[200px] truncate">
-                                                        <Mail className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
-                                                        <span className="truncate">{res.email}</span>
-                                                    </div>
-                                                </td>
-
-                                                {/* Phone Number with Copy */}
-                                                <td className="px-5 py-4 text-xs font-mono">
-                                                    {res.phone_number ? (
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="text-slate-900 dark:text-slate-200">{res.phone_number}</span>
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => handleCopyPhone(e, res.id, res.phone_number!)}
-                                                                className="p-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
-                                                                title="Copy phone number"
-                                                            >
-                                                                {copiedId === res.id ? (
-                                                                    <Check className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
-                                                                ) : (
-                                                                    <Copy className="w-3 h-3" />
-                                                                )}
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-slate-400 dark:text-slate-500">—</span>
-                                                    )}
-                                                </td>
-
-                                                {/* Barangay */}
-                                                <td className="px-5 py-4 text-xs">
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 text-slate-700 dark:text-slate-300 font-medium capitalize">
-                                                        <MapPin className="w-3 h-3 text-[#F61509] flex-shrink-0" />
-                                                        {formattedBarangay}
-                                                    </span>
-                                                </td>
-
-                                                {/* Registration Date */}
-                                                <td className="px-5 py-4 text-xs text-slate-500 dark:text-slate-400">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
-                                                        <span>{formattedDate}</span>
-                                                    </div>
-                                                </td>
-
-                                                {/* Account Status */}
-                                                <td className="px-5 py-4">
-                                                    <StatusBadge status={res.status || 'active'} />
-                                                </td>
-
-                                                {/* Reported Incidents */}
-                                                <td className="px-5 py-4 text-center">
-                                                    <span
-                                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                                            res.reported_incidents_count > 0
-                                                                ? 'bg-rose-500/10 text-[#F61509] border border-rose-500/20'
-                                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-white/5'
-                                                        }`}
-                                                    >
-                                                        {res.reported_incidents_count} {res.reported_incidents_count === 1 ? 'report' : 'reports'}
-                                                    </span>
-                                                </td>
-
-                                                {/* Actions */}
-                                                <td className="px-5 py-4 text-right">
-                                                    <Button
-                                                        size="xs"
-                                                        variant="secondary"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            router.get(`/dispatcher/residents/${res.id}`);
-                                                        }}
-                                                        className="group-hover:border-[#F61509]/40 group-hover:text-[#F61509] text-xs font-semibold"
-                                                    >
-                                                        <Eye className="w-3.5 h-3.5 mr-1" />
-                                                        View Details
-                                                    </Button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Pagination */}
-                    {residents && residents.last_page > 1 && (
-                        <div className="p-4 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
-                            <Pagination
-                                currentPage={residents.current_page}
-                                lastPage={residents.last_page}
-                                total={residents.total}
-                                perPage={residents.per_page}
-                                onPageChange={(page) => {
-                                    startTransition(() => {
-                                        router.get(
-                                            '/dispatcher/residents',
-                                            {
-                                                ...(search ? { search } : {}),
-                                                ...(barangay ? { barangay } : {}),
-                                                sort: currentSort,
-                                                direction: currentDirection,
-                                                page,
-                                            },
-                                            { preserveState: true, preserveScroll: true }
-                                        );
-                                    });
-                                }}
-                            />
-                        </div>
-                    )}
-                </Card>
+                    </Card>
                 )}
 
-                {/* SIM / Anonymous Callers Tab */}
+                {/* 5. Tab 2: SIM / Anonymous Callers View */}
                 {activeTab === 'sim_callers' && (
-                <Card padding={false} className="border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#090e1a] shadow-sm rounded-2xl overflow-hidden">
-                    {/* SIM Search Bar */}
-                    <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-white/10 bg-amber-50/50 dark:bg-amber-900/10">
-                        <form onSubmit={handleSimSearch} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                            <div className="flex items-center gap-2 flex-1">
-                                <div className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/20">
-                                    <PhoneCall className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    <Card padding={false}>
+                        {/* Toolbar */}
+                        <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] flex flex-col gap-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+                                    {/* Debounced SIM Search Input */}
+                                    <div className="relative w-full sm:w-72">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                        <input
+                                            type="text"
+                                            value={simSearch}
+                                            onChange={(e) => setSimSearch(e.target.value)}
+                                            placeholder="Search caller name or phone..."
+                                            className="w-full bg-white dark:bg-[#070b14] border border-slate-200/80 dark:border-white/10 rounded-xl pl-9 pr-9 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all shadow-xs"
+                                        />
+                                        {simSearch && (
+                                            <button
+                                                type="button"
+                                                onClick={handleClearSimFilters}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Reset Button (Only visible when filtered) */}
+                                    {isSimFiltered && (
+                                        <button
+                                            type="button"
+                                            onClick={handleClearSimFilters}
+                                            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                                            title="Reset caller search"
+                                        >
+                                            <RotateCcw className="w-3 h-3" />
+                                            <span>Reset</span>
+                                        </button>
+                                    )}
                                 </div>
-                                <div>
-                                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Anonymous SIM / Phone Callers</p>
-                                    <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70">Incidents reported via phone call with no linked resident account.</p>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {isPending && (
+                                        <span className="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
+                                            Updating...
+                                        </span>
+                                    )}
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                                        Showing {simCallerList.length} of {simCallers?.total ?? simCallerList.length} callers
+                                    </span>
                                 </div>
                             </div>
-                            <div className="relative flex-1 min-w-[220px]">
-                                <input
-                                    type="text"
-                                    value={simSearch}
-                                    onChange={(e) => setSimSearch(e.target.value)}
-                                    placeholder="Search by caller name or phone..."
-                                    className="w-full bg-white dark:bg-[#070b14]/70 border border-amber-300/60 dark:border-amber-500/20 rounded-xl pl-9 pr-4 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all"
-                                />
-                                <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-amber-500">
-                                    <Search className="w-4 h-4" />
-                                </div>
-                            </div>
-                            <Button type="submit" size="sm" className="bg-amber-500 hover:bg-amber-600 text-white border-amber-500 whitespace-nowrap">
-                                <Search className="w-3.5 h-3.5 mr-1" />
-                                Search
-                            </Button>
-                        </form>
-                    </div>
-
-                    {/* SIM Callers Table */}
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="border-b border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.03]">
-                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Caller</th>
-                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Phone Number</th>
-                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400 text-center">Total Calls</th>
-                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Last Incident Type</th>
-                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Location</th>
-                                    <th className="px-5 py-3.5 text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">Last Called</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200/80 dark:divide-white/5">
-                                {simCallerList.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400">
-                                            <div className="flex flex-col items-center justify-center gap-2">
-                                                <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 border border-amber-200/80 dark:border-amber-500/20 flex items-center justify-center text-amber-500 mb-1">
-                                                    <PhoneCall className="w-6 h-6" />
-                                                </div>
-                                                <p className="text-sm font-semibold text-slate-900 dark:text-white">No Anonymous SIM Callers Found</p>
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
-                                                    {simSearch ? 'No callers match your search.' : 'No phone/SIM call incidents without a linked resident account.'}
-                                                </p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    simCallerList.map((inc, idx) => {
-                                        const callerName = inc.caller_name ? toPascalCase(inc.caller_name) : 'Unknown Caller';
-                                        const incidentTypeName = inc.incident_type?.incident_type_name || inc.incident_type?.name || 'General';
-                                        const location = inc.place_of_incident || inc.incident_address || 'No location';
-                                        const lastCalled = (inc.last_called_at || inc.reported_at)
-                                            ? new Date((inc.last_called_at || inc.reported_at)!).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                                            : '—';
-                                        const callCount = inc.total_calls ?? 1;
-                                        const isFrequent = callCount >= 3;
-
-                                        return (
-                                            <tr key={inc.caller_phone_number ?? idx} className="hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors group">
-                                                {/* Caller */}
-                                                <td className="px-5 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border ${isFrequent ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-300/40 dark:border-rose-500/20' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-200/60 dark:border-amber-500/20'}`}>
-                                                            <UserX className="w-4 h-4" />
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-semibold text-slate-900 dark:text-white text-sm">{callerName}</p>
-                                                            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
-                                                                <PhoneCall className="w-2.5 h-2.5" />
-                                                                SIM Call — No Account
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </td>
-
-                                                {/* Phone */}
-                                                <td className="px-5 py-4 font-mono text-xs text-slate-700 dark:text-slate-200">
-                                                    {inc.caller_phone_number || '—'}
-                                                </td>
-
-                                                {/* Total Calls */}
-                                                <td className="px-5 py-4 text-center">
-                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                                                        callCount >= 5
-                                                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/25'
-                                                            : callCount >= 3
-                                                            ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/25'
-                                                            : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border-slate-200/60 dark:border-white/10'
-                                                    }`}>
-                                                        <PhoneCall className="w-3 h-3" />
-                                                        {callCount}x {callCount >= 5 ? '— Frequent!' : callCount >= 3 ? '— Repeat' : ''}
-                                                    </span>
-                                                </td>
-
-                                                {/* Incident Type */}
-                                                <td className="px-5 py-4 text-xs text-slate-600 dark:text-slate-300">
-                                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 font-medium">
-                                                        <Activity className="w-3 h-3 text-[#F61509]" />
-                                                        {incidentTypeName}
-                                                    </span>
-                                                </td>
-
-                                                {/* Location */}
-                                                <td className="px-5 py-4 text-xs text-slate-500 dark:text-slate-400 max-w-[200px] truncate">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                                                        <span className="truncate">{location}</span>
-                                                    </div>
-                                                </td>
-
-                                                {/* Last Called */}
-                                                <td className="px-5 py-4 text-xs text-slate-500 dark:text-slate-400">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                                                        {lastCalled}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* SIM Callers Pagination */}
-                    {simCallers && simCallers.last_page > 1 && (
-                        <div className="p-4 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
-                            <Pagination
-                                currentPage={simCallers.current_page}
-                                lastPage={simCallers.last_page}
-                                total={simCallers.total}
-                                perPage={simCallers.per_page}
-                                onPageChange={(page) => {
-                                    startTransition(() => {
-                                        router.get(
-                                            '/dispatcher/residents',
-                                            { ...(simSearch ? { sim_search: simSearch } : {}), sim_page: page },
-                                            { preserveState: true, preserveScroll: true }
-                                        );
-                                    });
-                                }}
-                            />
                         </div>
-                    )}
-                </Card>
-                )}
 
+                        {/* SIM Callers Table */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead>
+                                    <tr className="border-b border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                            Caller
+                                        </th>
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                            Phone Number
+                                        </th>
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 text-center">
+                                            Total Calls
+                                        </th>
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                            Last Incident Type
+                                        </th>
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                            Location
+                                        </th>
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                            Last Called
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200/80 dark:divide-white/5">
+                                    {simCallerList.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400">
+                                                <div className="flex flex-col items-center justify-center gap-1.5">
+                                                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                                        No Anonymous Callers Found
+                                                    </p>
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
+                                                        {simSearch
+                                                            ? 'No callers match your search query.'
+                                                            : 'No phone or SIM call incidents without a linked resident account.'}
+                                                    </p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        simCallerList.map((inc, idx) => {
+                                            const callerName = inc.caller_name
+                                                ? toPascalCase(inc.caller_name)
+                                                : 'Unknown Caller';
+                                            const incidentTypeName =
+                                                inc.incident_type?.incident_type_name ||
+                                                inc.incident_type?.name ||
+                                                'General';
+                                            const location =
+                                                inc.place_of_incident || inc.incident_address || '—';
+                                            const lastCalled =
+                                                inc.last_called_at || inc.reported_at
+                                                    ? new Date(
+                                                          (inc.last_called_at || inc.reported_at)!
+                                                      ).toLocaleDateString('en-PH', {
+                                                          month: 'short',
+                                                          day: 'numeric',
+                                                          year: 'numeric',
+                                                          hour: '2-digit',
+                                                          minute: '2-digit',
+                                                      })
+                                                    : '—';
+                                            const callCount = inc.total_calls ?? 1;
+
+                                            return (
+                                                <tr
+                                                    key={inc.caller_phone_number ?? idx}
+                                                    className="hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors"
+                                                >
+                                                    {/* Caller */}
+                                                    <td className="px-5 py-3.5">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0 font-bold text-xs">
+                                                                {callerName[0] || 'U'}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-semibold text-slate-900 dark:text-white text-xs">
+                                                                    {callerName}
+                                                                </p>
+                                                                <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                                                                    SIM / Phone Call
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Phone */}
+                                                    <td className="px-5 py-3.5 font-mono text-xs">
+                                                        {inc.caller_phone_number ? (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-slate-900 dark:text-slate-200">
+                                                                    {inc.caller_phone_number}
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) =>
+                                                                        handleCopyText(
+                                                                            e,
+                                                                            inc.caller_phone_number!,
+                                                                            inc.caller_phone_number!
+                                                                        )
+                                                                    }
+                                                                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                                                                    title="Copy phone number"
+                                                                >
+                                                                    {copiedId === inc.caller_phone_number ? (
+                                                                        <Check className="w-3 h-3 text-emerald-500" />
+                                                                    ) : (
+                                                                        <Copy className="w-3 h-3" />
+                                                                    )}
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-400 dark:text-slate-500">—</span>
+                                                        )}
+                                                    </td>
+
+                                                    {/* Total Calls */}
+                                                    <td className="px-5 py-3.5 text-center">
+                                                        <span
+                                                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                                                callCount >= 5
+                                                                    ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/25'
+                                                                    : callCount >= 3
+                                                                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/25'
+                                                                    : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-white/10'
+                                                            }`}
+                                                        >
+                                                            {callCount}x {callCount === 1 ? 'Call' : 'Calls'}
+                                                        </span>
+                                                    </td>
+
+                                                    {/* Incident Type */}
+                                                    <td className="px-5 py-3.5 text-xs text-slate-700 dark:text-slate-300">
+                                                        <span className="font-medium">{incidentTypeName}</span>
+                                                    </td>
+
+                                                    {/* Location */}
+                                                    <td className="px-5 py-3.5 text-xs text-slate-600 dark:text-slate-400 max-w-[220px]">
+                                                        <span className="truncate block">{location}</span>
+                                                    </td>
+
+                                                    {/* Last Called */}
+                                                    <td className="px-5 py-3.5 text-xs text-slate-600 dark:text-slate-400 font-mono">
+                                                        {lastCalled}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* SIM Callers Pagination */}
+                        {simCallers && simCallers.last_page > 1 && (
+                            <div className="p-4 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
+                                <Pagination
+                                    currentPage={simCallers.current_page}
+                                    lastPage={simCallers.last_page}
+                                    total={simCallers.total}
+                                    perPage={simCallers.per_page}
+                                    onPageChange={(page) => {
+                                        startTransition(() => {
+                                            router.get(
+                                                '/dispatcher/residents',
+                                                {
+                                                    ...(simSearch ? { sim_search: simSearch } : {}),
+                                                    sim_page: page,
+                                                },
+                                                { preserveState: true, preserveScroll: true }
+                                            );
+                                        });
+                                    }}
+                                />
+                            </div>
+                        )}
+                    </Card>
+                )}
             </div>
         </DispatcherLayout>
     );

@@ -2,21 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import EmptyState from '@/shared/components/EmptyState';
 import PatientCareRecordDetailsModal from '@/dispatcher/components/PatientCareRecords/PatientCareRecordDetailsModal';
 import {
-    Activity,
     ArrowUpDown,
-    Building2,
-    Calendar,
-    CheckCircle2,
     ChevronLeft,
     ChevronRight,
     Clock,
-    Eye,
-    MapPin,
     RotateCcw,
     Search,
-    Stethoscope,
-    Truck,
-    Users,
     X,
 } from 'lucide-react';
 import { toPascalCase } from '@/shared/utils/utils';
@@ -218,10 +209,9 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
 
                     <button
                         type="submit"
-                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#F61509] hover:bg-red-600 text-white font-semibold text-xs sm:text-sm shadow-sm shadow-red-600/20 transition-all cursor-pointer shrink-0"
+                        className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-950 font-semibold text-xs sm:text-sm transition-all cursor-pointer shrink-0"
                     >
-                        <Search className="w-4 h-4" />
-                        <span>Search</span>
+                        Search
                     </button>
                 </form>
 
@@ -257,7 +247,7 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
                             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-50 dark:bg-white/[0.03] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/[0.08] transition-colors cursor-pointer"
                             title="Toggle chronological order"
                         >
-                            <ArrowUpDown className="w-3.5 h-3.5 text-[#F61509]" />
+                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                             <span>{sortOrder === 'newest' ? 'Newest First' : 'Oldest First'}</span>
                         </button>
 
@@ -389,8 +379,7 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
                                                     PCR #{r.id}
                                                 </span>
                                                 <span className="text-xs text-slate-400 dark:text-slate-500">•</span>
-                                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                                                    <Calendar className="w-3.5 h-3.5 text-[#F61509]" />
+                                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                     {formattedIncidentDate}
                                                     {formattedIncidentTime && (
                                                         <span className="text-slate-500 dark:text-slate-400 font-mono text-[11px] ml-1">
@@ -411,8 +400,8 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
                                         </span>
 
                                         {r.transported ? (
-                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                                                <Building2 className="w-3 h-3" /> Transported
+                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                                                Transported
                                             </span>
                                         ) : (
                                             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
@@ -423,10 +412,9 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
                                         <button
                                             type="button"
                                             onClick={() => setSelectedRecord(r)}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-950 font-semibold text-xs shadow-sm transition-all cursor-pointer ml-1"
+                                            className="inline-flex items-center px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-950 font-semibold text-xs shadow-sm transition-all cursor-pointer ml-1"
                                         >
-                                            <Eye className="w-3.5 h-3.5" />
-                                            <span>View PCR Details</span>
+                                            View PCR Details
                                         </button>
                                     </div>
                                 </div>
@@ -465,9 +453,8 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
                                             <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider block">
                                                 Place of Incident
                                             </span>
-                                            <p className="text-sm font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1.5 capitalize">
-                                                <MapPin className="w-4 h-4 text-[#F61509] flex-shrink-0" />
-                                                <span>{placeDisplay}</span>
+                                            <p className="text-sm font-medium text-slate-800 dark:text-slate-200 capitalize">
+                                                {placeDisplay}
                                             </p>
                                         </div>
                                     </div>
@@ -478,8 +465,7 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
                                             <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider block">
                                                 Patient Condition (GCS)
                                             </span>
-                                            <div className="flex items-center gap-1.5 mt-0.5">
-                                                <Stethoscope className="w-3.5 h-3.5 text-[#F61509]" />
+                                            <div className="mt-0.5">
                                                 <span className="font-bold text-slate-900 dark:text-white text-xs font-mono">
                                                     {gcs.total ? `GCS: ${gcs.total}/15` : 'GCS: —'}
                                                 </span>
@@ -493,8 +479,7 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
                                             <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider block">
                                                 Initial Vitals
                                             </span>
-                                            <div className="flex items-center gap-1.5 mt-0.5">
-                                                <Activity className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                            <div className="mt-0.5">
                                                 <span className="font-bold text-slate-900 dark:text-white text-xs font-mono">
                                                     {vitals?.bp ? `BP: ${vitals.bp}` : 'Vitals logged'}
                                                 </span>
@@ -532,21 +517,17 @@ export default function PatientHistory({ records = [] }: PatientHistoryProps) {
                                     {/* Operational & Crew Metadata Footer */}
                                     <div className="flex flex-wrap items-center justify-between gap-3 pt-3 text-xs border-t border-slate-100 dark:border-white/10 text-slate-500 dark:text-slate-400">
                                         <div className="flex items-center gap-4 flex-wrap">
-                                            <span className="flex items-center gap-1.5">
-                                                <Truck className="w-3.5 h-3.5 text-orange-500 dark:text-orange-400" />
-                                                <span className="text-slate-800 dark:text-slate-300 font-semibold capitalize">
-                                                    {toPascalCase(dispatch?.ambulance?.vehicle_name || dispatch?.ambulance?.plate_number || 'MDRRMO Ambulance')}
-                                                </span>
+                                            <span className="text-slate-800 dark:text-slate-300 font-semibold capitalize">
+                                                {toPascalCase(dispatch?.ambulance?.vehicle_name || dispatch?.ambulance?.plate_number || 'MDRRMO Ambulance')}
                                             </span>
 
-                                            <span className="flex items-center gap-1.5">
-                                                <Users className="w-3.5 h-3.5 text-[#F61509]" />
-                                                <span>Crew: <span className="text-slate-800 dark:text-slate-200 font-semibold capitalize">{toPascalCase(dispatch?.team_leader?.name || r.responders || 'Assigned Crew')}</span></span>
+                                            <span>
+                                                Crew: <span className="text-slate-800 dark:text-slate-200 font-semibold capitalize">{toPascalCase(dispatch?.team_leader?.name || r.responders || 'Assigned Crew')}</span>
                                             </span>
 
                                             {r.waiver_signed && (
-                                                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
-                                                    <CheckCircle2 className="w-3.5 h-3.5" /> Waiver Signed
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                                    Waiver Signed
                                                 </span>
                                             )}
                                         </div>

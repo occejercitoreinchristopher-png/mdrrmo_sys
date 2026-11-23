@@ -107,6 +107,25 @@ class ResidentController extends Controller
             return $row;
         });
 
+        // Compute high-level KPI metrics for executive overview
+        $totalRegistered = User::where('role', 'resident')->count();
+        $totalActive = User::where('role', 'resident')->where(function ($q) {
+            $q->where('status', 'active')->orWhereNull('status');
+        })->count();
+        $totalAnonymous = Incident::whereNull('resident_id')
+            ->where('report_source', 'phone_sim')
+            ->whereNotNull('caller_phone_number')
+            ->distinct('caller_phone_number')
+            ->count('caller_phone_number');
+        $totalReports = Incident::whereNotNull('resident_id')->count();
+
+        $summary = [
+            'total_registered' => $totalRegistered,
+            'total_active' => $totalActive,
+            'total_anonymous' => $totalAnonymous,
+            'total_reports' => $totalReports,
+        ];
+
         return Inertia::render('dispatcher/Residents', [
             'residents' => $residents,
             'barangays' => $barangays,
@@ -118,6 +137,7 @@ class ResidentController extends Controller
                 'sim_search' => $request->sim_search ?? '',
             ],
             'simCallers' => $simCallers,
+            'summary' => $summary,
         ]);
     }
 

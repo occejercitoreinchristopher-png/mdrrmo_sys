@@ -49,6 +49,17 @@ class PatientController extends Controller
             });
         }
 
+        if ($request->filled('status')) {
+            $status = strtolower(trim($request->status));
+            if ($status === 'unidentified') {
+                $query->where('is_unidentified', true);
+            } elseif ($status === 'identified') {
+                $query->where(function ($q) {
+                    $q->where('is_unidentified', false)->orWhereNull('is_unidentified');
+                });
+            }
+        }
+
         $patients = $query->latest()->paginate(15)->withQueryString();
 
         $transformedPatients = collect($patients->items())->map(function ($patient) {
@@ -104,6 +115,18 @@ class PatientController extends Controller
             ];
         });
 
+        $totalPatients = Patient::count();
+        $unidentifiedCount = Patient::where('is_unidentified', true)->count();
+        $identifiedCount = $totalPatients - $unidentifiedCount;
+        $totalPcrRecords = DB::table('patient_care_records')->count();
+
+        $summary = [
+            'total' => $totalPatients,
+            'identified' => $identifiedCount,
+            'unidentified' => $unidentifiedCount,
+            'pcr_records' => $totalPcrRecords,
+        ];
+
         return Inertia::render('dispatcher/Patients', [
             'patients' => $transformedPatients,
             'pagination' => [
@@ -114,7 +137,9 @@ class PatientController extends Controller
             ],
             'filters' => [
                 'search' => $request->search ?? '',
+                'status' => $request->status ?? '',
             ],
+            'summary' => $summary,
         ]);
     }
 

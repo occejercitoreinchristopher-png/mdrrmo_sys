@@ -684,6 +684,25 @@ class DispatchController extends Controller
                     'resolved_at' => now(),
                     'verified_by' => $user->id,
                 ]);
+
+                // Check if resident reached 3 intentional prank strikes
+                if ($isPrank && $dispatch->incident->resident_id) {
+                    $resident = \App\Models\User::find($dispatch->incident->resident_id);
+                    if ($resident) {
+                        $prankCount = \App\Models\Incident::where('resident_id', $resident->id)
+                            ->where(function ($q) {
+                                $q->where('is_prank', true)
+                                  ->orWhere('rejection_category', 'prank');
+                            })
+                            ->count();
+
+                        if ($prankCount >= 3) {
+                            $resident->update([
+                                'reporting_suspended_until' => now()->addDay(),
+                            ]);
+                        }
+                    }
+                }
             }
 
             if ($dispatch->ambulance_id) {

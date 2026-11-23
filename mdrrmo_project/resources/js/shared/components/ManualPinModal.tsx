@@ -498,6 +498,20 @@ export default function ManualPinModal({
         };
     }, [inputMode, polygonVertices, riskLevel]);
 
+    // Centroid of closed polygon for real-time preview of High Risk radar pulse
+    const polygonCentroid = useMemo(() => {
+        if (!isPolygonClosed || polygonVertices.length < 3) return null;
+        let sLng = 0, sLat = 0;
+        polygonVertices.forEach(([lng, lat]) => {
+            sLng += lng;
+            sLat += lat;
+        });
+        return {
+            lng: sLng / polygonVertices.length,
+            lat: sLat / polygonVertices.length,
+        };
+    }, [isPolygonClosed, polygonVertices]);
+
     // Handle Map click depending on current mode
     const handleMapClick = (lat: number, lng: number) => {
         if (inputMode === 'POINT') {
@@ -1289,15 +1303,46 @@ export default function ManualPinModal({
                                         );
                                     })}
 
-                                {/* MODE A: Draggable Single Pin Marker */}
-                                {inputMode === 'POINT' && hasValidPin && (
+                                {/* MODE B: High Risk Beating Radar Pulse at Polygon Center */}
+                                {inputMode === 'POLYGON' && isPolygonClosed && polygonCentroid && riskLevel === 'High' && (
                                     <Marker
-                                        longitude={parsedLng}
-                                        latitude={parsedLat}
-                                        anchor="bottom"
-                                        draggable
-                                        onDragEnd={(e) => handleMapClick(e.lngLat.lat, e.lngLat.lng)}
+                                        longitude={polygonCentroid.lng}
+                                        latitude={polygonCentroid.lat}
+                                        anchor="center"
                                     >
+                                        <div className="relative flex items-center justify-center pointer-events-none">
+                                            <span className="w-24 h-24 rounded-full bg-red-500/20 animate-ping absolute" />
+                                            <span className="w-14 h-14 rounded-full bg-red-600/35 animate-ping absolute" />
+                                            <span className="w-5 h-5 rounded-full bg-[#E53935] animate-pulse shadow-[0_0_16px_rgba(229,57,53,0.95)] absolute" />
+                                            <span className="w-2.5 h-2.5 rounded-full bg-white absolute" />
+                                        </div>
+                                    </Marker>
+                                )}
+
+                                {/* MODE A: Draggable Single Pin Marker & High Risk Pulse */}
+                                {inputMode === 'POINT' && hasValidPin && (
+                                    <>
+                                        {riskLevel === 'High' && (
+                                            <Marker
+                                                longitude={parsedLng}
+                                                latitude={parsedLat}
+                                                anchor="center"
+                                            >
+                                                <div className="relative flex items-center justify-center pointer-events-none">
+                                                    <span className="w-24 h-24 rounded-full bg-red-500/20 animate-ping absolute" />
+                                                    <span className="w-14 h-14 rounded-full bg-red-600/35 animate-ping absolute" />
+                                                    <span className="w-5 h-5 rounded-full bg-[#E53935] animate-pulse shadow-[0_0_16px_rgba(229,57,53,0.95)] absolute" />
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-white absolute" />
+                                                </div>
+                                            </Marker>
+                                        )}
+                                        <Marker
+                                            longitude={parsedLng}
+                                            latitude={parsedLat}
+                                            anchor="bottom"
+                                            draggable
+                                            onDragEnd={(e) => handleMapClick(e.lngLat.lat, e.lngLat.lng)}
+                                        >
                                         <div className="flex flex-col items-center cursor-grab active:cursor-grabbing">
                                             <span
                                                 className="mb-1 px-2 py-0.5 rounded-full text-white text-[10px] font-bold shadow-lg whitespace-nowrap border border-white/40"
@@ -1316,6 +1361,7 @@ export default function ManualPinModal({
                                             </svg>
                                         </div>
                                     </Marker>
+                                    </>
                                 )}
                             </Map>
                         ) : (

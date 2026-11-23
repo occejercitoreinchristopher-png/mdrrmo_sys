@@ -733,8 +733,8 @@ class IncidentController extends Controller
                 'verified_by' => $request->user()->id,
             ]);
 
-            // Check if resident has accumulated 3 rejected/prank strikes
-            if ($incident->resident_id) {
+            // Check if resident has accumulated 3 intentional prank strikes
+            if ($incident->resident_id && $isPrank) {
                 $resident = \App\Models\User::find($incident->resident_id);
                 if ($resident) {
                     $prankCount = Incident::where('resident_id', $resident->id)
@@ -744,11 +744,7 @@ class IncidentController extends Controller
                         })
                         ->count();
 
-                    $totalRejected = Incident::where('resident_id', $resident->id)
-                        ->where('incident_status', 'rejected')
-                        ->count();
-
-                    if ($prankCount >= 3 || $totalRejected >= 3) {
+                    if ($prankCount >= 3) {
                         $resident->update([
                             'reporting_suspended_until' => now()->addDay(),
                         ]);
@@ -761,7 +757,7 @@ class IncidentController extends Controller
         \App\Services\PushNotificationService::notifyIncidentRejected($incident);
 
         $notice = ($incident->resident?->fresh()?->isReportingSuspended())
-            ? 'Incident rejected. Reporter reached 3 strikes and has been suspended from reporting for 24 hours.'
+            ? 'Incident rejected. Reporter reached 3 intentional prank strikes and has been suspended from reporting for 24 hours.'
             : 'Incident rejected and any active dispatches cancelled.';
 
         return back()->with('success', $notice);

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { router } from '@inertiajs/react';
+import { useQuery } from '@tanstack/react-query';
 import DataTable from '@/shared/components/DataTable';
 import PageHeader from '@/shared/components/PageHeader';
 import SearchInput from '@/shared/components/SearchInput';
@@ -8,49 +9,229 @@ import Select from '@/shared/components/Select';
 import Button from '@/shared/components/Button';
 import Drawer from '@/shared/components/Drawer';
 import Pagination from '@/shared/components/Pagination';
-import { 
-    ShieldAlert, 
-    Shield, 
-    Truck, 
-    AlertCircle, 
-    CheckCircle2, 
-    Clock, 
-    UserCheck, 
-    ChevronRight,
-    ArrowRightLeft,
-    Siren,
-    Smartphone,
-} from 'lucide-react';
+import { ChevronRight, RotateCcw } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/avatar';
 import { toPascalCase } from '@/shared/utils/utils';
 
-const AVAILABILITY_OPTIONS = [
+const STATUS_OPTIONS = [
     { value: '', label: 'All Statuses' },
-    { value: 'available', label: '🟢 Available' },
-    { value: 'assigned', label: '🚑 Assigned' },
-    { value: 'off_duty', label: '🟡 Off Duty' },
-    { value: 'on_leave', label: '🟠 On Leave' },
-    { value: 'sick', label: '🔴 Sick' },
+    { value: 'available', label: 'Available' },
+    { value: 'assigned', label: 'Assigned' },
+    { value: 'offline', label: 'Offline' },
 ];
 
-interface ResponderManagementProps {
-    users?: any[];
-    pagination?: any;
-    initialSearch?: string;
+const ROLE_OPTIONS = [
+    { value: '', label: 'All Roles' },
+    { value: 'emt', label: 'EMT' },
+    { value: 'driver', label: 'Driver' },
+    { value: 'team_leader', label: 'Team Leader' },
+];
+
+const TEAM_OPTIONS = [
+    { value: '', label: 'All Teams / Pools' },
+    { value: 'Alpha', label: 'Team Alpha' },
+    { value: 'Bravo', label: 'Team Bravo' },
+    { value: 'Charlie', label: 'Team Charlie' },
+    { value: 'reliever', label: 'Reliever Pool' },
+    { value: 'unassigned', label: 'Unassigned' },
+];
+
+interface SummaryStats {
+    total: number;
+    assigned: number;
+    available: number;
+    offline: number;
+    relievers: number;
 }
 
-export default function ResponderManagement({ users = [], pagination = null, initialSearch = '' }: ResponderManagementProps) {
-    const [search, setSearch] = useState(initialSearch);
-    const [statusFilter, setStatusFilter] = useState('');
+interface ResponderManagementProps {
+    initialUsers?: any[];
+    initialPagination?: any;
+    initialFilters?: any;
+    initialSummary?: SummaryStats;
+}
+
+export default function ResponderManagement({
+    initialUsers = [],
+    initialPagination = null,
+    initialFilters = {},
+    initialSummary,
+}: ResponderManagementProps) {
+    // 1. Filter States
+    const [search, setSearch] = useState(initialFilters?.search ?? '');
+    const [debouncedSearch, setDebouncedSearch] = useState(search);
+    const [statusFilter, setStatusFilter] = useState(initialFilters?.status ?? '');
+    const [roleFilter, setRoleFilter] = useState(initialFilters?.role ?? '');
+    const [teamFilter, setTeamFilter] = useState(initialFilters?.team ?? '');
+    const [page, setPage] = useState(initialPagination?.current_page ?? 1);
+
+    // 2. Drawer & Editing States
     const [selectedResponder, setSelectedResponder] = useState<any | null>(null);
     const [statusUpdating, setStatusUpdating] = useState(false);
     const [editingBadge, setEditingBadge] = useState(false);
     const [badgeInput, setBadgeInput] = useState('');
     const [badgeUpdating, setBadgeUpdating] = useState(false);
 
+    // Reset page to 1 when filters change
+    const handleStatusChange = (val: string) => {
+        setStatusFilter(val);
+        setPage(1);
+    };
+
+    const handleRoleChange = (val: string) => {
+        setRoleFilter(val);
+        setPage(1);
+    };
+
+    const handleTeamChange = (val: string) => {
+        setTeamFilter(val);
+        setPage(1);
+    };
+
+    const handleResetFilters = () => {
+        setSearch('');
+        setDebouncedSearch('');
+        setStatusFilter('');
+        setRoleFilter('');
+        setTeamFilter('');
+        setPage(1);
+    };
+
+    const isFiltered = Boolean(debouncedSearch || statusFilter || roleFilter || teamFilter);
+
+    // Sync URL search params cleanly
+    useEffect(() => {
+        const params = new URLSearchParams();
+        if (debouncedSearch) params.set('search', debouncedSearch);
+        if (statusFilter) params.set('status', statusFilter);
+        if (roleFilter) params.set('role', roleFilter);
+        if (teamFilter) params.set('team', teamFilter);
+        if (page > 1) params.set('page', String(page));
+        const qs = params.toString();
+        const newUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}`;
+        window.history.replaceState({}, '', newUrl);
+    }, [debouncedSearch, statusFilter, roleFilter, teamFilter, page]);
+
+    // 4. TanStack Query for fast reactive caching & background fetching
+    const fetchResponders = async () => {
+        const params = new URLSearchParams();
+        if (debouncedSearch) params.set('search', debouncedSearch);
+        if (statusFilter) params.set('status', statusFilter);
+        if (roleFilter) params.set('role', roleFilter);
+        if (teamFilter) params.set('team', teamFilter);
+        if (page > 1) params.set('page', String(page));
+
+        const res = await fetch(`/dispatcher/responders?${params.toString()}`, {
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+
+        if (!res.ok) {
+            throw new Error('Failed to fetch responders roster');
+        }
+
+        return res.json();
+    };
+
+    const isDefaultState =
+        !debouncedSearch &&
+        !statusFilter &&
+        !roleFilter &&
+        !teamFilter &&
+        page === (initialPagination?.current_page ?? 1);
+
+    const { data: serverData, isFetching } = useQuery({
+        queryKey: ['responders', debouncedSearch, statusFilter, roleFilter, teamFilter, page],
+        queryFn: fetchResponders,
+        initialData: isDefaultState
+            ? {
+                  users: initialUsers,
+                  pagination: initialPagination,
+                  summary: initialSummary,
+                  filters: initialFilters,
+              }
+            : undefined,
+        staleTime: 0,
+        refetchOnWindowFocus: false,
+    });
+
+    // 5. Instant client-side reactive filtering (0ms latency fallback)
+    const displayedUsers = useMemo(() => {
+        let list: any[] = serverData?.users ?? initialUsers;
+
+        if (debouncedSearch.trim()) {
+            const q = debouncedSearch.toLowerCase().trim();
+            list = list.filter((u: any) => {
+                const fullName = `${u.first_name ?? ''} ${u.last_name ?? ''}`.toLowerCase();
+                const badge = `${u.badge_number ?? ''} ${u.badge_id ?? ''} ${u.responder_profile?.badge_number ?? ''}`.toLowerCase();
+                const role = `${u.display_role ?? ''} ${u.responder_profile?.position ?? ''} ${u.role ?? ''}`.toLowerCase();
+                const team = `${u.permanent_crew ?? ''} ${u.responder_profile?.team ?? ''}`.toLowerCase();
+                const id = String(u.id ?? '');
+                return (
+                    fullName.includes(q) ||
+                    badge.includes(q) ||
+                    role.includes(q) ||
+                    team.includes(q) ||
+                    id === q ||
+                    `rsp-${id}`.includes(q)
+                );
+            });
+        }
+
+        if (statusFilter) {
+            list = list.filter((u: any) => {
+                const raw = (u.current_status || (u.responder_profile?.availability === 'available' ? 'available' : 'offline')).toLowerCase();
+                const st = raw === 'assigned' ? 'assigned' : (raw === 'available' ? 'available' : 'offline');
+                return st === statusFilter.toLowerCase();
+            });
+        }
+
+        if (roleFilter) {
+            list = list.filter((u: any) => {
+                const pos = `${u.display_role ?? ''} ${u.responder_profile?.position ?? ''} ${u.role ?? ''}`.toLowerCase();
+                if (roleFilter === 'emt') return pos.includes('emt');
+                if (roleFilter === 'driver') return pos.includes('driver');
+                if (roleFilter === 'team_leader') return pos.includes('leader') || pos.includes('lead');
+                return pos.includes(roleFilter.toLowerCase());
+            });
+        }
+
+        if (teamFilter) {
+            list = list.filter((u: any) => {
+                const isReliever = Boolean(u.is_reliever || u.responder_profile?.is_reliever);
+                const rawTeam = `${u.responder_profile?.team ?? ''} ${u.permanent_crew ?? ''}`.toLowerCase();
+                if (teamFilter.toLowerCase() === 'reliever') {
+                    return isReliever;
+                }
+                if (teamFilter.toLowerCase() === 'unassigned') {
+                    return !isReliever && (rawTeam === '' || rawTeam.includes('unassigned'));
+                }
+                return !isReliever && rawTeam.includes(teamFilter.toLowerCase());
+            });
+        }
+
+        return list;
+    }, [serverData?.users, initialUsers, debouncedSearch, statusFilter, roleFilter, teamFilter]);
+
+    const pagination = serverData?.pagination ?? initialPagination ?? null;
+    const summary: SummaryStats = serverData?.summary ?? initialSummary ?? {
+        total: initialUsers.length,
+        assigned: initialUsers.filter((u: any) => u.current_status === 'assigned').length,
+        available: initialUsers.filter((u: any) => u.current_status === 'available').length,
+        offline: initialUsers.filter((u: any) => u.current_status !== 'assigned' && u.current_status !== 'available').length,
+        relievers: initialUsers.filter((u: any) => u.is_reliever).length,
+    };
+
+    // 5. Drawer open / select responder
     const handleSelectResponder = (responder: any) => {
         setSelectedResponder(responder);
-        const currentBadge = responder?.badge_number || responder?.badge_id || responder?.responder_profile?.badge_number || `RSP-${String(responder?.id).padStart(4, '0')}`;
+        const currentBadge =
+            responder?.badge_number ||
+            responder?.badge_id ||
+            responder?.responder_profile?.badge_number ||
+            `RSP-${String(responder?.id).padStart(4, '0')}`;
         setBadgeInput(currentBadge);
         setEditingBadge(false);
     };
@@ -58,131 +239,102 @@ export default function ResponderManagement({ users = [], pagination = null, ini
     const handleUpdateBadge = () => {
         if (!selectedResponder || !badgeInput.trim()) return;
         setBadgeUpdating(true);
-        router.patch(`/dispatcher/responders/${selectedResponder.id}/badge`, {
-            badge_number: badgeInput.trim(),
-        }, {
-            onFinish: () => {
-                setBadgeUpdating(false);
-                setEditingBadge(false);
-                setSelectedResponder((prev: any) => prev ? ({
-                    ...prev,
-                    badge_number: badgeInput.trim(),
-                    badge_id: badgeInput.trim(),
-                }) : null);
+        router.patch(
+            `/dispatcher/responders/${selectedResponder.id}/badge`,
+            {
+                badge_number: badgeInput.trim(),
+            },
+            {
+                onFinish: () => {
+                    setBadgeUpdating(false);
+                    setEditingBadge(false);
+                    setSelectedResponder((prev: any) =>
+                        prev
+                            ? {
+                                  ...prev,
+                                  badge_number: badgeInput.trim(),
+                                  badge_id: badgeInput.trim(),
+                              }
+                            : null
+                    );
+                },
             }
-        });
-    };
-
-    const filtered = users.filter((u: any) => {
-        const q = search.trim().toLowerCase();
-        const badge = (u.badge_number || u.badge_id || u.responder_profile?.badge_number || `RSP-${String(u.id).padStart(4, '0')}`).toLowerCase();
-        const rawBadge = (u.responder_profile?.badge_number || '').toLowerCase();
-        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase();
-        const idStr = String(u.id);
-
-        const matchQ =
-            !q ||
-            fullName.includes(q) ||
-            u.first_name?.toLowerCase().includes(q) ||
-            u.last_name?.toLowerCase().includes(q) ||
-            badge.includes(q) ||
-            rawBadge.includes(q) ||
-            idStr === q ||
-            idStr.includes(q) ||
-            u.display_role?.toLowerCase().includes(q) ||
-            u.permanent_crew?.toLowerCase().includes(q) ||
-            u.role?.toLowerCase().includes(q);
-
-        const currentStatus = u.current_status || u.responder_profile?.availability || 'offline';
-        const matchStatus = !statusFilter || 
-            (statusFilter === 'assigned' ? currentStatus === 'assigned' : currentStatus === statusFilter);
-
-        return matchQ && matchStatus;
-    });
-
-    const getStatusBadge = (user: any) => {
-        const status = user.current_status || user.responder_profile?.availability || 'offline';
-        const isLoggedIn = Boolean(user.is_logged_in);
-
-        let badge;
-        if (status === 'assigned') {
-            badge = (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 border border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
-                    🚑 Assigned
-                </span>
-            );
-        } else {
-            switch (status) {
-                case 'available':
-                    badge = (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            🟢 Available
-                        </span>
-                    );
-                    break;
-                case 'off_duty':
-                    badge = (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            🟡 Off Duty
-                        </span>
-                    );
-                    break;
-                case 'on_leave':
-                    badge = (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                            🟠 On Leave
-                        </span>
-                    );
-                    break;
-                case 'sick':
-                    badge = (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:border-rose-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            🔴 Sick
-                        </span>
-                    );
-                    break;
-                default:
-                    badge = (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-500/15 dark:text-slate-400 dark:border-slate-500/30 capitalize">
-                            ⚪ {status.replace('_', ' ')}
-                        </span>
-                    );
-            }
-        }
-
-        return (
-            <div className="flex flex-col gap-1 items-start">
-                {badge}
-                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                    isLoggedIn
-                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25'
-                        : 'bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10'
-                }`}>
-                    <Smartphone className="w-2.5 h-2.5 shrink-0" />
-                    {isLoggedIn ? 'App Logged In' : 'App Logged Out'}
-                </span>
-            </div>
         );
     };
 
     const handleUpdateStatus = (user: any, newAvailability: string) => {
         if (!user) return;
         setStatusUpdating(true);
-        router.patch(`/dispatcher/responders/${user.id}/status`, {
-            availability: newAvailability,
-        }, {
-            onFinish: () => {
-                setStatusUpdating(false);
-                setSelectedResponder(null);
+        router.patch(
+            `/dispatcher/responders/${user.id}/status`,
+            {
+                availability: newAvailability,
+            },
+            {
+                onFinish: () => {
+                    setStatusUpdating(false);
+                    setSelectedResponder(null);
+                },
             }
-        });
+        );
     };
 
+    // 6. Professional Status Badge (Only 3 canonical statuses: Assigned, Available, Offline)
+    const renderStatusBadge = (user: any) => {
+        const rawStatus = (user.current_status || (user.responder_profile?.availability === 'available' ? 'available' : 'offline')).toLowerCase();
+        const status = rawStatus === 'assigned' ? 'assigned' : (rawStatus === 'available' ? 'available' : 'offline');
+        const isLoggedIn = Boolean(user.is_logged_in);
+
+        let badgeConfig = {
+            label: 'Offline',
+            dotClass: 'bg-slate-400',
+            containerClass:
+                'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-white/10',
+        };
+
+        if (status === 'assigned') {
+            badgeConfig = {
+                label: 'Assigned',
+                dotClass: 'bg-cyan-500 animate-pulse',
+                containerClass:
+                    'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-500/25',
+            };
+        } else if (status === 'available') {
+            badgeConfig = {
+                label: 'Available',
+                dotClass: 'bg-emerald-500',
+                containerClass:
+                    'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25',
+            };
+        }
+
+        return (
+            <div className="flex flex-col gap-1 items-start">
+                <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badgeConfig.containerClass}`}
+                >
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${badgeConfig.dotClass}`} />
+                    <span>{badgeConfig.label}</span>
+                </span>
+                <span
+                    className={`text-[10px] font-medium tracking-wide flex items-center gap-1 ${
+                        isLoggedIn
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-slate-400 dark:text-slate-500'
+                    }`}
+                >
+                    <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                            isLoggedIn ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-slate-600'
+                        }`}
+                    />
+                    {isLoggedIn ? 'App Online' : 'App Offline'}
+                </span>
+            </div>
+        );
+    };
+
+    // 7. Table Columns
     const columns = [
         {
             key: 'name',
@@ -191,8 +343,9 @@ export default function ResponderManagement({ users = [], pagination = null, ini
                 <div className="flex items-center gap-3">
                     <Avatar className="w-9 h-9 rounded-xl border border-slate-200/80 dark:border-white/10 shrink-0">
                         <AvatarImage src={row.avatar} />
-                        <AvatarFallback className="rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 text-xs font-bold ring-1 ring-slate-900/10 dark:ring-white/20">
-                            {row.first_name?.[0]}{row.last_name?.[0]}
+                        <AvatarFallback className="rounded-xl bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-200 text-xs font-bold ring-1 ring-slate-900/10 dark:ring-white/15">
+                            {row.first_name?.[0]}
+                            {row.last_name?.[0]}
                         </AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col min-w-0">
@@ -201,73 +354,75 @@ export default function ResponderManagement({ users = [], pagination = null, ini
                                 {toPascalCase(`${row.first_name} ${row.last_name}`)}
                             </span>
                             {row.is_borrowed && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 animate-pulse">
-                                    <ArrowRightLeft className="w-2.5 h-2.5" />
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                                     Borrowed
                                 </span>
                             )}
                         </div>
                         <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Role: <span className="text-slate-800 dark:text-slate-300 font-medium capitalize">{toPascalCase(row.display_role || 'Responder')}</span>
+                            Role:{' '}
+                            <span className="text-slate-800 dark:text-slate-300 font-medium capitalize">
+                                {toPascalCase(row.display_role || 'Responder')}
+                            </span>
                         </span>
                     </div>
                 </div>
-            )
+            ),
         },
         {
             key: 'badge_id',
             header: 'Badge ID',
             render: (_: any, row: any) => {
-                const badge = row.badge_number || row.badge_id || row.responder_profile?.badge_number || `RSP-${String(row.id).padStart(4, '0')}`;
+                const badge =
+                    row.badge_number ||
+                    row.badge_id ||
+                    row.responder_profile?.badge_number ||
+                    `RSP-${String(row.id).padStart(4, '0')}`;
                 return (
-                    <div className="flex flex-col">
-                        <span className="inline-flex items-center gap-1.5 font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40 w-fit">
-                            <Shield className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    <div className="flex flex-col items-start">
+                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/10">
                             {badge}
                         </span>
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 pl-0.5">
-                            ID: #{row.id}
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono">
+                            ID #{row.id}
                         </span>
                     </div>
                 );
-            }
+            },
         },
         {
             key: 'permanent_crew',
             header: 'Team / Pool',
             render: (_: any, row: any) => (
-                <div className="flex flex-col">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-900 dark:text-slate-200 capitalize">
+                <div className="flex flex-col items-start">
+                    <span className="text-xs font-semibold text-slate-900 dark:text-slate-200 capitalize">
                         {row.is_reliever ? (
-                            <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                            <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/25">
                                 Reliever Pool
                             </span>
                         ) : (
-                            <>
-                                <Shield className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                                {toPascalCase(row.permanent_crew || 'Unassigned')}
-                            </>
+                            toPascalCase(row.permanent_crew || 'Unassigned')
                         )}
                     </span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                        {row.is_reliever ? 'Standby Fill-in' : 'Permanent Crew'}
+                        {row.is_reliever ? 'Standby Fill-in' : 'Permanent Assignment'}
                     </span>
                 </div>
-            )
+            ),
         },
         {
             key: 'role',
             header: 'Role',
             render: (_: any, row: any) => (
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-white/10 px-2.5 py-1 rounded-xl border border-slate-200/80 dark:border-white/10 capitalize">
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-white/5 px-2.5 py-0.5 rounded-lg border border-slate-200/80 dark:border-white/10 capitalize">
                     {toPascalCase(row.display_role || 'Responder')}
                 </span>
-            )
+            ),
         },
         {
             key: 'availability',
             header: 'Status',
-            render: (_: any, row: any) => getStatusBadge(row)
+            render: (_: any, row: any) => renderStatusBadge(row),
         },
         {
             key: 'temporary_mission',
@@ -275,25 +430,30 @@ export default function ResponderManagement({ users = [], pagination = null, ini
             render: (_: any, row: any) => {
                 const mission = row.temporary_mission;
                 if (!mission) {
-                    return <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">— Standby</span>;
+                    return (
+                        <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+                            — Standby
+                        </span>
+                    );
                 }
 
                 if (mission.is_reliever) {
                     return (
-                        <div className="flex flex-col gap-1 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/25 max-w-[280px]">
+                        <div className="flex flex-col gap-0.5 p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 max-w-[260px]">
                             <div className="flex items-center gap-1.5">
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40">
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 uppercase tracking-wider">
                                     Reliever Mission
                                 </span>
-                                <span className="text-xs font-bold text-amber-800 dark:text-amber-200 capitalize">
-                                    Assigned to: {toPascalCase(mission.dispatch_team || 'Emergency Mission')}
+                                <span className="text-xs font-bold text-amber-800 dark:text-amber-200 capitalize truncate">
+                                    {toPascalCase(mission.dispatch_team || 'Emergency Mission')}
                                 </span>
                             </div>
-                            <div className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-1">
-                                <Siren className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                                <span>Incident: <strong className="text-slate-900 dark:text-white">#{mission.incident_id}</strong></span>
+                            <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                                Incident <strong className="text-slate-900 dark:text-white">#{mission.incident_id}</strong>
                                 {mission.incident_code && (
-                                    <span className="text-slate-500 dark:text-slate-400 font-mono">({mission.incident_code})</span>
+                                    <span className="text-slate-500 dark:text-slate-400 font-mono ml-1">
+                                        ({mission.incident_code})
+                                    </span>
                                 )}
                             </div>
                         </div>
@@ -302,97 +462,237 @@ export default function ResponderManagement({ users = [], pagination = null, ini
 
                 return (
                     <div className="flex flex-col gap-0.5">
-                        <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300 flex items-center gap-1">
-                            <Truck className="w-3.5 h-3.5 text-[#F61509]" />
+                        <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400">
                             Incident #{mission.incident_id}
                         </span>
                         <span className="text-[10px] text-slate-500 dark:text-slate-400 capitalize font-medium">
-                            {toPascalCase(mission.dispatch_team)}
+                            {toPascalCase(mission.dispatch_team)} • Active Deployment
                         </span>
                     </div>
                 );
-            }
+            },
         },
         {
             key: 'actions',
             header: '',
             render: (_: any, row: any) => (
-                <Button 
-                    variant="ghost" 
-                    size="sm" 
+                <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => handleSelectResponder(row)}
                     className="text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                    Details <ChevronRight className="w-3.5 h-3.5" />
+                    <span>Details</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
                 </Button>
-            )
-        }
+            ),
+        },
     ];
 
     return (
         <div className="space-y-4">
-            <PageHeader 
-                title="Responder Availability & Crew Roster" 
-                subtitle="Track permanent team assignments, standby relievers, and live emergency mission deployments." 
+            {/* Page Header */}
+            <PageHeader
+                title="Responder Availability & Crew Roster"
+                subtitle="Track permanent team assignments, standby relievers, and live emergency mission deployments."
             />
 
-            <Card padding={false}>
-                <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02]">
-                    <div className="flex items-center gap-3 flex-1 max-w-lg">
-                        <SearchInput 
-                            placeholder="Search by name, Badge ID (e.g. RSP-0001), team..." 
-                            value={search}
-                            onChange={setSearch} 
-                            className="flex-1" 
-                        />
-                        <Select
-                            id="status-filter"
-                            value={statusFilter}
-                            onChange={setStatusFilter}
-                            options={AVAILABILITY_OPTIONS}
-                            className="w-44"
-                        />
+            {/* 1. KPI Metric Summary Cards (Executive Overview) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* Total Roster */}
+                <div className="p-3.5 rounded-2xl bg-white dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 shadow-xs">
+                    <span className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block">
+                        Total Personnel
+                    </span>
+                    <div className="flex items-baseline justify-between mt-1">
+                        <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                            {summary.total}
+                        </span>
+                        <span className="text-[10px] text-slate-400">Roster total</span>
                     </div>
+                </div>
 
-                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                        <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-700 dark:text-amber-400 px-2.5 py-1 rounded-xl border border-amber-500/20 font-medium">
-                            <ArrowRightLeft className="w-3 h-3" /> Borrowed: Never changes permanent crew
+                {/* Ready / Available */}
+                <div className="p-3.5 rounded-2xl bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06] border border-emerald-500/20 shadow-xs">
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                        <span className="text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-400 font-semibold">
+                            Available / Standby
+                        </span>
+                    </div>
+                    <div className="flex items-baseline justify-between mt-1">
+                        <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 tracking-tight">
+                            {summary.available}
+                        </span>
+                        <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 font-medium">
+                            Ready to deploy
                         </span>
                     </div>
                 </div>
 
+                {/* Deployed on Mission */}
+                <div className="p-3.5 rounded-2xl bg-cyan-500/[0.04] dark:bg-cyan-500/[0.06] border border-cyan-500/20 shadow-xs">
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse shrink-0" />
+                        <span className="text-[11px] uppercase tracking-wider text-cyan-700 dark:text-cyan-400 font-semibold">
+                            Active Mission
+                        </span>
+                    </div>
+                    <div className="flex items-baseline justify-between mt-1">
+                        <span className="text-2xl font-black text-cyan-700 dark:text-cyan-300 tracking-tight">
+                            {summary.assigned}
+                        </span>
+                        <span className="text-[10px] text-cyan-600/70 dark:text-cyan-400/60 font-medium">
+                            Dispatched crew
+                        </span>
+                    </div>
+                </div>
+
+                {/* Offline Personnel */}
+                <div className="p-3.5 rounded-2xl bg-white dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 shadow-xs">
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
+                        <span className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
+                            Offline
+                        </span>
+                    </div>
+                    <div className="flex items-baseline justify-between mt-1">
+                        <span className="text-2xl font-black text-slate-700 dark:text-slate-300 tracking-tight">
+                            {summary.offline ?? 0}
+                        </span>
+                        <span className="text-[10px] text-slate-400">Off duty / Standby</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* 2. Main Card with Search & Multi-Filter Toolbar */}
+            <Card padding={false}>
+                <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        {/* Search and Dropdowns */}
+                        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+                            {/* Debounced Search */}
+                            <div className="w-full sm:w-64">
+                                <SearchInput
+                                    placeholder="Search name, badge, ID..."
+                                    value={search}
+                                    onChange={(val) => {
+                                        setSearch(val);
+                                        setDebouncedSearch(val);
+                                        setPage(1);
+                                    }}
+                                    debounce={300}
+                                    className="w-full"
+                                />
+                            </div>
+
+                            {/* Status Filter */}
+                            <div className="w-36 sm:w-40">
+                                <Select
+                                    id="status-filter"
+                                    value={statusFilter}
+                                    onChange={handleStatusChange}
+                                    options={STATUS_OPTIONS}
+                                    placeholder={null}
+                                    className="text-xs h-9 py-1.5"
+                                />
+                            </div>
+
+                            {/* Role Filter */}
+                            <div className="w-32 sm:w-36">
+                                <Select
+                                    id="role-filter"
+                                    value={roleFilter}
+                                    onChange={handleRoleChange}
+                                    options={ROLE_OPTIONS}
+                                    placeholder={null}
+                                    className="text-xs h-9 py-1.5"
+                                />
+                            </div>
+
+                            {/* Team / Pool Filter */}
+                            <div className="w-36 sm:w-44">
+                                <Select
+                                    id="team-filter"
+                                    value={teamFilter}
+                                    onChange={handleTeamChange}
+                                    options={TEAM_OPTIONS}
+                                    placeholder={null}
+                                    className="text-xs h-9 py-1.5"
+                                />
+                            </div>
+
+                            {/* Reset Button (Only visible when filtered) */}
+                            {isFiltered && (
+                                <button
+                                    type="button"
+                                    onClick={handleResetFilters}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                                    title="Reset all search and dropdown filters"
+                                >
+                                    <RotateCcw className="w-3 h-3" />
+                                    <span>Reset</span>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Live Sync Status indicator */}
+                        <div className="flex items-center gap-2 shrink-0">
+                            {isFetching && (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-medium">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping" />
+                                    Updating...
+                                </span>
+                            )}
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                                Showing {displayedUsers.length} of {summary.total}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. Responders Table */}
                 <div className="p-4">
-                    <DataTable 
-                        columns={columns} 
-                        data={filtered} 
-                        keyField="id" 
-                        emptyTitle="No responders found" 
-                        emptyIcon={ShieldAlert} 
+                    <DataTable
+                        columns={columns}
+                        data={displayedUsers}
+                        keyField="id"
+                        loading={isFetching && displayedUsers.length === 0}
+                        emptyTitle="No responders found"
+                        emptyDescription="Try adjusting your search query, status, role, or team filters."
                     />
-                    {pagination && (
-                        <div className="mt-4">
-                            <Pagination {...pagination} onPageChange={(page) => router.get(window.location.pathname, { page })} />
+
+                    {pagination && pagination.last_page > 1 && (
+                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/5">
+                            <Pagination
+                                {...pagination}
+                                onPageChange={(newPage) => {
+                                    setPage(newPage);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                            />
                         </div>
                     )}
                 </div>
             </Card>
 
-            {/* Responder Details Sidebar Drawer */}
+            {/* 4. Responder Details Drawer */}
             {selectedResponder && (
                 <Drawer
                     open={Boolean(selectedResponder)}
                     onClose={() => setSelectedResponder(null)}
                     title={toPascalCase(`${selectedResponder.first_name} ${selectedResponder.last_name}`)}
-                    description={`Permanent Crew: ${toPascalCase(selectedResponder.permanent_crew || 'Unassigned')}`}
+                    description={`Permanent Assignment: ${toPascalCase(selectedResponder.permanent_crew || 'Unassigned')}`}
                     width="w-[420px]"
                 >
-                    <div className="space-y-5">
-                        {/* Header Avatar & Identity */}
-                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200/80 dark:border-white/10 flex items-center gap-4">
-                            <Avatar className="w-14 h-14 rounded-xl border border-slate-200/80 dark:border-white/10">
+                    <div className="space-y-4">
+                        {/* Profile Header */}
+                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex items-center gap-4">
+                            <Avatar className="w-13 h-13 rounded-xl border border-slate-200/80 dark:border-white/10">
                                 <AvatarImage src={selectedResponder.avatar} />
-                                <AvatarFallback className="rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 text-base font-bold ring-1 ring-slate-900/10 dark:ring-white/20">
-                                    {selectedResponder.first_name?.[0]}{selectedResponder.last_name?.[0]}
+                                <AvatarFallback className="rounded-xl bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-200 text-base font-bold ring-1 ring-slate-900/10 dark:ring-white/15">
+                                    {selectedResponder.first_name?.[0]}
+                                    {selectedResponder.last_name?.[0]}
                                 </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
@@ -401,35 +701,40 @@ export default function ResponderManagement({ users = [], pagination = null, ini
                                         {toPascalCase(`${selectedResponder.first_name} ${selectedResponder.last_name}`)}
                                     </h3>
                                     {selectedResponder.is_borrowed && (
-                                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                                        <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 uppercase">
                                             Borrowed
                                         </span>
                                     )}
                                 </div>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                    Role: <span className="text-slate-900 dark:text-white font-semibold capitalize">{toPascalCase(selectedResponder.display_role || 'Responder')}</span>
+                                    Official Role:{' '}
+                                    <span className="text-slate-900 dark:text-white font-semibold capitalize">
+                                        {toPascalCase(selectedResponder.display_role || 'Responder')}
+                                    </span>
                                 </p>
-                                <div className="mt-2">
-                                    {getStatusBadge(selectedResponder)}
-                                </div>
+                                <div className="mt-2">{renderStatusBadge(selectedResponder)}</div>
                             </div>
                         </div>
 
-                        {/* Responder Official ID & Badge Card */}
-                        <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-800/30 space-y-2.5">
+                        {/* Official Badge & Identifier */}
+                        <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-white/[0.02] border border-slate-200/80 dark:border-white/10 space-y-2">
                             <div className="flex items-center justify-between">
-                                <div className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-widest flex items-center gap-1.5">
-                                    <Shield className="w-3.5 h-3.5 text-blue-600" /> Official Badge & ID
-                                </div>
+                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                    Official Badge & Identifier
+                                </span>
                                 {!editingBadge ? (
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            const currentBadge = selectedResponder.badge_number || selectedResponder.badge_id || selectedResponder.responder_profile?.badge_number || `RSP-${String(selectedResponder.id).padStart(4, '0')}`;
+                                            const currentBadge =
+                                                selectedResponder.badge_number ||
+                                                selectedResponder.badge_id ||
+                                                selectedResponder.responder_profile?.badge_number ||
+                                                `RSP-${String(selectedResponder.id).padStart(4, '0')}`;
                                             setBadgeInput(currentBadge);
                                             setEditingBadge(true);
                                         }}
-                                        className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
                                     >
                                         Edit Badge ID
                                     </button>
@@ -437,7 +742,7 @@ export default function ResponderManagement({ users = [], pagination = null, ini
                                     <button
                                         type="button"
                                         onClick={() => setEditingBadge(false)}
-                                        className="text-[11px] font-medium text-slate-500 hover:text-slate-700 cursor-pointer"
+                                        className="text-xs font-medium text-slate-500 hover:text-slate-700 cursor-pointer"
                                     >
                                         Cancel
                                     </button>
@@ -447,14 +752,17 @@ export default function ResponderManagement({ users = [], pagination = null, ini
                             {!editingBadge ? (
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                        <span className="font-mono text-sm font-bold text-blue-800 dark:text-blue-200 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800/40 shadow-xs">
-                                            {selectedResponder.badge_number || selectedResponder.badge_id || selectedResponder.responder_profile?.badge_number || `RSP-${String(selectedResponder.id).padStart(4, '0')}`}
+                                        <span className="font-mono text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-900 px-3 py-1 rounded-xl border border-slate-200 dark:border-white/10 shadow-xs">
+                                            {selectedResponder.badge_number ||
+                                                selectedResponder.badge_id ||
+                                                selectedResponder.responder_profile?.badge_number ||
+                                                `RSP-${String(selectedResponder.id).padStart(4, '0')}`}
                                         </span>
                                         <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                                             (User #{selectedResponder.id})
                                         </span>
                                     </div>
-                                    <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-100/70 dark:bg-blue-900/40 px-2 py-0.5 rounded-md">
+                                    <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded-md">
                                         Active Badge
                                     </span>
                                 </div>
@@ -465,7 +773,7 @@ export default function ResponderManagement({ users = [], pagination = null, ini
                                         value={badgeInput}
                                         onChange={(e) => setBadgeInput(e.target.value)}
                                         placeholder="e.g. RSP-0012 or BADGE-1"
-                                        className="flex-1 px-3 py-1.5 text-xs font-mono font-bold rounded-xl border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="flex-1 px-3 py-1.5 text-xs font-mono font-bold rounded-xl border border-blue-400 dark:border-blue-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         autoFocus
                                     />
                                     <Button
@@ -481,98 +789,84 @@ export default function ResponderManagement({ users = [], pagination = null, ini
                                 </div>
                             )}
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                                This Badge ID is displayed in the responder table and shown to residents in place of personal names for responder privacy.
+                                Used on reports and visible to residents in place of personal identity for responder privacy.
                             </p>
                         </div>
 
-                        {/* Permanent Crew Information */}
-                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200/80 dark:border-white/10 space-y-2">
-                            <div className="text-[10px] font-bold text-[#F61509] uppercase tracking-widest flex items-center gap-1.5">
-                                <Shield className="w-3.5 h-3.5" /> Permanent Crew
-                            </div>
-                            <div className="text-base font-bold text-slate-900 dark:text-white flex items-center justify-between capitalize">
+                        {/* Permanent Assignment Info */}
+                        <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-white/[0.02] border border-slate-200/80 dark:border-white/10 space-y-1.5">
+                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                                Permanent Roster Assignment
+                            </span>
+                            <div className="text-sm font-bold text-slate-900 dark:text-white capitalize flex items-center justify-between">
                                 <span>{toPascalCase(selectedResponder.permanent_crew || 'Unassigned')}</span>
-                                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/10 px-2 py-0.5 rounded-md">Official Team</span>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded-md">
+                                    Official Unit
+                                </span>
                             </div>
-                            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                                This responder officially belongs to <strong className="text-slate-900 dark:text-white capitalize">{toPascalCase(selectedResponder.permanent_crew)}</strong>. Their permanent crew is never modified when borrowed.
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                                Responders borrowed during mutual-aid missions automatically revert back to their permanent crew once the incident completes.
                             </p>
                         </div>
 
-                        {/* Temporary Mission Assignment Card */}
-                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200/80 dark:border-white/10 space-y-3">
-                            <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                                <Truck className="w-3.5 h-3.5 text-blue-500" /> Temporary Mission Assignment
-                            </div>
+                        {/* Temporary Mission Assignment */}
+                        <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-white/[0.02] border border-slate-200/80 dark:border-white/10 space-y-2">
+                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                                Temporary Mission Assignment
+                            </span>
 
                             {selectedResponder.temporary_mission ? (
-                                <div className={`p-3.5 rounded-xl border space-y-2.5 ${
-                                    selectedResponder.is_borrowed 
-                                        ? 'bg-amber-500/10 border-amber-500/30' 
-                                        : 'bg-cyan-500/10 border-cyan-500/20'
-                                }`}>
+                                <div
+                                    className={`p-3 rounded-xl border space-y-2 ${
+                                        selectedResponder.is_borrowed
+                                            ? 'bg-amber-500/10 border-amber-500/25'
+                                            : 'bg-cyan-500/10 border-cyan-500/20'
+                                    }`}
+                                >
                                     <div className="flex items-center justify-between">
                                         <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">
-                                            Incident: #{selectedResponder.temporary_mission.incident_id}
+                                            Incident #{selectedResponder.temporary_mission.incident_id}
                                         </span>
-                                        {selectedResponder.is_borrowed ? (
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-200 border border-amber-500/30">
-                                                Borrowed
-                                            </span>
-                                        ) : (
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-700 dark:text-cyan-200">
-                                                Active Crew
-                                            </span>
-                                        )}
+                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/60 dark:bg-white/10 text-slate-900 dark:text-white">
+                                            {selectedResponder.temporary_mission.dispatch_status}
+                                        </span>
                                     </div>
 
                                     {selectedResponder.is_borrowed && (
-                                        <div className="text-xs font-semibold text-amber-600 dark:text-amber-300">
-                                            Borrowed to: <span className="text-slate-900 dark:text-white">{selectedResponder.temporary_mission.borrowed_to || selectedResponder.temporary_mission.dispatch_team}</span>
+                                        <div className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                                            Borrowed to: {selectedResponder.temporary_mission.borrowed_to || selectedResponder.temporary_mission.dispatch_team}
                                         </div>
                                     )}
-
-                                    <div className="text-xs text-slate-600 dark:text-slate-300">
-                                        Status: <span className="capitalize font-medium text-slate-900 dark:text-white">{selectedResponder.temporary_mission.dispatch_status}</span>
-                                    </div>
 
                                     {selectedResponder.temporary_mission.incident_type && (
-                                        <div className="text-xs text-slate-400">
-                                            Type: {selectedResponder.temporary_mission.incident_type}
-                                        </div>
-                                    )}
-
-                                    {selectedResponder.is_borrowed && (
-                                        <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-200/90 leading-relaxed">
-                                            ⚠️ <strong>Notice:</strong> {toPascalCase(selectedResponder.first_name)} remains assigned to Incident #{selectedResponder.temporary_mission.incident_id} until completion. Upon mission completion, they will automatically return to <strong className="capitalize">{toPascalCase(selectedResponder.permanent_crew)}</strong>.
+                                        <div className="text-xs text-slate-600 dark:text-slate-300">
+                                            Emergency: {selectedResponder.temporary_mission.incident_type}
                                         </div>
                                     )}
                                 </div>
                             ) : (
-                                <div className="p-4 rounded-xl bg-slate-100/70 dark:bg-slate-950/40 border border-slate-200/80 dark:border-white/5 text-center text-xs text-slate-500 dark:text-slate-400">
-                                    No active mission assignment. Ready for deployment with <span className="font-semibold text-slate-800 dark:text-slate-200 capitalize">{toPascalCase(selectedResponder.permanent_crew)}</span>.
+                                <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-white/5 border border-slate-200/60 dark:border-white/5 text-xs text-slate-500 dark:text-slate-400">
+                                    No active mission deployment. Standby ready with{' '}
+                                    <span className="font-semibold text-slate-800 dark:text-slate-200 capitalize">
+                                        {toPascalCase(selectedResponder.permanent_crew)}
+                                    </span>
+                                    .
                                 </div>
                             )}
                         </div>
 
-                        {/* Dispatcher Availability Control */}
-                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200/80 dark:border-white/10 space-y-3">
-                            <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                                <UserCheck className="w-3.5 h-3.5 text-emerald-500" /> Availability Control
-                            </div>
+                        {/* Availability Control Actions */}
+                        <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-white/[0.02] border border-slate-200/80 dark:border-white/10 space-y-2.5">
+                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                                Duty Status Control
+                            </span>
 
                             {selectedResponder.current_status === 'assigned' ? (
-                                <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-xs text-cyan-800 dark:text-cyan-300 flex items-start gap-2">
-                                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-cyan-600 dark:text-cyan-400" />
-                                    <span>
-                                        Locked: Responders assigned to active missions cannot have their availability altered. They will automatically return to their permanent crew once the dispatch is completed.
-                                    </span>
+                                <div className="p-2.5 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-xs text-cyan-800 dark:text-cyan-300">
+                                    <strong>Mission Active:</strong> Duty status is locked while deployed on an active incident. Status unlocks automatically upon mission resolution.
                                 </div>
                             ) : (
                                 <div className="space-y-2">
-                                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                                        Update duty availability for <span className="font-semibold text-slate-900 dark:text-white capitalize">{toPascalCase(selectedResponder.first_name)}</span> (e.g., when returning from absence):
-                                    </p>
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button
                                             variant="secondary"
@@ -580,39 +874,19 @@ export default function ResponderManagement({ users = [], pagination = null, ini
                                             loading={statusUpdating}
                                             disabled={selectedResponder.current_status === 'available'}
                                             onClick={() => handleUpdateStatus(selectedResponder, 'available')}
-                                            className="text-xs bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/25 border-emerald-500/30"
+                                            className="text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 cursor-pointer"
                                         >
-                                            <CheckCircle2 className="w-3.5 h-3.5" /> 🟢 Set Available / Returned
+                                            Set Available
                                         </Button>
                                         <Button
                                             variant="secondary"
                                             size="sm"
                                             loading={statusUpdating}
-                                            disabled={selectedResponder.current_status === 'off_duty'}
-                                            onClick={() => handleUpdateStatus(selectedResponder, 'off_duty')}
-                                            className="text-xs bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-500/25 border-yellow-500/30"
+                                            disabled={selectedResponder.current_status === 'offline'}
+                                            onClick={() => handleUpdateStatus(selectedResponder, 'offline')}
+                                            className="text-xs font-semibold bg-slate-500/10 hover:bg-slate-500/20 text-slate-700 dark:text-slate-300 border border-slate-500/25 cursor-pointer"
                                         >
-                                            <Clock className="w-3.5 h-3.5" /> 🟡 Set Off Duty
-                                        </Button>
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            loading={statusUpdating}
-                                            disabled={selectedResponder.current_status === 'on_leave'}
-                                            onClick={() => handleUpdateStatus(selectedResponder, 'on_leave')}
-                                            className="text-xs text-slate-700 dark:text-slate-300"
-                                        >
-                                            🟠 Set On Leave
-                                        </Button>
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            loading={statusUpdating}
-                                            disabled={selectedResponder.current_status === 'sick'}
-                                            onClick={() => handleUpdateStatus(selectedResponder, 'sick')}
-                                            className="text-xs text-slate-700 dark:text-slate-300"
-                                        >
-                                            🔴 Set Sick
+                                            Set Offline
                                         </Button>
                                     </div>
                                 </div>

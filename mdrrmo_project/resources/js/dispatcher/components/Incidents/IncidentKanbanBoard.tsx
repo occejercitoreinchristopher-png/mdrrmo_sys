@@ -1,18 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
 import { 
-    Clock, 
-    ShieldCheck, 
-    UserCheck, 
-    Truck, 
     Search, 
-    Filter, 
-    Activity, 
-    X,
-    Radio,
-    Sparkles,
-    AlertCircle,
-    CheckCircle2
+    X
 } from 'lucide-react';
 import IncidentCard from './IncidentCard';
 
@@ -96,7 +86,6 @@ export default function IncidentKanbanBoard({
             title: 'PENDING', 
             subtitle: 'Awaiting Triage',
             statusKey: 'pending', 
-            icon: Clock,
             accentBg: 'bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/30',
             topBorder: 'border-t-amber-500',
             badgeClass: 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30',
@@ -107,7 +96,6 @@ export default function IncidentKanbanBoard({
             title: 'VERIFIED', 
             subtitle: 'Ready for Unit Dispatch',
             statusKey: 'verified', 
-            icon: ShieldCheck,
             accentBg: 'bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/30',
             topBorder: 'border-t-blue-500',
             badgeClass: counts.verified > 0 
@@ -120,7 +108,6 @@ export default function IncidentKanbanBoard({
             title: 'ASSIGNED', 
             subtitle: 'Team Marshaled',
             statusKey: 'assigned', 
-            icon: UserCheck,
             accentBg: 'bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 border-indigo-500/30',
             topBorder: 'border-t-indigo-500',
             badgeClass: 'bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30',
@@ -131,7 +118,6 @@ export default function IncidentKanbanBoard({
             title: 'RESPONDING', 
             subtitle: 'Active in Field',
             statusKey: 'responding', 
-            icon: Truck,
             accentBg: 'bg-orange-500/10 text-orange-500 dark:text-orange-400 border-orange-500/30',
             topBorder: 'border-t-orange-500',
             badgeClass: counts.responding > 0
@@ -166,9 +152,6 @@ export default function IncidentKanbanBoard({
                             {counts.total}
                         </div>
                     </div>
-                    <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 flex items-center justify-center text-slate-600 dark:text-slate-400">
-                        <Activity className="w-4 h-4" />
-                    </div>
                 </div>
 
                 {/* Pending Verification */}
@@ -183,9 +166,6 @@ export default function IncidentKanbanBoard({
                         <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
                             {counts.pending}
                         </div>
-                    </div>
-                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
-                        <Clock className="w-4 h-4" />
                     </div>
                 </div>
 
@@ -207,9 +187,6 @@ export default function IncidentKanbanBoard({
                             {counts.verified}
                         </div>
                     </div>
-                    <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                        <ShieldCheck className="w-4 h-4" />
-                    </div>
                 </div>
 
                 {/* Active Field Dispatches */}
@@ -224,9 +201,6 @@ export default function IncidentKanbanBoard({
                         <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
                             {counts.activeField}
                         </div>
-                    </div>
-                    <div className="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center">
-                        <Truck className="w-4 h-4" />
                     </div>
                 </div>
             </div>
@@ -280,8 +254,8 @@ export default function IncidentKanbanBoard({
                     <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-white/10 rounded-xl">
                         {[
                             { id: 'all', label: 'All Sources' },
-                            { id: 'hotline', label: '📞 Hotline' },
-                            { id: 'app', label: '📱 App' },
+                            { id: 'hotline', label: 'Hotline' },
+                            { id: 'app', label: 'App' },
                         ].map((item) => (
                             <button
                                 key={item.id}
@@ -321,7 +295,6 @@ export default function IncidentKanbanBoard({
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start w-full min-h-[70vh]">
                 {columns.map((col) => {
                     const columnIncidents = filteredIncidents.filter(i => i.incident_status === col.statusKey);
-                    const ColIcon = col.icon;
 
                     return (
                         <div 
@@ -334,17 +307,12 @@ export default function IncidentKanbanBoard({
                         >
                             {/* Column Header */}
                             <div className="p-3.5 bg-white/70 dark:bg-slate-900/80 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border", col.accentBg)}>
-                                        <ColIcon className="w-4 h-4" />
-                                    </div>
-                                    <div>
-                                        <h2 className="font-black text-xs tracking-wider uppercase text-slate-900 dark:text-white">
-                                            {col.title}
-                                        </h2>
-                                        <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                                            {col.subtitle}
-                                        </div>
+                                <div>
+                                    <h2 className="font-black text-xs tracking-wider uppercase text-slate-900 dark:text-white">
+                                        {col.title}
+                                    </h2>
+                                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                                        {col.subtitle}
                                     </div>
                                 </div>
 
@@ -357,9 +325,6 @@ export default function IncidentKanbanBoard({
                             <div className="p-3 flex-1 overflow-y-auto space-y-3 min-h-[220px] max-h-[80vh] scrollbar-thin">
                                 {columnIncidents.length === 0 ? (
                                     <div className="text-center py-12 px-4 rounded-xl border border-dashed border-slate-200 dark:border-white/10 space-y-2">
-                                        <div className="w-10 h-10 mx-auto rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-400">
-                                            <ColIcon className="w-5 h-5 opacity-60" />
-                                        </div>
                                         <div className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                                             No {col.title.toLowerCase()} incidents
                                         </div>

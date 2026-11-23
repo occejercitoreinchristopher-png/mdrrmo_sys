@@ -122,7 +122,7 @@ class IncidentController extends Controller
 
         if ($user->isReportingSuspended()) {
             return response()->json([
-                'message' => 'Your reporting privileges are temporarily suspended until ' . $user->reporting_suspended_until->format('M d, Y h:i A') . ' due to multiple rejected reports.',
+                'message' => 'Your reporting privileges are temporarily suspended until ' . $user->reporting_suspended_until->format('M d, Y h:i A') . ' due to multiple intentional prank reports.',
                 'suspended_until' => $user->reporting_suspended_until->toIso8601String(),
             ], 403);
         }

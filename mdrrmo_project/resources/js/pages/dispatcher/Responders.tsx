@@ -1,10 +1,25 @@
 import DispatcherLayout from '@/dispatcher/layouts/DispatcherLayout';
 import ResponderManagement from '@/dispatcher/components/Responders/ResponderManagement';
 
-export default function RespondersPage({ users, pagination, filters }: { users?: any[]; pagination?: any; filters?: any }) {
+export default function RespondersPage({
+    users,
+    pagination,
+    filters,
+    summary,
+}: {
+    users?: any[];
+    pagination?: any;
+    filters?: any;
+    summary?: any;
+}) {
     return (
-        <DispatcherLayout title="Responder Management">
-            <ResponderManagement users={users ?? []} pagination={pagination} initialSearch={filters?.search ?? ''} />
+        <DispatcherLayout title="Responder Roster">
+            <ResponderManagement
+                initialUsers={users ?? []}
+                initialPagination={pagination}
+                initialFilters={filters}
+                initialSummary={summary}
+            />
         </DispatcherLayout>
     );
 }

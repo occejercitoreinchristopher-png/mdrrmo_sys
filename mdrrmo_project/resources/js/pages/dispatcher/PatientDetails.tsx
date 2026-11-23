@@ -6,22 +6,9 @@ import Button from '@/shared/components/Button';
 import PatientHistory from '@/dispatcher/components/Patients/PatientHistory';
 import {
     ArrowLeft,
-    Calendar,
-    CheckCircle,
-    Clock,
-    FileText,
-    Heart,
-    Home,
-    Mail,
-    MapPin,
-    Phone,
-    Shield,
-    Sparkles,
-    User,
-    UserCheck,
-    Copy,
     Check,
-    AlertCircle,
+    Copy,
+    UserCheck,
 } from 'lucide-react';
 import { toPascalCase } from '@/shared/utils/utils';
 import IdentifyPatientModal from '@/dispatcher/components/Patients/IdentifyPatientModal';
@@ -157,15 +144,15 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                                         {formattedPatientName}
                                     </h1>
                                     {patient.is_unidentified ? (
-                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                                            <AlertCircle className="w-3.5 h-3.5" /> Unidentified Patient
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+                                            Unidentified Patient
                                         </span>
                                     ) : patient.registered_user ? (
-                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                            <UserCheck className="w-3.5 h-3.5" /> Registered Resident
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                                            Registered Resident
                                         </span>
                                     ) : (
-                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-[#F61509] border border-rose-500/20">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-[#F61509] border border-rose-500/20">
                                             Community Patient
                                         </span>
                                     )}
@@ -186,8 +173,7 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                                     {formattedBarangay && (
                                         <>
                                             <span>•</span>
-                                            <span className="flex items-center gap-1 font-medium text-slate-800 dark:text-slate-200">
-                                                <MapPin className="w-3.5 h-3.5 text-[#F61509]" />
+                                            <span className="font-medium text-slate-800 dark:text-slate-200">
                                                 Brgy. {formattedBarangay}
                                             </span>
                                         </>
@@ -254,8 +240,8 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                     <div className="lg:col-span-1 lg:sticky lg:top-6 space-y-6">
                         <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#090e1a] shadow-sm overflow-hidden">
                             <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.03] flex items-center justify-between">
-                                <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                                    <User className="w-4 h-4 text-[#F61509]" /> Patient Profile
+                                <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                                    Patient Profile
                                 </h2>
                                 <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Master Record</span>
                             </div>
@@ -291,8 +277,7 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                                     </span>
                                     {patient.contact_number ? (
                                         <div className="flex items-center gap-2">
-                                            <span className="font-mono text-xs text-slate-900 dark:text-slate-200 font-semibold flex items-center gap-1.5">
-                                                <Phone className="w-3.5 h-3.5 text-[#F61509]" />
+                                            <span className="font-mono text-xs text-slate-900 dark:text-slate-200 font-semibold">
                                                 {patient.contact_number}
                                             </span>
                                             <button
@@ -318,16 +303,13 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                                         Residential Address
                                     </span>
                                     <div className="bg-slate-50/70 dark:bg-white/[0.02] rounded-xl p-3.5 border border-slate-200/80 dark:border-white/5 space-y-1.5">
-                                        <div className="flex items-start gap-2.5">
-                                            <Home className="w-4 h-4 text-[#F61509] flex-shrink-0 mt-0.5" />
-                                            <div>
-                                                <p className="text-slate-900 dark:text-slate-200 font-semibold capitalize">
-                                                    {patient.address ? toPascalCase(patient.address) : 'Address details not fully specified'}
-                                                </p>
-                                                <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 space-y-0.5">
-                                                    {formattedBarangay && <p>Barangay: <span className="font-medium text-slate-800 dark:text-slate-300">{formattedBarangay}</span></p>}
-                                                    <p className="text-slate-500 dark:text-slate-500">Opol, Misamis Oriental</p>
-                                                </div>
+                                        <div>
+                                            <p className="text-slate-900 dark:text-slate-200 font-semibold capitalize">
+                                                {patient.address ? toPascalCase(patient.address) : 'Address details not fully specified'}
+                                            </p>
+                                            <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 space-y-0.5">
+                                                {formattedBarangay && <p>Barangay: <span className="font-medium text-slate-800 dark:text-slate-300">{formattedBarangay}</span></p>}
+                                                <p className="text-slate-500 dark:text-slate-500">Opol, Misamis Oriental</p>
                                             </div>
                                         </div>
                                     </div>
@@ -340,17 +322,14 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                                             Linked Resident Account
                                         </span>
                                         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3.5 text-xs space-y-1.5">
-                                            <p className="font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5 capitalize">
-                                                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                            <p className="font-semibold text-emerald-800 dark:text-emerald-300 capitalize">
                                                 {toPascalCase(patient.registered_user.name)}
                                             </p>
-                                            <p className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5 font-mono text-[11px]">
-                                                <Mail className="w-3.5 h-3.5 text-slate-400" />
+                                            <p className="text-slate-600 dark:text-slate-300 font-mono text-[11px]">
                                                 {patient.registered_user.email}
                                             </p>
                                             {patient.registered_user.phone_number && (
-                                                <p className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5 font-mono text-[11px]">
-                                                    <Phone className="w-3.5 h-3.5 text-slate-400" />
+                                                <p className="text-slate-600 dark:text-slate-300 font-mono text-[11px]">
                                                     {patient.registered_user.phone_number}
                                                 </p>
                                             )}
@@ -374,8 +353,8 @@ export default function PatientDetailsPage({ patient, care_records = [] }: Patie
                     <div className="lg:col-span-2 space-y-4">
                         <div className="flex flex-wrap items-center justify-between gap-3 px-1">
                             <div>
-                                <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                    <FileText className="w-5 h-5 text-[#F61509]" /> Patient Care Record History
+                                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                                    Patient Care Record History
                                 </h2>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                     Chronological timeline of all medical incidents and PCR submissions for this patient.

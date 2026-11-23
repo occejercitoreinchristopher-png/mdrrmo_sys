@@ -212,16 +212,26 @@ export default function ActiveDispatchWorkspace({
 
     useEffect(() => {
         if (selectedIncidentId && handledIncidentIdRef.current !== selectedIncidentId) {
-            const dispatch = dispatches.find(d => d.incident_id == selectedIncidentId);
+            const dispatch = dispatches.find(d => d.incident_id == selectedIncidentId || d.id == selectedIncidentId);
             if (dispatch) {
                 setSelectedDispatch(dispatch);
                 setIsExpanded(true); // Auto-expand only once upon initial URL navigation
+                const lat = parseFloat(dispatch.incident?.incident_latitude);
+                const lng = parseFloat(dispatch.incident?.incident_longitude);
+                if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                    setFocusedTarget({ latitude: lat, longitude: lng, zoom: 16, key: dispatch.id });
+                }
                 handledIncidentIdRef.current = selectedIncidentId;
                 window.history.replaceState({}, '', '/dispatcher/dispatches');
             } else {
                 const vi = verifiedIncidents.find(i => i.id == selectedIncidentId);
                 if (vi) {
                     setAssigningIncident(vi);
+                    const lat = parseFloat(vi.incident_latitude);
+                    const lng = parseFloat(vi.incident_longitude);
+                    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                        setFocusedTarget({ latitude: lat, longitude: lng, zoom: 16, key: vi.id });
+                    }
                     handledIncidentIdRef.current = selectedIncidentId;
                     window.history.replaceState({}, '', '/dispatcher/dispatches');
                 }
