@@ -531,6 +531,7 @@ class DispatchController extends Controller
             if (! empty($assignedUserIds)) {
                 ResponderProfile::whereIn('user_id', $assignedUserIds)->update(['availability' => 'available']);
             }
+            ResponderProfile::syncBusyAvailability();
         }
 
         try {

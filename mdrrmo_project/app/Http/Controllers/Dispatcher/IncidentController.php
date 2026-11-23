@@ -100,6 +100,9 @@ class IncidentController extends Controller
             ->where('vehicle_type', '!=', 'Station')
             ->get();
 
+        // Auto-heal any stale busy responder profiles without active dispatches
+        ResponderProfile::syncBusyAvailability();
+
         $responders = User::where('role', 'responder')
             ->with('responderProfile')
             ->get();

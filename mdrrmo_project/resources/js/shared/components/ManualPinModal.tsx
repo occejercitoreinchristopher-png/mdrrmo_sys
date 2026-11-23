@@ -10,7 +10,13 @@ import {
     Layers,
     Loader2,
     MapPin,
+    MousePointerClick,
     Plus,
+    Redo2,
+    RotateCcw,
+    Shapes,
+    Trash2,
+    Undo2,
     Upload,
     X,
 } from 'lucide-react';
@@ -38,14 +44,16 @@ export interface ModalHotspotPreview {
 interface ManualPinModalProps {
     open: boolean;
     onClose: () => void;
-    onSaved: () => void;
+    onSaved: (newPin?: any) => void;
     userRole: 'admin' | 'dispatcher' | string;
     incidentTypes: Array<{ id: number; incident_type_name: string }>;
     opolBarangays: string[];
     existingHotspots: ModalHotspotPreview[];
+    existingPronePolygons?: any;
     barangayGeojson: any;
     activeFilterSummary: string;
     getTypeColorHex: (typeName: string) => string;
+    initialCenter?: { latitude: number; longitude: number; zoom: number };
 }
 
 const OPOL_DEFAULT = {
@@ -53,6 +61,35 @@ const OPOL_DEFAULT = {
     longitude: 124.5731,
     zoom: 13.0,
 };
+
+export const RISK_LEVELS = [
+    { label: 'High', color: '#E53935', bg: 'bg-[#E53935]', text: 'text-red-400', border: 'border-red-500' },
+    { label: 'Moderate-High', color: '#FB8C00', bg: 'bg-[#FB8C00]', text: 'text-orange-400', border: 'border-orange-500' },
+    { label: 'Moderate', color: '#FDD835', bg: 'bg-[#FDD835]', text: 'text-yellow-300', border: 'border-yellow-400' },
+    { label: 'Low', color: '#43A047', bg: 'bg-[#43A047]', text: 'text-emerald-400', border: 'border-emerald-500' },
+] as const;
+
+export const getRiskColorHex = (level?: string | null): string => {
+    const l = (level || '').toLowerCase();
+    if (l.includes('high') && !l.includes('mod')) return '#E53935';
+    if (l.includes('mod-high') || l.includes('moderate-high')) return '#FB8C00';
+    if (l.includes('mod')) return '#FDD835';
+    if (l.includes('low')) return '#43A047';
+    return '#FDD835';
+};
+
+// Simple Ray-Casting algorithm to check if a point [lng, lat] is inside a polygon ring
+function isPointInRing(point: [number, number], ring: number[][]): boolean {
+    const [x, y] = point;
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i];
+        const [xj, yj] = ring[j];
+        const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
 
 export default function ManualPinModal({
     open,
@@ -62,32 +99,100 @@ export default function ManualPinModal({
     incidentTypes,
     opolBarangays,
     existingHotspots,
+    existingPronePolygons,
     barangayGeojson,
     activeFilterSummary,
     getTypeColorHex,
+    initialCenter,
 }: ManualPinModalProps) {
     const mapRef = useRef<MapRef>(null);
     const reverseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastGeocodedRef = useRef<string>('');
 
+    // Sync camera to user's current view on main heatmap when modal opens
+    useEffect(() => {
+        if (open && mapRef.current) {
+            const target = initialCenter || OPOL_DEFAULT;
+            mapRef.current.flyTo({
+                center: [target.longitude, target.latitude],
+                zoom: target.zoom || 13.0,
+                duration: 400,
+            });
+        }
+    }, [open, initialCenter]);
+
+    // GeoJSON for existing hotspot 20m circle glows for visual reference
+    const existingHotspotsGeojson = useMemo(() => {
+        if (!existingHotspots || existingHotspots.length === 0) return null;
+        const steps = 36;
+        const earthRadius = 6371000;
+        const features = existingHotspots.map((spot) => {
+            const radiusM = spot.radius_meters || 25;
+            const latRad = (spot.latitude * Math.PI) / 180;
+            const dLat = (radiusM / earthRadius) * (180 / Math.PI);
+            const dLng = ((radiusM / earthRadius) * (180 / Math.PI)) / Math.cos(latRad);
+            const ring: [number, number][] = [];
+            for (let i = 0; i <= steps; i++) {
+                const angle = (i / steps) * 2 * Math.PI;
+                ring.push([
+                    spot.longitude + dLng * Math.cos(angle),
+                    spot.latitude + dLat * Math.sin(angle),
+                ]);
+            }
+            const clusterType = spot.incident_type || spot.most_common_type || 'Incident';
+            const pinColor = spot.color || getTypeColorHex(clusterType) || '#3B82F6';
+            return {
+                type: 'Feature' as const,
+                properties: {
+                    color: pinColor,
+                },
+                geometry: {
+                    type: 'Polygon' as const,
+                    coordinates: [ring],
+                },
+            };
+        });
+        return {
+            type: 'FeatureCollection' as const,
+            features,
+        };
+    }, [existingHotspots, getTypeColorHex]);
+
+    // INPUT MODE: MODE A (POINT) or MODE B (POLYGON)
+    const [inputMode, setInputMode] = useState<'POINT' | 'POLYGON'>('POINT');
+
+    // Common fields
+    const [areaName, setAreaName] = useState<string>('');
+    const [riskLevel, setRiskLevel] = useState<string>('Moderate');
     const [typeMode, setTypeMode] = useState<string>('custom');
     const [customType, setCustomType] = useState<string>('');
-    const [latitude, setLatitude] = useState<string>('');
-    const [longitude, setLongitude] = useState<string>('');
-    const [address, setAddress] = useState<string>('');
     const [detectedBarangay, setDetectedBarangay] = useState<string>('');
     const [description, setDescription] = useState<string>('');
     const [photoFiles, setPhotoFiles] = useState<Array<{ file: File; previewUrl: string }>>([]);
     const [mapStyle, setMapStyle] = useState<'dark' | 'satellite'>('dark');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Mode A: Point specific
+    const [latitude, setLatitude] = useState<string>('');
+    const [longitude, setLongitude] = useState<string>('');
+    const [address, setAddress] = useState<string>('');
     const [isGeocoding, setIsGeocoding] = useState(false);
+
+    // Mode B: Polygon specific
+    const [polygonVertices, setPolygonVertices] = useState<Array<[number, number]>>([]); // [lng, lat][]
+    const [redoStack, setRedoStack] = useState<Array<[number, number]>>([]);
+    const [isPolygonClosed, setIsPolygonClosed] = useState<boolean>(false);
+    const [selectedVertexIdx, setSelectedVertexIdx] = useState<number | null>(null);
+
     const [isSaving, setIsSaving] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     // Reset form cleanly whenever modal opens
     useEffect(() => {
         if (!open) return;
+        setInputMode('POINT');
+        setAreaName('');
+        setRiskLevel('Moderate');
         setTypeMode(incidentTypes.length > 0 ? String(incidentTypes[0].id) : 'custom');
         setCustomType('');
         setLatitude('');
@@ -95,6 +200,10 @@ export default function ManualPinModal({
         setAddress('');
         setDetectedBarangay('');
         setDescription('');
+        setPolygonVertices([]);
+        setRedoStack([]);
+        setIsPolygonClosed(false);
+        setSelectedVertexIdx(null);
         setPhotoFiles((prev) => {
             prev.forEach((p) => URL.revokeObjectURL(p.previewUrl));
             return [];
@@ -163,71 +272,6 @@ export default function ManualPinModal({
         parsedLng >= -180 &&
         parsedLng <= 180;
 
-    // Haversine distance in meters to detect nearby/overlapping clusters & exact custom hazard duplicates
-    const haversineMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-        const R = 6371000;
-        const dLat = ((lat2 - lat1) * Math.PI) / 180;
-        const dLon = ((lon2 - lon1) * Math.PI) / 180;
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos((lat1 * Math.PI) / 180) *
-                Math.cos((lat2 * Math.PI) / 180) *
-                Math.sin(dLon / 2) *
-                Math.sin(dLon / 2);
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    };
-
-    const proximityCheck = useMemo(() => {
-        if (!hasValidPin) return null;
-
-        let nearestSpot: ModalHotspotPreview | null = null;
-        let nearestDist = Infinity;
-
-        for (const spot of existingHotspots) {
-            const dist = haversineMeters(parsedLat, parsedLng, spot.latitude, spot.longitude);
-            if (dist <= 40 && dist < nearestDist) {
-                nearestDist = dist;
-                nearestSpot = spot;
-            }
-        }
-
-        // Check if exact same custom hazard manual pin already exists within 20m
-        let duplicateCustomPin: { type: string; dist: number; barangay: string } | null = null;
-        const normCustom = typeMode === 'custom' ? customType.trim().toLowerCase() : '';
-        if (normCustom) {
-            for (const spot of existingHotspots) {
-                const items = spot.incidents || [];
-                for (const item of items) {
-                    if (
-                        item.is_manual_pin &&
-                        item.latitude !== null &&
-                        item.longitude !== null &&
-                        item.incident_type.trim().toLowerCase() === normCustom
-                    ) {
-                        const d = haversineMeters(parsedLat, parsedLng, Number(item.latitude), Number(item.longitude));
-                        if (d <= 20) {
-                            duplicateCustomPin = {
-                                type: item.incident_type,
-                                dist: Math.round(d),
-                                barangay: spot.barangay,
-                            };
-                            break;
-                        }
-                    }
-                }
-                if (duplicateCustomPin) break;
-            }
-        }
-
-        if (!nearestSpot && !duplicateCustomPin) return null;
-
-        return {
-            nearestSpot,
-            nearestDistMeters: Math.round(nearestDist),
-            duplicateCustomPin,
-        };
-    }, [hasValidPin, parsedLat, parsedLng, existingHotspots, typeMode, customType]);
-
     // Detect Opol barangay from text
     const extractBarangay = (text: string): string => {
         if (!text) return '';
@@ -239,7 +283,46 @@ export default function ManualPinModal({
         return '';
     };
 
-    // Mapbox Reverse Geocoding: auto-fill address when latitude & longitude are filled or pin is clicked
+    // Auto-detect barangay from polygon coordinates using GeoJSON boundaries
+    const detectBarangayFromCoordinates = (coords: Array<[number, number]>): string => {
+        if (!barangayGeojson || !barangayGeojson.features || coords.length === 0) return '';
+        // Calculate centroid of coordinates
+        let sumLng = 0;
+        let sumLat = 0;
+        coords.forEach(([lng, lat]) => {
+            sumLng += lng;
+            sumLat += lat;
+        });
+        const centroid: [number, number] = [sumLng / coords.length, sumLat / coords.length];
+
+        for (const feat of barangayGeojson.features) {
+            const geom = feat.geometry;
+            if (geom.type === 'Polygon') {
+                for (const ring of geom.coordinates) {
+                    if (isPointInRing(centroid, ring)) {
+                        const rawName = String(feat.properties?.name || feat.properties?.BARANGAY || '');
+                        if (rawName) {
+                            return rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
+                        }
+                    }
+                }
+            } else if (geom.type === 'MultiPolygon') {
+                for (const poly of geom.coordinates) {
+                    for (const ring of poly) {
+                        if (isPointInRing(centroid, ring)) {
+                            const rawName = String(feat.properties?.name || feat.properties?.BARANGAY || '');
+                            if (rawName) {
+                                return rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return '';
+    };
+
+    // Mode A: Reverse Geocode
     const reverseGeocodeCoords = async (lat: number, lng: number) => {
         const token = import.meta.env.VITE_MAPBOX_TOKEN;
         const coordKey = `${lat.toFixed(6)},${lng.toFixed(6)}`;
@@ -264,8 +347,8 @@ export default function ManualPinModal({
             if (placeName) {
                 const trimmed = placeName.slice(0, 255);
                 setAddress(trimmed);
-                const brgy = extractBarangay(trimmed);
-                setDetectedBarangay(brgy);
+                const brgy = extractBarangay(trimmed) || detectBarangayFromCoordinates([[lng, lat]]);
+                if (brgy) setDetectedBarangay(brgy);
             } else {
                 setAddress(`Opol, Misamis Oriental (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
             }
@@ -276,9 +359,9 @@ export default function ManualPinModal({
         }
     };
 
-    // Auto-geocode & pan map when user manually types Latitude and Longitude
+    // Mode A: Auto-geocode & pan map when user manually types Latitude and Longitude
     useEffect(() => {
-        if (!open || !hasValidPin) return;
+        if (!open || inputMode !== 'POINT' || !hasValidPin) return;
         if (reverseTimerRef.current) clearTimeout(reverseTimerRef.current);
 
         reverseTimerRef.current = setTimeout(() => {
@@ -294,85 +377,139 @@ export default function ManualPinModal({
         return () => {
             if (reverseTimerRef.current) clearTimeout(reverseTimerRef.current);
         };
-    }, [open, latitude, longitude]);
+    }, [open, inputMode, latitude, longitude]);
 
-    // GeoJSON for existing filtered hotspots (radial glows + 20m true-scale perimeter circles)
-    const existingGlowGeojson = useMemo(() => {
-        return {
-            type: 'FeatureCollection' as const,
-            features: existingHotspots.map((spot) => ({
-                type: 'Feature' as const,
-                properties: {
-                    color: spot.color,
-                    incident_count: spot.incident_count,
-                },
-                geometry: {
-                    type: 'Point' as const,
-                    coordinates: [spot.longitude, spot.latitude],
-                },
-            })),
-        };
-    }, [existingHotspots]);
+    // Mode B: Centroid and automatic barangay detection on vertices change
+    useEffect(() => {
+        if (inputMode !== 'POLYGON' || polygonVertices.length === 0) return;
+        const brgy = detectBarangayFromCoordinates(polygonVertices);
+        if (brgy) setDetectedBarangay(brgy);
+    }, [inputMode, polygonVertices]);
 
-    const existingPerimeterGeojson = useMemo(() => {
-        const steps = 40;
-        const earthRadius = 6371000;
-        return {
-            type: 'FeatureCollection' as const,
-            features: existingHotspots.map((spot) => {
-                const radiusM = spot.radius_meters || 20;
-                const latRad = (spot.latitude * Math.PI) / 180;
-                const dLat = (radiusM / earthRadius) * (180 / Math.PI);
-                const dLng = ((radiusM / earthRadius) * (180 / Math.PI)) / Math.cos(latRad);
-                const ring: [number, number][] = [];
-                for (let i = 0; i <= steps; i++) {
-                    const angle = (i / steps) * 2 * Math.PI;
-                    ring.push([
-                        spot.longitude + dLng * Math.cos(angle),
-                        spot.latitude + dLat * Math.sin(angle),
-                    ]);
-                }
-                return {
-                    type: 'Feature' as const,
-                    properties: { color: spot.color },
-                    geometry: { type: 'Polygon' as const, coordinates: [ring] },
-                };
-            }),
-        };
-    }, [existingHotspots]);
+    // Mode B Polygon Drawing Handlers
+    const handleAddPolygonVertex = (lng: number, lat: number) => {
+        if (isPolygonClosed) return;
 
-    // New Pin 20m preview circle on the modal map so user sees if it overlaps/enters an existing circle
-    const newPinPerimeterGeojson = useMemo(() => {
-        if (!hasValidPin) return null;
-        const steps = 40;
-        const earthRadius = 6371000;
-        const latRad = (parsedLat * Math.PI) / 180;
-        const dLat = (20 / earthRadius) * (180 / Math.PI);
-        const dLng = ((20 / earthRadius) * (180 / Math.PI)) / Math.cos(latRad);
-        const ring: [number, number][] = [];
-        for (let i = 0; i <= steps; i++) {
-            const angle = (i / steps) * 2 * Math.PI;
-            ring.push([parsedLng + dLng * Math.cos(angle), parsedLat + dLat * Math.sin(angle)]);
+        // If clicking near the first vertex (threshold) and has >= 3 vertices, close the polygon
+        if (polygonVertices.length >= 3) {
+            const [firstLng, firstLat] = polygonVertices[0];
+            const distDeg = Math.hypot(lng - firstLng, lat - firstLat);
+            // Approx 30 meters threshold in degrees (~0.0003)
+            if (distDeg < 0.00035) {
+                setIsPolygonClosed(true);
+                return;
+            }
         }
+
+        const newPoint: [number, number] = [Number(lng.toFixed(7)), Number(lat.toFixed(7))];
+        setPolygonVertices((prev) => [...prev, newPoint]);
+        setRedoStack([]);
+        setSelectedVertexIdx(null);
+        setErrorMsg(null);
+    };
+
+    const handleUndoVertex = () => {
+        if (polygonVertices.length === 0) return;
+        const last = polygonVertices[polygonVertices.length - 1];
+        setPolygonVertices((prev) => prev.slice(0, prev.length - 1));
+        setRedoStack((prev) => [...prev, last]);
+        setIsPolygonClosed(false);
+    };
+
+    const handleRedoVertex = () => {
+        if (redoStack.length === 0) return;
+        const next = redoStack[redoStack.length - 1];
+        setRedoStack((prev) => prev.slice(0, prev.length - 1));
+        setPolygonVertices((prev) => [...prev, next]);
+    };
+
+    const handleDeleteVertex = (idx: number) => {
+        setPolygonVertices((prev) => prev.filter((_, i) => i !== idx));
+        setSelectedVertexIdx(null);
+        setIsPolygonClosed(false);
+    };
+
+    const handleDragVertex = (idx: number, lat: number, lng: number) => {
+        setPolygonVertices((prev) => {
+            const copy = [...prev];
+            copy[idx] = [Number(lng.toFixed(7)), Number(lat.toFixed(7))];
+            return copy;
+        });
+    };
+
+    const handleFinishPolygon = () => {
+        if (polygonVertices.length < 3) {
+            setErrorMsg('A polygon area must have at least 3 distinct boundary vertices.');
+            return;
+        }
+        setIsPolygonClosed(true);
+        setErrorMsg(null);
+    };
+
+    const handleResetPolygon = () => {
+        setPolygonVertices([]);
+        setRedoStack([]);
+        setIsPolygonClosed(false);
+        setSelectedVertexIdx(null);
+    };
+
+    // Mode B: GeoJSON for real-time drawing (LineString while drawing, Polygon when completed/preview)
+    const activeDrawingLineGeojson = useMemo(() => {
+        if (inputMode !== 'POLYGON' || polygonVertices.length < 2) return null;
         return {
             type: 'FeatureCollection' as const,
             features: [
                 {
                     type: 'Feature' as const,
                     properties: {},
-                    geometry: { type: 'Polygon' as const, coordinates: [ring] },
+                    geometry: {
+                        type: 'LineString' as const,
+                        coordinates: polygonVertices,
+                    },
                 },
             ],
         };
-    }, [hasValidPin, parsedLat, parsedLng]);
+    }, [inputMode, polygonVertices]);
 
-    const handleMapPick = (lat: number, lng: number) => {
-        const latStr = lat.toFixed(6);
-        const lngStr = lng.toFixed(6);
-        setLatitude(latStr);
-        setLongitude(lngStr);
-        setErrorMsg(null);
-        reverseGeocodeCoords(Number(latStr), Number(lngStr));
+    const activeDrawingPolygonGeojson = useMemo(() => {
+        if (inputMode !== 'POLYGON' || polygonVertices.length < 3) return null;
+        const ring = [...polygonVertices];
+        // Ensure closed ring for valid GeoJSON polygon
+        if (
+            ring[0][0] !== ring[ring.length - 1][0] ||
+            ring[0][1] !== ring[ring.length - 1][1]
+        ) {
+            ring.push(ring[0]);
+        }
+        return {
+            type: 'FeatureCollection' as const,
+            features: [
+                {
+                    type: 'Feature' as const,
+                    properties: {
+                        color: getRiskColorHex(riskLevel),
+                    },
+                    geometry: {
+                        type: 'Polygon' as const,
+                        coordinates: [ring],
+                    },
+                },
+            ],
+        };
+    }, [inputMode, polygonVertices, riskLevel]);
+
+    // Handle Map click depending on current mode
+    const handleMapClick = (lat: number, lng: number) => {
+        if (inputMode === 'POINT') {
+            const latStr = lat.toFixed(6);
+            const lngStr = lng.toFixed(6);
+            setLatitude(latStr);
+            setLongitude(lngStr);
+            setErrorMsg(null);
+            reverseGeocodeCoords(Number(latStr), Number(lngStr));
+        } else {
+            handleAddPolygonVertex(lng, lat);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -381,22 +518,25 @@ export default function ManualPinModal({
 
         const isCustom = typeMode === 'custom';
         if (isCustom && !customType.trim()) {
-            setErrorMsg('Please enter a custom type (e.g., Landslide Area).');
+            setErrorMsg('Please enter an Incident / Hazard Type (e.g., Landslide Area).');
             return;
         }
-        if (proximityCheck?.duplicateCustomPin) {
-            setErrorMsg(
-                `A manual hazard pin for "${proximityCheck.duplicateCustomPin.type}" already exists ${proximityCheck.duplicateCustomPin.dist}m away. Move the pin or use a different label to avoid duplicating this hazard area.`
-            );
-            return;
-        }
-        if (!hasValidPin) {
-            setErrorMsg('Please click a location on the map or enter valid Latitude and Longitude.');
-            return;
-        }
-        if (!address.trim()) {
-            setErrorMsg('Address is required.');
-            return;
+
+        if (inputMode === 'POINT') {
+            if (!hasValidPin) {
+                setErrorMsg('Please click on the map to set a location pin or enter valid Latitude and Longitude.');
+                return;
+            }
+            if (!address.trim()) {
+                setErrorMsg('Address is required for pin location.');
+                return;
+            }
+        } else {
+            // MODE B: POLYGON
+            if (polygonVertices.length < 3) {
+                setErrorMsg('Please draw an enclosed area with at least 3 points on the map.');
+                return;
+            }
         }
 
         setIsSaving(true);
@@ -406,21 +546,60 @@ export default function ManualPinModal({
             const prefix = userRole === 'admin' ? '/admin' : '/dispatcher';
 
             const formData = new FormData();
+            formData.append('geometry_type', inputMode);
+            if (areaName.trim()) {
+                formData.append('area_name', areaName.trim().slice(0, 150));
+            }
+            formData.append('risk_level', riskLevel);
+
             if (!isCustom) {
                 formData.append('incident_type_id', String(Number(typeMode)));
             } else {
                 formData.append('custom_pin_type', customType.trim().slice(0, 100));
             }
-            formData.append('pin_address', address.trim().slice(0, 255));
-            formData.append('pin_latitude', String(Number(parsedLat.toFixed(7))));
-            formData.append('pin_longitude', String(Number(parsedLng.toFixed(7))));
+
             if (description.trim()) {
                 formData.append('pin_description', description.trim().slice(0, 255));
             }
+
             const resolvedBrgy = detectedBarangay || extractBarangay(address);
             if (resolvedBrgy) {
                 formData.append('barangay_name', resolvedBrgy);
             }
+
+            if (inputMode === 'POINT') {
+                formData.append('pin_address', address.trim().slice(0, 255));
+                formData.append('pin_latitude', String(Number(parsedLat.toFixed(7))));
+                formData.append('pin_longitude', String(Number(parsedLng.toFixed(7))));
+            } else {
+                // Polygon mode
+                const ringCoords = [...polygonVertices];
+                if (
+                    ringCoords.length >= 3 &&
+                    (ringCoords[0][0] !== ringCoords[ringCoords.length - 1][0] ||
+                        ringCoords[0][1] !== ringCoords[ringCoords.length - 1][1])
+                ) {
+                    ringCoords.push(ringCoords[0]);
+                }
+                formData.append('polygon_coordinates', JSON.stringify(ringCoords));
+                formData.append(
+                    'pin_address',
+                    address.trim() || areaName.trim() || `Prone Area Polygon (${resolvedBrgy || 'Opol'})`
+                );
+
+                // Compute centroid
+                let sumLng = 0;
+                let sumLat = 0;
+                polygonVertices.forEach(([lng, lat]) => {
+                    sumLng += lng;
+                    sumLat += lat;
+                });
+                const cLat = sumLat / polygonVertices.length;
+                const cLng = sumLng / polygonVertices.length;
+                formData.append('pin_latitude', String(Number(cLat.toFixed(7))));
+                formData.append('pin_longitude', String(Number(cLng.toFixed(7))));
+            }
+
             photoFiles.forEach((entry) => {
                 formData.append('pin_images[]', entry.file);
             });
@@ -440,16 +619,17 @@ export default function ManualPinModal({
                 const firstErr =
                     errData?.message ||
                     (errData?.errors ? Object.values(errData.errors).flat()[0] : null) ||
-                    'Failed to save manual pin.';
+                    'Failed to save incident-prone area.';
                 setErrorMsg(String(firstErr));
                 return;
             }
 
-            onSaved();
+            const savedData = await resp.json().catch(() => null);
+            onSaved(savedData?.pin);
             onClose();
         } catch (err) {
-            console.error('Error saving manual pin:', err);
-            setErrorMsg('Network error while saving manual pin. Please try again.');
+            console.error('Error saving incident-prone area:', err);
+            setErrorMsg('Network error while saving incident-prone area. Please try again.');
         } finally {
             setIsSaving(false);
         }
@@ -457,30 +637,80 @@ export default function ManualPinModal({
 
     if (!open) return null;
 
+    const currentRiskColor = getRiskColorHex(riskLevel);
+
     return (
         <div
             className="fixed inset-0 z-[90] bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
             onClick={() => !isSaving && onClose()}
         >
             <div
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-900 dark:text-slate-100"
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-6xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden text-slate-900 dark:text-slate-100"
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Modal Header */}
-                <div className="px-5 py-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.03] flex items-center justify-between gap-3 shrink-0">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-xl bg-[#F61509]/15 border border-[#F61509]/30 flex items-center justify-center text-[#F61509]">
-                            <MapPin className="w-4 h-4" />
+                {/* Modal Header with Mode Switcher */}
+                <div className="px-5 py-3.5 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.03] flex flex-wrap items-center justify-between gap-3 shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div
+                            className="w-9 h-9 rounded-xl border flex items-center justify-center transition-colors shadow-sm"
+                            style={{
+                                backgroundColor: `${currentRiskColor}20`,
+                                borderColor: `${currentRiskColor}50`,
+                                color: currentRiskColor,
+                            }}
+                        >
+                            {inputMode === 'POINT' ? (
+                                <MapPin className="w-5 h-5" />
+                            ) : (
+                                <Shapes className="w-5 h-5" />
+                            )}
                         </div>
                         <div>
                             <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight">
-                                Add Manual Heatmap Pin
+                                Add Incident-Prone Area
                             </h2>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                Pin a hazard or incident location directly on the map. Existing filtered pins remain visible for reference.
+                                {inputMode === 'POINT'
+                                    ? 'MODE A: Drop a single pin at a specific geographical location.'
+                                    : 'MODE B: Draw an enclosed geographical boundary by connecting multiple points.'}
                             </p>
                         </div>
                     </div>
+
+                    {/* TWO-MODE SELECTOR SWITCHER */}
+                    <div className="flex items-center bg-slate-200/70 dark:bg-slate-800 p-1 rounded-xl border border-slate-300/80 dark:border-white/10">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setInputMode('POINT');
+                                setErrorMsg(null);
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                inputMode === 'POINT'
+                                    ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm'
+                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                        >
+                            <MapPin className="w-3.5 h-3.5" />
+                            <span>MODE A: PIN LOCATION</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setInputMode('POLYGON');
+                                setErrorMsg(null);
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                inputMode === 'POLYGON'
+                                    ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 shadow-sm'
+                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                        >
+                            <Shapes className="w-3.5 h-3.5" />
+                            <span>MODE B: DRAW AREA (POLYGON)</span>
+                        </button>
+                    </div>
+
                     <button
                         type="button"
                         disabled={isSaving}
@@ -492,7 +722,7 @@ export default function ManualPinModal({
                     </button>
                 </div>
 
-                {/* Modal Body: Form (Left) + Synced Interactive Map (Right) */}
+                {/* Modal Body: Form (Left) + Interactive Drawing Map (Right) */}
                 <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 min-h-0">
                     {/* Left Form Column */}
                     <div className="lg:col-span-5 p-4 sm:p-5 space-y-3.5 border-b lg:border-b-0 lg:border-r border-slate-200/80 dark:border-white/10 overflow-y-auto">
@@ -503,49 +733,99 @@ export default function ManualPinModal({
                             </div>
                         )}
 
-                        {/* Smart Proximity Warning / Duplicate Hazard Guard Banner */}
-                        {proximityCheck?.duplicateCustomPin ? (
-                            <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-500/15 border border-rose-300 dark:border-rose-500/40 text-rose-800 dark:text-rose-200 text-[11px] flex items-start gap-2">
-                                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                                <div className="leading-snug">
-                                    <span className="font-bold block">Duplicate Custom Hazard Detected ({proximityCheck.duplicateCustomPin.dist}m away)</span>
-                                    <span>
-                                        A manual pin for <strong>{proximityCheck.duplicateCustomPin.type}</strong> is already placed here (Brgy. {proximityCheck.duplicateCustomPin.barangay}). Move the pin farther than 20m to avoid duplicates.
-                                    </span>
-                                </div>
+                        {/* Mode Indicator Banner */}
+                        <div
+                            className="p-2.5 rounded-xl border text-[11px] flex items-center justify-between"
+                            style={{
+                                backgroundColor: `${currentRiskColor}12`,
+                                borderColor: `${currentRiskColor}40`,
+                            }}
+                        >
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-800 dark:text-slate-200">
+                                    {inputMode === 'POINT' ? 'Single Pin Marker' : 'Custom Enclosed Polygon'}
+                                </span>
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900/60 text-white font-mono font-semibold">
+                                    {inputMode === 'POINT' ? 'POINT' : `POLYGON (${polygonVertices.length} pts)`}
+                                </span>
                             </div>
-                        ) : proximityCheck?.nearestSpot ? (
-                            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-500/15 border border-amber-300/80 dark:border-amber-500/35 text-amber-900 dark:text-amber-200 text-[11px] flex items-start gap-2">
-                                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                                <div className="leading-snug">
-                                    <span className="font-bold block">
-                                        Near Existing Pin ({proximityCheck.nearestDistMeters}m away) &mdash; Will Auto-Combine
-                                    </span>
-                                    <span>
-                                        Within 40m of <strong>{proximityCheck.nearestSpot.most_common_type}</strong> ({proximityCheck.nearestSpot.incident_count}{' '}
-                                        {proximityCheck.nearestSpot.incident_count === 1 ? 'record' : 'records'} in Brgy. {proximityCheck.nearestSpot.barangay}). Saving here combines into this circle (new total:{' '}
-                                        <strong>{proximityCheck.nearestSpot.incident_count + 1}</strong>). Drag farther (&gt;40m) to create a separate solo pin.
-                                    </span>
-                                </div>
-                            </div>
-                        ) : null}
+                            <span
+                                className="font-bold font-mono text-[11px]"
+                                style={{ color: currentRiskColor }}
+                            >
+                                {riskLevel.toUpperCase()} RISK
+                            </span>
+                        </div>
 
-                        {/* Emergency Type or Custom Type */}
+                        {/* Prone Area Name */}
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                                Prone Area Name <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                maxLength={150}
+                                value={areaName}
+                                onChange={(e) => setAreaName(e.target.value)}
+                                placeholder={
+                                    inputMode === 'POINT'
+                                        ? 'e.g., Poblacion Blind Curve, Barra Highway Junction'
+                                        : 'e.g., Luyongbonbon Coastal Flood Zone, Awang Landslide Perimeter'
+                                }
+                                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                                required
+                            />
+                        </div>
+
+                        {/* Risk Level Selector Buttons (High, Mod-High, Moderate, Low) */}
                         <div className="space-y-1.5">
                             <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
-                                Emergency / Hazard Type <span className="text-rose-500">*</span>
+                                Risk Level Classification <span className="text-rose-500">*</span>
+                            </label>
+                            <div className="grid grid-cols-4 gap-1.5">
+                                {RISK_LEVELS.map((r) => {
+                                    const isSelected = riskLevel === r.label;
+                                    return (
+                                        <button
+                                            key={r.label}
+                                            type="button"
+                                            onClick={() => setRiskLevel(r.label)}
+                                            className={`px-2 py-1.5 rounded-xl border text-[10.5px] font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                                                isSelected
+                                                    ? 'bg-slate-900 text-white ring-2 shadow-sm'
+                                                    : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-white/10'
+                                            }`}
+                                            style={isSelected ? { borderColor: r.color } : {}}
+                                        >
+                                            <span
+                                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                                style={{ backgroundColor: r.color }}
+                                            />
+                                            <span className="truncate w-full text-center leading-tight">
+                                                {r.label}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Emergency / Hazard Type */}
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                                Incident / Hazard Type <span className="text-rose-500">*</span>
                             </label>
                             <select
                                 value={typeMode}
                                 onChange={(e) => setTypeMode(e.target.value)}
-                                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 cursor-pointer"
+                                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
                             >
                                 {incidentTypes.map((t) => (
                                     <option key={t.id} value={String(t.id)}>
                                         {t.incident_type_name}
                                     </option>
                                 ))}
-                                <option value="custom">+ Other / Custom Type (e.g., Landslide Area)</option>
+                                <option value="custom">+ Other / Custom Hazard Type</option>
                             </select>
 
                             {typeMode === 'custom' && (
@@ -554,111 +834,159 @@ export default function ManualPinModal({
                                     maxLength={100}
                                     value={customType}
                                     onChange={(e) => setCustomType(e.target.value)}
-                                    placeholder="e.g., Landslide Area, Flood-Prone Zone, Blind Curve..."
+                                    placeholder="e.g., Flood Prone, Landslide Hazard, Vehicular Blindspot..."
                                     className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-500/40 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500"
                                     required
                                 />
                             )}
                         </div>
 
-                        {/* Latitude & Longitude */}
-                        <div className="grid grid-cols-2 gap-2.5">
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
-                                    Latitude <span className="text-rose-500">*</span>
-                                </label>
-                                <input
-                                    type="number"
-                                    step="any"
-                                    value={latitude}
-                                    onChange={(e) => setLatitude(e.target.value)}
-                                    placeholder="8.514200"
-                                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500"
-                                    required
-                                />
+                        {/* Mode A: Lat/Lng & Address */}
+                        {inputMode === 'POINT' ? (
+                            <>
+                                <div className="grid grid-cols-2 gap-2.5">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                                            Latitude <span className="text-rose-500">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={latitude}
+                                            onChange={(e) => setLatitude(e.target.value)}
+                                            placeholder="8.514200"
+                                            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                                            Longitude <span className="text-rose-500">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={longitude}
+                                            onChange={(e) => setLongitude(e.target.value)}
+                                            placeholder="124.573100"
+                                            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                                            <span>Address / Landmark <span className="text-rose-500">*</span></span>
+                                            {isGeocoding && (
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-rose-500">
+                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                    Detecting...
+                                                </span>
+                                            )}
+                                        </label>
+                                        <span className="text-[10px] text-slate-400 font-mono">{address.length}/255</span>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        maxLength={255}
+                                        value={address}
+                                        onChange={(e) => {
+                                            setAddress(e.target.value);
+                                            const b = extractBarangay(e.target.value);
+                                            if (b) setDetectedBarangay(b);
+                                        }}
+                                        placeholder="Click on the map or type address..."
+                                        className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                                        required
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            /* Mode B: Polygon Coordinates Status & Summary */
+                            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 space-y-2 text-xs">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                                        <Shapes className="w-4 h-4 text-cyan-400" />
+                                        <span>Polygon Boundary Status</span>
+                                    </span>
+                                    <span
+                                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                            isPolygonClosed
+                                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                                : polygonVertices.length >= 3
+                                                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                                  : 'bg-slate-700/60 text-slate-300'
+                                        }`}
+                                    >
+                                        {isPolygonClosed
+                                            ? 'Enclosed Area Ready'
+                                            : polygonVertices.length >= 3
+                                              ? 'Unclosed Area'
+                                              : `${polygonVertices.length}/3 Min Points`}
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    {polygonVertices.length === 0
+                                        ? 'Click on the map to start placing points along the perimeter of the prone area.'
+                                        : isPolygonClosed
+                                          ? `Enclosed area formed with ${polygonVertices.length} perimeter vertices. You can drag vertices to adjust the shape.`
+                                          : `Drawing: ${polygonVertices.length} points placed. Click first point or "Finish Drawing" to close.`}
+                                </p>
                             </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
-                                    Longitude <span className="text-rose-500">*</span>
-                                </label>
-                                <input
-                                    type="number"
-                                    step="any"
-                                    value={longitude}
-                                    onChange={(e) => setLongitude(e.target.value)}
-                                    placeholder="124.573100"
-                                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500"
-                                    required
-                                />
-                            </div>
-                        </div>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-2">
-                            Click anywhere on the map or type Latitude &amp; Longitude — the Address will auto-fill automatically.
-                        </p>
+                        )}
 
-                        {/* Auto-filled Address (max 255 string) */}
+                        {/* Covered / Detected Barangay */}
                         <div className="space-y-1">
-                            <div className="flex items-center justify-between">
-                                <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                                    <span>Address <span className="text-rose-500">*</span></span>
-                                    {isGeocoding && (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-rose-500">
-                                            <Loader2 className="w-3 h-3 animate-spin" />
-                                            Detecting...
-                                        </span>
-                                    )}
-                                </label>
-                                <span className="text-[10px] text-slate-400 font-mono">{address.length}/255</span>
-                            </div>
-                            <input
-                                type="text"
-                                maxLength={255}
-                                value={address}
-                                onChange={(e) => {
-                                    setAddress(e.target.value);
-                                    const b = extractBarangay(e.target.value);
-                                    if (b) setDetectedBarangay(b);
-                                }}
-                                placeholder="Auto-filled from map pin or coordinates..."
-                                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500"
-                                required
-                            />
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                                Covered Barangay
+                            </label>
+                            <select
+                                value={detectedBarangay}
+                                onChange={(e) => setDetectedBarangay(e.target.value)}
+                                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
+                            >
+                                <option value="">Select or Auto-detected Barangay</option>
+                                {opolBarangays.map((b) => (
+                                    <option key={b} value={b}>
+                                        Brgy. {b}
+                                    </option>
+                                ))}
+                            </select>
                             {detectedBarangay && (
                                 <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
                                     <CheckCircle2 className="w-3 h-3" />
-                                    Detected Barangay: Brgy. {detectedBarangay}
+                                    Area associated with Brgy. {detectedBarangay}
                                 </p>
                             )}
                         </div>
 
-                        {/* Description (max 255 string — NOT text) */}
+                        {/* Description */}
                         <div className="space-y-1">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                                    Description
+                                    Description / Hazard Notes
                                 </label>
                                 <span className="text-[10px] text-slate-400 font-mono">{description.length}/255</span>
                             </div>
                             <textarea
-                                rows={3}
+                                rows={2}
                                 maxLength={255}
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
-                                placeholder="Brief notes about this hazard or location (max 255 characters)..."
-                                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500/40 focus:border-rose-500 resize-none"
+                                placeholder="Describe specific hazards, terrain, blindspots, or historical incidents..."
+                                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500 resize-none"
                             />
                         </div>
 
-                        {/* Optional Photos Upload (Up to 5 Photos, stored in 3NF child table) */}
+                        {/* Optional Photos */}
                         <div className="space-y-1.5">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                                     <Camera className="w-3.5 h-3.5 text-rose-500" />
                                     <span>Photos (Optional)</span>
                                 </label>
-                                <span className="text-[10px] text-slate-400 font-mono">
-                                    {photoFiles.length}/5
-                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono">{photoFiles.length}/5</span>
                             </div>
 
                             <input
@@ -674,11 +1002,11 @@ export default function ManualPinModal({
                                 <button
                                     type="button"
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="w-full px-3 py-2.5 rounded-xl border border-dashed border-slate-300 dark:border-white/15 bg-slate-50/70 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                                    className="w-full px-3 py-2 rounded-xl border border-dashed border-slate-300 dark:border-white/15 bg-slate-50/70 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-center gap-2 transition-colors cursor-pointer"
                                 >
                                     <Upload className="w-3.5 h-3.5 text-rose-500" />
                                     <span className="font-semibold">Upload Photo(s)</span>
-                                    <span className="text-[10px] text-slate-400">(JPG, PNG, WEBP • max 5MB)</span>
+                                    <span className="text-[10px] text-slate-400">(max 5MB)</span>
                                 </button>
                             )}
 
@@ -720,31 +1048,27 @@ export default function ManualPinModal({
                             </button>
                             <button
                                 type="submit"
-                                disabled={isSaving || Boolean(proximityCheck?.duplicateCustomPin)}
-                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F61509] hover:bg-rose-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-[#F61509]/25 transition-colors cursor-pointer"
+                                disabled={isSaving || (inputMode === 'POLYGON' && polygonVertices.length < 3)}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-bold shadow-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                style={{ backgroundColor: currentRiskColor }}
                             >
                                 {isSaving ? (
                                     <>
                                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                        <span>Saving Pin...</span>
-                                    </>
-                                ) : proximityCheck?.nearestSpot && !proximityCheck?.duplicateCustomPin ? (
-                                    <>
-                                        <Plus className="w-3.5 h-3.5" />
-                                        <span>Save &amp; Combine (+1)</span>
+                                        <span>Saving Prone Area...</span>
                                     </>
                                 ) : (
                                     <>
                                         <Plus className="w-3.5 h-3.5" />
-                                        <span>Save Manual Pin</span>
+                                        <span>Save Incident-Prone Area</span>
                                     </>
                                 )}
                             </button>
                         </div>
                     </div>
 
-                    {/* Right Interactive Map Column (Shows existing filtered pins + Click-to-Pin) */}
-                    <div className="lg:col-span-7 relative min-h-[380px] lg:min-h-[500px] bg-slate-950">
+                    {/* Right Interactive Drawing Map Column */}
+                    <div className="lg:col-span-7 relative min-h-[420px] lg:min-h-[540px] bg-slate-950">
                         {import.meta.env.VITE_MAPBOX_TOKEN ? (
                             <Map
                                 ref={mapRef}
@@ -757,10 +1081,10 @@ export default function ManualPinModal({
                                         : 'mapbox://styles/mapbox/satellite-streets-v12'
                                 }
                                 attributionControl={false}
-                                cursor="crosshair"
-                                onClick={(e) => handleMapPick(e.lngLat.lat, e.lngLat.lng)}
+                                cursor={inputMode === 'POLYGON' ? 'crosshair' : 'pointer'}
+                                onClick={(e) => handleMapClick(e.lngLat.lat, e.lngLat.lng)}
                             >
-                                {/* Opol Barangay Boundaries */}
+                                {/* Opol Barangay Reference Boundary Lines */}
                                 {barangayGeojson && (
                                     <Source id="modal-opol-boundaries" type="geojson" data={barangayGeojson}>
                                         <Layer
@@ -768,141 +1092,223 @@ export default function ManualPinModal({
                                             type="line"
                                             paint={{
                                                 'line-color': '#64748b',
-                                                'line-width': 1,
-                                                'line-opacity': 0.4,
+                                                'line-width': 1.2,
+                                                'line-opacity': 0.5,
                                                 'line-dasharray': [3, 2],
                                             }}
                                         />
                                     </Source>
                                 )}
 
-                                {/* Existing Filtered Hotspots Radial Glows + 20m Perimeters */}
-                                <Source id="modal-existing-glow" type="geojson" data={existingGlowGeojson}>
-                                    <Layer
-                                        id="modal-existing-glow-layer"
-                                        type="circle"
-                                        paint={{
-                                            'circle-radius': [
-                                                'interpolate',
-                                                ['exponential', 2],
-                                                ['zoom'],
-                                                13, 8,
-                                                15, 20,
-                                                16, 38,
-                                                17, 72,
-                                                18, 140,
-                                            ],
-                                            'circle-color': ['get', 'color'],
-                                            'circle-opacity': 0.34,
-                                            'circle-blur': 0.7,
-                                        }}
-                                    />
-                                </Source>
-
-                                <Source id="modal-existing-perimeters" type="geojson" data={existingPerimeterGeojson}>
-                                    <Layer
-                                        id="modal-existing-perim-line"
-                                        type="line"
-                                        minzoom={14.5}
-                                        paint={{
-                                            'line-color': ['get', 'color'],
-                                            'line-width': 1.5,
-                                            'line-opacity': 0.7,
-                                            'line-dasharray': [3, 2],
-                                        }}
-                                    />
-                                </Source>
-
-                                {/* New Pin 20m Preview Ring */}
-                                {newPinPerimeterGeojson && (
-                                    <Source id="modal-new-pin-ring" type="geojson" data={newPinPerimeterGeojson}>
+                                {/* Existing Saved Incident-Prone Polygons (faint background reference) */}
+                                {existingPronePolygons && existingPronePolygons.features?.length > 0 && (
+                                    <Source id="modal-existing-polygons" type="geojson" data={existingPronePolygons}>
                                         <Layer
-                                            id="modal-new-pin-ring-fill"
+                                            id="modal-existing-polygons-fill"
                                             type="fill"
                                             paint={{
-                                                'fill-color': '#F61509',
+                                                'fill-color': ['get', 'color'],
                                                 'fill-opacity': 0.16,
                                             }}
                                         />
                                         <Layer
-                                            id="modal-new-pin-ring-line"
+                                            id="modal-existing-polygons-stroke"
                                             type="line"
                                             paint={{
-                                                'line-color': '#F61509',
-                                                'line-width': 2,
+                                                'line-color': ['get', 'color'],
+                                                'line-width': 1.5,
                                                 'line-dasharray': [2, 2],
+                                                'line-opacity': 0.65,
                                             }}
                                         />
                                     </Source>
                                 )}
 
-                                {/* Existing Filtered Pins (Synced with Heatmap Filters) */}
-                                {existingHotspots.map((spot, idx) => {
-                                    const hex = getTypeColorHex(spot.incident_type || spot.most_common_type);
-                                    const isCombined = spot.incident_count > 1;
-                                    return (
-                                        <Marker
-                                            key={`modal-existing-${spot.cluster_key}-${idx}`}
-                                            longitude={spot.longitude}
-                                            latitude={spot.latitude}
-                                            anchor="bottom"
-                                        >
-                                            <div
-                                                className="pointer-events-none opacity-85"
-                                                title={`${spot.most_common_type} (${spot.incident_count}) — Brgy. ${spot.barangay}`}
-                                            >
-                                                <svg
-                                                    width={isCombined ? 24 : 20}
-                                                    height={isCombined ? 32 : 26}
-                                                    viewBox="0 0 24 32"
-                                                    fill="none"
-                                                >
-                                                    <path
-                                                        d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
-                                                        fill={hex}
-                                                        stroke="#FFFFFF"
-                                                        strokeWidth="2"
-                                                    />
-                                                    {isCombined ? (
-                                                        <>
-                                                            <circle cx="12" cy="11.5" r="7" fill="#0f172a" />
-                                                            <text
-                                                                x="12"
-                                                                y="14.7"
-                                                                textAnchor="middle"
-                                                                fill="#FFFFFF"
-                                                                fontSize="9"
-                                                                fontWeight="800"
-                                                            >
-                                                                {spot.incident_count}
-                                                            </text>
-                                                        </>
-                                                    ) : (
-                                                        <circle cx="12" cy="11.5" r="4" fill="#FFFFFF" />
-                                                    )}
-                                                </svg>
-                                            </div>
-                                        </Marker>
-                                    );
-                                })}
+                                {/* Existing Hotspot 20m Cluster Circles (reference glow) */}
+                                {existingHotspotsGeojson && (
+                                    <Source id="modal-hotspot-circles" type="geojson" data={existingHotspotsGeojson}>
+                                        <Layer
+                                            id="modal-hotspot-circle-fill"
+                                            type="fill"
+                                            paint={{
+                                                'fill-color': ['get', 'color'],
+                                                'fill-opacity': 0.25,
+                                            }}
+                                        />
+                                        <Layer
+                                            id="modal-hotspot-circle-line"
+                                            type="line"
+                                            paint={{
+                                                'line-color': ['get', 'color'],
+                                                'line-width': 1.2,
+                                                'line-dasharray': [2, 2],
+                                                'line-opacity': 0.6,
+                                            }}
+                                        />
+                                    </Source>
+                                )}
 
-                                {/* New Manual Pin Marker (Draggable!) */}
-                                {hasValidPin && (
+                                {/* Existing Incident Pins (Past Incidents / Hotspots) for Visual Reference */}
+                                {existingHotspots &&
+                                    existingHotspots.map((spot, idx) => {
+                                        const isCombined = spot.incident_count > 1;
+                                        const clusterType = spot.incident_type || spot.most_common_type || 'Incident';
+                                        const pinColor = spot.color || getTypeColorHex(clusterType) || '#3B82F6';
+
+                                        return (
+                                            <Marker
+                                                key={`modal-existing-pin-${spot.cluster_key || idx}`}
+                                                longitude={spot.longitude}
+                                                latitude={spot.latitude}
+                                                anchor="bottom"
+                                            >
+                                                <div
+                                                    className="pointer-events-none group relative flex flex-col items-center filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.65)]"
+                                                    title={`${clusterType} • ${spot.incident_count} incidents (${spot.barangay})`}
+                                                >
+                                                    <svg
+                                                        width={isCombined ? 26 : 22}
+                                                        height={isCombined ? 34 : 28}
+                                                        viewBox="0 0 24 32"
+                                                        fill="none"
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                    >
+                                                        <path
+                                                            d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
+                                                            fill={pinColor}
+                                                            stroke="#FFFFFF"
+                                                            strokeWidth="1.8"
+                                                            strokeLinejoin="round"
+                                                        />
+                                                        {isCombined ? (
+                                                            <>
+                                                                <circle cx="12" cy="11.5" r="6.5" fill="#0f172a" />
+                                                                <text
+                                                                    x="12"
+                                                                    y="14.3"
+                                                                    textAnchor="middle"
+                                                                    fill="#FFFFFF"
+                                                                    fontSize={spot.incident_count >= 10 ? '7.5' : '8.5'}
+                                                                    fontWeight="800"
+                                                                    fontFamily="system-ui, -apple-system, sans-serif"
+                                                                >
+                                                                    {spot.incident_count}
+                                                                </text>
+                                                            </>
+                                                        ) : (
+                                                            <circle cx="12" cy="11.5" r="4" fill="#FFFFFF" />
+                                                        )}
+                                                    </svg>
+                                                    <span className="text-[9px] font-bold px-1 rounded bg-slate-900/85 text-white mt-0.5 border border-white/20 whitespace-nowrap leading-tight">
+                                                        {spot.incident_count} {spot.incident_count === 1 ? 'inc' : 'incs'}
+                                                    </span>
+                                                </div>
+                                            </Marker>
+                                        );
+                                    })}
+
+                                {/* MODE B: Real-time Polygon Area Fill & Outline */}
+                                {activeDrawingPolygonGeojson && (
+                                    <Source id="active-polygon-area" type="geojson" data={activeDrawingPolygonGeojson}>
+                                        <Layer
+                                            id="active-polygon-fill"
+                                            type="fill"
+                                            paint={{
+                                                'fill-color': currentRiskColor,
+                                                'fill-opacity': isPolygonClosed ? 0.38 : 0.2,
+                                            }}
+                                        />
+                                        <Layer
+                                            id="active-polygon-stroke"
+                                            type="line"
+                                            paint={{
+                                                'line-color': currentRiskColor,
+                                                'line-width': isPolygonClosed ? 2.5 : 1.5,
+                                                'line-dasharray': isPolygonClosed ? [1, 0] : [2, 2],
+                                            }}
+                                        />
+                                    </Source>
+                                )}
+
+                                {/* MODE B: Real-time In-progress Line String */}
+                                {activeDrawingLineGeojson && !isPolygonClosed && (
+                                    <Source id="active-polygon-lines" type="geojson" data={activeDrawingLineGeojson}>
+                                        <Layer
+                                            id="active-lines-layer"
+                                            type="line"
+                                            paint={{
+                                                'line-color': currentRiskColor,
+                                                'line-width': 2.2,
+                                                'line-dasharray': [3, 1.5],
+                                            }}
+                                        />
+                                    </Source>
+                                )}
+
+                                {/* MODE B: Draggable Vertex Point Markers */}
+                                {inputMode === 'POLYGON' &&
+                                    polygonVertices.map(([lng, lat], idx) => {
+                                        const isFirst = idx === 0;
+                                        const isSelected = selectedVertexIdx === idx;
+                                        return (
+                                            <Marker
+                                                key={`vertex-${idx}-${lng}-${lat}`}
+                                                longitude={lng}
+                                                latitude={lat}
+                                                draggable
+                                                onDragEnd={(e) => handleDragVertex(idx, e.lngLat.lat, e.lngLat.lng)}
+                                                onClick={(e) => {
+                                                    e.originalEvent.stopPropagation();
+                                                    if (isFirst && polygonVertices.length >= 3 && !isPolygonClosed) {
+                                                        handleFinishPolygon();
+                                                    } else {
+                                                        setSelectedVertexIdx(idx);
+                                                    }
+                                                }}
+                                            >
+                                                <div
+                                                    className={`w-4 h-4 rounded-full border-2 cursor-move hover:scale-130 transition-all flex items-center justify-center shadow-lg ${
+                                                        isFirst
+                                                            ? 'bg-amber-400 border-white ring-2 ring-amber-500 animate-pulse'
+                                                            : isSelected
+                                                              ? 'bg-cyan-400 border-white ring-2 ring-cyan-500'
+                                                              : 'bg-white'
+                                                    }`}
+                                                    style={!isFirst && !isSelected ? { borderColor: currentRiskColor } : {}}
+                                                    title={
+                                                        isFirst && polygonVertices.length >= 3 && !isPolygonClosed
+                                                            ? 'Click to Close Polygon Area'
+                                                            : `Vertex ${idx + 1} (Drag to adjust)`
+                                                    }
+                                                >
+                                                    <span className="text-[8px] font-extrabold text-slate-900 leading-none">
+                                                        {idx + 1}
+                                                    </span>
+                                                </div>
+                                            </Marker>
+                                        );
+                                    })}
+
+                                {/* MODE A: Draggable Single Pin Marker */}
+                                {inputMode === 'POINT' && hasValidPin && (
                                     <Marker
                                         longitude={parsedLng}
                                         latitude={parsedLat}
                                         anchor="bottom"
                                         draggable
-                                        onDragEnd={(e) => handleMapPick(e.lngLat.lat, e.lngLat.lng)}
+                                        onDragEnd={(e) => handleMapClick(e.lngLat.lat, e.lngLat.lng)}
                                     >
                                         <div className="flex flex-col items-center cursor-grab active:cursor-grabbing">
-                                            <span className="mb-1 px-2 py-0.5 rounded-full bg-[#F61509] text-white text-[10px] font-bold shadow-lg whitespace-nowrap border border-white/40">
-                                                New Pin
+                                            <span
+                                                className="mb-1 px-2 py-0.5 rounded-full text-white text-[10px] font-bold shadow-lg whitespace-nowrap border border-white/40"
+                                                style={{ backgroundColor: currentRiskColor }}
+                                            >
+                                                {areaName.trim() || 'Prone Area Pin'}
                                             </span>
                                             <svg width="32" height="42" viewBox="0 0 24 32" fill="none" className="drop-shadow-xl">
                                                 <path
                                                     d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
-                                                    fill="#F61509"
+                                                    fill={currentRiskColor}
                                                     stroke="#FFFFFF"
                                                     strokeWidth="2.2"
                                                 />
@@ -918,16 +1324,89 @@ export default function ManualPinModal({
                             </div>
                         )}
 
-                        {/* Top-Left Synced Filter Info Pill */}
-                        <div className="absolute top-3 left-3 z-10 max-w-[78%] px-3 py-1.5 rounded-xl bg-slate-900/90 border border-white/15 backdrop-blur-md text-[11px] text-slate-100 shadow-lg space-y-0.5">
-                            <div className="font-bold flex items-center gap-1.5">
-                                <MapPin className="w-3.5 h-3.5 text-[#F61509] shrink-0" />
-                                <span>Click on map to drop pin ({existingHotspots.length} existing pins shown)</span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 truncate">
-                                Synced filter: {activeFilterSummary}
-                            </div>
+                        {/* Top-Left Instructions / Drawing Status Badge */}
+                        <div className="absolute top-3 left-3 z-10 max-w-[82%] px-3 py-2 rounded-xl bg-slate-900/90 border border-white/15 backdrop-blur-md text-[11px] text-slate-100 shadow-xl space-y-1">
+                            {inputMode === 'POINT' ? (
+                                <div className="font-bold flex items-center gap-1.5 text-slate-200">
+                                    <MousePointerClick className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                    <span>Click on map to drop pin, or drag pin to adjust coordinates.</span>
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    <div className="font-bold flex items-center gap-1.5 text-slate-200">
+                                        <Shapes className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                        <span>
+                                            {isPolygonClosed
+                                                ? 'Polygon Closed! Drag any numbered point to refine shape.'
+                                                : 'Click map to add boundary points. Click point #1 to close area.'}
+                                        </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 flex items-center gap-3">
+                                        <span>Vertices: {polygonVertices.length}</span>
+                                        {detectedBarangay && <span>Barangay: Brgy. {detectedBarangay}</span>}
+                                    </div>
+                                </div>
+                            )}
                         </div>
+
+                        {/* MODE B: Interactive Polygon Toolbar on the Map */}
+                        {inputMode === 'POLYGON' && (
+                            <div className="absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-1.5 bg-slate-900/95 border border-white/15 backdrop-blur-md p-1.5 rounded-xl shadow-2xl">
+                                <button
+                                    type="button"
+                                    onClick={handleUndoVertex}
+                                    disabled={polygonVertices.length === 0}
+                                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                    title="Undo last added point"
+                                >
+                                    <Undo2 className="w-3 h-3" />
+                                    <span>Undo</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleRedoVertex}
+                                    disabled={redoStack.length === 0}
+                                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                    title="Redo previously removed point"
+                                >
+                                    <Redo2 className="w-3 h-3" />
+                                    <span>Redo</span>
+                                </button>
+                                {selectedVertexIdx !== null && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDeleteVertex(selectedVertexIdx)}
+                                        className="px-2.5 py-1 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-500/30 text-rose-300 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                        title={`Delete Vertex ${selectedVertexIdx + 1}`}
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                        <span>Del #{selectedVertexIdx + 1}</span>
+                                    </button>
+                                )}
+                                {!isPolygonClosed && (
+                                    <button
+                                        type="button"
+                                        onClick={handleFinishPolygon}
+                                        disabled={polygonVertices.length < 3}
+                                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
+                                        title="Close and complete the polygon boundary"
+                                    >
+                                        <CheckCircle2 className="w-3 h-3" />
+                                        <span>Finish Drawing</span>
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={handleResetPolygon}
+                                    disabled={polygonVertices.length === 0}
+                                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-400 hover:text-slate-200 text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                                    title="Clear drawing and start over"
+                                >
+                                    <RotateCcw className="w-3 h-3" />
+                                    <span>Reset</span>
+                                </button>
+                            </div>
+                        )}
 
                         {/* Top-Right Map Style & Reset Controls */}
                         <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">

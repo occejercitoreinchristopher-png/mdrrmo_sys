@@ -316,6 +316,24 @@ class PatientCareRecordController extends Controller
 
         // Idempotency check: If already completed and user requested final complete
         if ($dispatch->dispatch_status === 'completed' && $shouldCompleteMission) {
+            $crewUserIds = $dispatch->crew()->pluck('users.id')->toArray();
+            $assignedUserIds = array_unique(array_filter(array_merge($crewUserIds, [
+                $dispatch->driver_id,
+                $dispatch->emt_id,
+            ])));
+
+            if (! empty($assignedUserIds)) {
+                ResponderProfile::whereIn('user_id', $assignedUserIds)->update(['availability' => 'available']);
+            }
+            if ($dispatch->ambulance_id) {
+                Ambulance::where('id', $dispatch->ambulance_id)->update(['status' => 'available']);
+            }
+            ResponderProfile::syncBusyAvailability();
+
+            try {
+                broadcast(new DispatchCompleted($dispatch));
+            } catch (\Throwable $e) {}
+
             return response()->json([
                 'message' => 'PCR Submitted and Dispatch Completed',
                 'data' => $pcr,
@@ -324,8 +342,13 @@ class PatientCareRecordController extends Controller
             ]);
         }
 
+        // Fast-forward dispatch to arrived_on_scene if submitted directly (e.g. from offline sync queue replay)
         if (! in_array($dispatch->dispatch_status, ['arrived_on_scene', 'completed'])) {
-            return response()->json(['message' => 'You must arrive on scene before submitting the PCR.'], 403);
+            $dispatch->update([
+                'dispatch_status' => 'arrived_on_scene',
+                'arrived_at' => $dispatch->arrived_at ?? now(),
+                'last_location_updated_at' => now(),
+            ]);
         }
 
         $completedAt = now();
@@ -421,6 +444,7 @@ class PatientCareRecordController extends Controller
             if (! empty($assignedUserIds)) {
                 ResponderProfile::whereIn('user_id', $assignedUserIds)->update(['availability' => 'available']);
             }
+            ResponderProfile::syncBusyAvailability();
         }
 
         // Broadcast to Dispatcher in real-time

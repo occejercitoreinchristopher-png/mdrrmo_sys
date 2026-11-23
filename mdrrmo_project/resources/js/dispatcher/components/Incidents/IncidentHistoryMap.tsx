@@ -90,11 +90,18 @@ export default function IncidentHistoryMap({
         if (!selectedBarangays || selectedBarangays.length === 0) {
             return null;
         }
-        const normalizedSelected = selectedBarangays.map(s => s.toLowerCase().replace(/[\s-]/g, ''));
+        const normalize = (name: string) =>
+            (name || '')
+                .toLowerCase()
+                .replace(/^(brgy\.?|barangay)\s*/i, '')
+                .replace(/[^a-z0-9]/g, '');
+
+        const normalizedSelected = selectedBarangays.map(normalize);
         return {
             type: 'FeatureCollection' as const,
             features: barangayGeojson.features.filter((f: any) => {
-                const name = (f.properties?.name ?? '').toLowerCase().replace(/[\s-]/g, '');
+                const rawName = f.properties?.name || f.properties?.barangay_name || '';
+                const name = normalize(rawName);
                 return normalizedSelected.includes(name);
             })
         };

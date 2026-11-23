@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useMemo, Fragment } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import { toast } from 'sonner';
+import { intersect } from '@turf/intersect';
+import { featureCollection, polygon } from '@turf/helpers';
 import DispatcherLayout from '@/dispatcher/layouts/DispatcherLayout';
 import AdminLayout from '@/admin/layouts/AdminLayout';
 import PageHeader from '@/shared/components/PageHeader';
 import { printPatientCareRecord } from '@/dispatcher/utils/printPatientCareRecord';
 import MultiSelectFilterCombobox from '@/dispatcher/components/Incidents/MultiSelectFilterCombobox';
-import ManualPinModal from '@/shared/components/ManualPinModal';
+import ManualPinModal, { getRiskColorHex } from '@/shared/components/ManualPinModal';
 import Map, { Marker, Source, Layer, type MapRef } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
@@ -53,7 +55,8 @@ import {
     HeartPulse,
     Users,
     Plus,
-    Trash2
+    Trash2,
+    Shapes
 } from 'lucide-react';
 
 interface IncidentRecord {
@@ -65,6 +68,10 @@ interface IncidentRecord {
     type_filter_key?: string | null;
     is_manual_pin?: boolean;
     manual_pin_id?: number | null;
+    area_name?: string | null;
+    geometry_type?: 'POINT' | 'POLYGON' | string;
+    risk_level?: string | null;
+    polygon_coordinates?: Array<[number, number]> | null;
     status: string;
     priority: string;
     address: string;
@@ -151,6 +158,7 @@ interface HotspotRecord {
     intensity_class: 'critical' | 'high' | 'moderate';
     color: string;
     badge_text?: string;
+    level?: string;
     radius_meters?: number;
     incident_ids: number[];
     incidents?: IncidentRecord[];
@@ -162,6 +170,7 @@ interface HotspotRecord {
     }>;
     meets_threshold: boolean;
     rank?: number;
+    superseded_manual_areas?: IncidentRecord[];
 }
 
 interface AnalyticsData {
@@ -224,6 +233,150 @@ const OPOL_CENTER = {
     zoom: 12.4,
 };
 
+/**
+ * Simple Ray-Casting algorithm to check if a point [lng, lat] is inside a polygon ring
+ */
+function isPointInPolygon(point: [number, number], ring: number[][]): boolean {
+    if (!ring || ring.length < 3) return false;
+    const [x, y] = point;
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i];
+        const [xj, yj] = ring[j];
+        const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+/**
+ * Check if the hazard/emergency types match for absorption
+ * If polygon is "All Hazards", it absorbs all incidents.
+ * If polygon type matches incident type (e.g. "Vehicular Accident"), it absorbs.
+ */
+function isHazardTypeMatch(polygonType?: string, incidentType?: string): boolean {
+    if (!polygonType || !incidentType) return true;
+    const p = polygonType.toLowerCase().trim();
+    const i = incidentType.toLowerCase().trim();
+    if (
+        p === 'all' ||
+        p === 'all hazards' ||
+        p === 'all emergency types' ||
+        i === 'all' ||
+        i === 'all hazards' ||
+        i === 'all emergency types'
+    ) {
+        return true;
+    }
+    if (p === i) return true;
+    // Substring / common terms match
+    if (p.includes('vehicular') && i.includes('vehicular')) return true;
+    if (p.includes('medical') && i.includes('medical')) return true;
+    if (p.includes('fire') && i.includes('fire')) return true;
+    if (p.includes('flood') && i.includes('flood')) return true;
+    if (p.includes('landslide') && i.includes('landslide')) return true;
+    return false;
+}
+
+/**
+ * Format a newly created manual pin/polygon API response into an IncidentRecord
+ * for 0ms instantaneous optimistic rendering on the map
+ */
+function formatManualPinRecord(pin: any): IncidentRecord {
+    const isPoly = (pin?.geometry_type || '').toUpperCase() === 'POLYGON';
+    const typeName =
+        pin?.incident_type?.incident_type_name ||
+        pin?.incident_type?.name ||
+        pin?.custom_pin_type ||
+        'Custom Hazard';
+    const brgyName = pin?.barangay?.barangay_name || pin?.barangay_name || 'Opol';
+    const rawCoords = pin?.polygon_coordinates;
+    let parsedCoords: Array<[number, number]> | null = null;
+    if (Array.isArray(rawCoords)) {
+        parsedCoords = rawCoords;
+    } else if (typeof rawCoords === 'string') {
+        try {
+            parsedCoords = JSON.parse(rawCoords);
+        } catch {
+            parsedCoords = null;
+        }
+    }
+
+    let lat = pin?.pin_latitude !== null && pin?.pin_latitude !== undefined ? Number(pin.pin_latitude) : null;
+    let lng = pin?.pin_longitude !== null && pin?.pin_longitude !== undefined ? Number(pin.pin_longitude) : null;
+    if ((lat === null || lng === null) && parsedCoords && parsedCoords.length > 0) {
+        let sumLat = 0;
+        let sumLng = 0;
+        let count = 0;
+        parsedCoords.forEach((pt) => {
+            if (Array.isArray(pt) && pt.length >= 2) {
+                sumLng += Number(pt[0]);
+                sumLat += Number(pt[1]);
+                count++;
+            }
+        });
+        if (count > 0) {
+            lat = Number((sumLat / count).toFixed(7));
+            lng = Number((sumLng / count).toFixed(7));
+        }
+    }
+
+    const areaName = pin?.area_name || (isPoly ? `${typeName} Zone` : `${typeName} Pin`);
+    const prefixCode = isPoly ? 'POLY-' : 'PIN-';
+    const pinIdNum = Number(pin?.id || Date.now());
+
+    return {
+        id: -1 * pinIdNum,
+        incident_id: -1 * pinIdNum,
+        incident_number: `${prefixCode}${String(pinIdNum).padStart(4, '0')}`,
+        incident_type: typeName,
+        incident_type_id: pin?.incident_type_id ? Number(pin.incident_type_id) : null,
+        type_filter_key: pin?.incident_type_id ? `type_${pin.incident_type_id}` : `custom_${typeName}`,
+        priority: pin?.risk_level || 'Moderate',
+        status: 'manual_pin',
+        address: pin?.pin_address || areaName,
+        purok_or_location: pin?.pin_address || areaName,
+        barangay: brgyName,
+        description: pin?.pin_description || '',
+        chief_complaint: pin?.pin_description || areaName,
+        latitude: lat !== null ? lat : OPOL_CENTER.latitude,
+        longitude: lng !== null ? lng : OPOL_CENTER.longitude,
+        has_coords: lat !== null && lng !== null,
+        created_at: pin?.created_at || new Date().toISOString(),
+        formatted_date: 'Just now',
+        incident_date: 'Today',
+        incident_time: 'Just now',
+        time_ago: 'Just now',
+        caller_name: pin?.creator?.name || 'MDRRMO Personnel',
+        caller_phone: '',
+        report_source: 'manual_pin',
+        verified_by: null,
+        verification_remarks: 'Manual incident-prone area added by MDRRMO',
+        reported_at: 'Just now',
+        verified_at: null,
+        resolved_at: null,
+        images: Array.isArray(pin?.images)
+            ? pin.images.map((img: any) => ({
+                id: img.id,
+                image_path: img.pin_image_path || '',
+                url: img.url || (img.pin_image_path ? `/storage/${img.pin_image_path}` : ''),
+                source_role: 'responder' as const,
+                source_label: 'Manual Pin Photo',
+                is_manual_pin_image: true,
+                is_grayscale: Boolean(img.is_grayscale),
+            }))
+            : [],
+        dispatches: [],
+        patients: [],
+        is_manual_pin: true,
+        manual_pin_id: pinIdNum,
+        geometry_type: isPoly ? 'POLYGON' : 'POINT',
+        area_name: areaName,
+        polygon_coordinates: parsedCoords,
+        risk_level: pin?.risk_level || 'Moderate',
+    };
+}
+
 export default function AccidentHeatmapView({
     incidents = [],
     hotspots = [],
@@ -270,6 +423,13 @@ export default function AccidentHeatmapView({
     const [deletingPinId, setDeletingPinId] = useState<number | null>(null);
     const [confirmDeletePin, setConfirmDeletePin] = useState<IncidentRecord | null>(null);
 
+    // Reactive local incidents state allowing instant optimistic additions and deletions without page refresh
+    const [localIncidents, setLocalIncidents] = useState<IncidentRecord[]>(incidents);
+
+    useEffect(() => {
+        setLocalIncidents(incidents);
+    }, [incidents]);
+
     // Keep local filter state synced if server props update
     useEffect(() => {
         setSelectedPeriod(filters.period || 'all');
@@ -294,6 +454,23 @@ export default function AccidentHeatmapView({
     const [mapStyle, setMapStyle] = useState<'dark' | 'satellite'>('dark');
     const [showMarkers, setShowMarkers] = useState(true);
     const [showBarangayBoundaries, setShowBarangayBoundaries] = useState(true);
+    const [showRiskZones, setShowRiskZones] = useState(true);
+    const [hoveredBarangay, setHoveredBarangay] = useState<{
+        barangayName: string;
+        locationName?: string;
+        normName: string;
+        riskLevel: string;
+        riskColor: string;
+        riskLabel: string;
+        riskBadgeBg: string;
+        riskTextColor: string;
+        incidentCount: number;
+        dominantType: string;
+        dominantPercentage: number;
+        typeBreakdown: Array<{ type: string; count: number; percentage: number; color: string }>;
+        radiusMeters?: number;
+    } | null>(null);
+    const hoveredBarangayRef = useRef<any>(null);
     const [selectedHotspot, setSelectedHotspot] = useState<HotspotRecord | null>(null);
     const [activeIncidentIdx, setActiveIncidentIdx] = useState<number>(0);
     const [lightboxState, setLightboxState] = useState<{
@@ -510,8 +687,8 @@ export default function AccidentHeatmapView({
             typeof window !== 'undefined' && window.location.pathname
                 ? window.location.pathname
                 : userRole === 'admin'
-                ? '/admin/accident-heatmap'
-                : '/dispatcher/accident-heatmap';
+                    ? '/admin/accident-heatmap'
+                    : '/dispatcher/accident-heatmap';
 
         router.get(currentRoute, params, {
             preserveState: true,
@@ -534,8 +711,8 @@ export default function AccidentHeatmapView({
             typeof window !== 'undefined' && window.location.pathname
                 ? window.location.pathname
                 : userRole === 'admin'
-                ? '/admin/accident-heatmap'
-                : '/dispatcher/accident-heatmap';
+                    ? '/admin/accident-heatmap'
+                    : '/dispatcher/accident-heatmap';
 
         router.get(currentRoute, {}, {
             preserveState: true,
@@ -547,7 +724,17 @@ export default function AccidentHeatmapView({
     const handleDeleteManualPin = async (pinRecord: IncidentRecord) => {
         const manualPinId = pinRecord.manual_pin_id;
         if (!manualPinId) return;
+
+        // 1. INSTANT OPTIMISTIC REMOVAL:
+        // Remove from local state immediately so the polygon/pin vanishes from the map in 0ms!
+        setLocalIncidents((prev) =>
+            prev.filter((i) => i.manual_pin_id !== manualPinId && i.id !== pinRecord.id)
+        );
+        setConfirmDeletePin(null);
+        setSelectedHotspot(null);
+        setActiveIncidentIdx(0);
         setDeletingPinId(manualPinId);
+
         try {
             const csrfToken =
                 document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
@@ -561,27 +748,27 @@ export default function AccidentHeatmapView({
                 },
             });
             if (resp.ok) {
-                setConfirmDeletePin(null);
-                setSelectedHotspot(null);
-                setActiveIncidentIdx(0);
-                toast.success('Manual heatmap pin deleted.');
-                router.reload({
-                    only: [
-                        'incidents',
-                        'hotspots',
-                        'analytics',
-                        'customPinTypes',
-                        'availableYears',
-                        'totalIncidentsCount',
-                        'validCoordinatesCount',
-                    ],
-                    data: buildFilterParams(),
+                toast.success('Manual prone area deleted successfully.');
+                // 2. Re-sync with server without preserving stale state
+                const currentRoute =
+                    typeof window !== 'undefined' && window.location.pathname
+                        ? window.location.pathname
+                        : userRole === 'admin'
+                            ? '/admin/accident-heatmap'
+                            : '/dispatcher/accident-heatmap';
+                router.get(currentRoute, buildFilterParams(), {
+                    preserveState: false,
+                    preserveScroll: true,
+                    replace: true,
                 });
             } else {
+                // If deletion failed on server, restore from server props
+                setLocalIncidents(incidents);
                 toast.error('Failed to delete manual pin. Please try again.');
             }
         } catch (err) {
             console.error('Failed to delete manual pin:', err);
+            setLocalIncidents(incidents);
             toast.error('Network error while deleting manual pin.');
         } finally {
             setDeletingPinId(null);
@@ -619,8 +806,8 @@ export default function AccidentHeatmapView({
                 selectedPeriod === 'weekly'
                     ? 'Weekly'
                     : selectedPeriod === 'monthly'
-                    ? 'Monthly'
-                    : 'Yearly'
+                        ? 'Monthly'
+                        : 'Yearly'
             );
         }
         if (selectedYears.length > 0) parts.push(`Year: ${selectedYears.join(', ')}`);
@@ -649,7 +836,7 @@ export default function AccidentHeatmapView({
 
     // 1. Reactive Active Incidents (Real Incidents + Manual Pins) matching all Multi-Select filters
     const activeIncidents = useMemo(() => {
-        return incidents.filter((inc) => {
+        return localIncidents.filter((inc) => {
             const st = (inc.status || '').toLowerCase();
             if (st === 'cancelled' || st === 'rejected') {
                 return false;
@@ -666,13 +853,12 @@ export default function AccidentHeatmapView({
                 if (!matched) return false;
             }
 
-            // Multi-Select Barangay Filter
+            // Multi-Select Barangay Filter (Strict Exact Match to avoid Bonbon / Luyongbonbon substring collisions)
             if (selectedBarangays.length > 0) {
-                const incBrgy = (inc.barangay || '').replace(/[\s-]/g, '').toLowerCase();
-                const matchedBrgy = selectedBarangays.some((b) => {
-                    const target = b.replace(/[\s-]/g, '').toLowerCase();
-                    return incBrgy === target || incBrgy.includes(target) || target.includes(incBrgy);
-                });
+                const cleanBrgy = (str: string) =>
+                    (str || '').toLowerCase().replace(/^(brgy\.?|barangay)\s*/i, '').replace(/[^a-z0-9]/g, '');
+                const incBrgy = cleanBrgy(inc.barangay);
+                const matchedBrgy = selectedBarangays.some((b) => cleanBrgy(b) === incBrgy);
                 if (!matchedBrgy) return false;
             }
 
@@ -698,7 +884,7 @@ export default function AccidentHeatmapView({
 
             return true;
         });
-    }, [incidents, selectedEmergencyTypes, selectedBarangays, selectedYears, selectedMonths, selectedStatus]);
+    }, [localIncidents, selectedEmergencyTypes, selectedBarangays, selectedYears, selectedMonths, selectedStatus]);
 
     // Haversine distance in meters (matches backend AccidentHeatmapController)
     const haversineMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -708,9 +894,9 @@ export default function AccidentHeatmapView({
         const a =
             Math.sin(dLat / 2) * Math.sin(dLat / 2) +
             Math.cos((lat1 * Math.PI) / 180) *
-                Math.cos((lat2 * Math.PI) / 180) *
-                Math.sin(dLon / 2) *
-                Math.sin(dLon / 2);
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     };
 
@@ -718,25 +904,96 @@ export default function AccidentHeatmapView({
     // False when "All" (0 checked) OR 2+ Emergency Types are checked!
     const isSpecificEmergencyType = selectedEmergencyTypes.length === 1;
 
-    // Dynamic Risk Classification:
-    // - All Emergency Types:       1-4 Low (Yellow), 5-8 Moderate (Orange), 9+ High (Red)
-    // - Specific Emergency Type:   1-2 Low (Yellow), 3 Moderate (Orange),   4+ High (Red)
+    // Color mapper for emergency incident types (Strict Color Coding: Fire = Red, Medical = Blue, Vehicular = Orange, Rescue = Green)
+    const getTypeBadgeColor = (type: string) => {
+        const lower = (type || '').toLowerCase();
+        if (lower.includes('fire')) {
+            return {
+                bg: 'bg-red-500/15 border-red-500/30 text-red-300',
+                dot: 'bg-red-500',
+                hex: '#EF4444',
+            };
+        }
+        if (lower.includes('vehicular') || lower.includes('accident') || lower.includes('traffic') || lower.includes('collision')) {
+            return {
+                bg: 'bg-orange-500/15 border-orange-500/30 text-orange-300',
+                dot: 'bg-orange-500',
+                hex: '#F97316',
+            };
+        }
+        if (lower.includes('medical') || lower.includes('cardiac') || lower.includes('trauma')) {
+            return {
+                bg: 'bg-blue-500/15 border-blue-500/30 text-blue-300',
+                dot: 'bg-blue-500',
+                hex: '#3B82F6',
+            };
+        }
+        if (lower.includes('search') || lower.includes('rescue') || lower.includes('drown') || lower.includes('water')) {
+            return {
+                bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
+                dot: 'bg-emerald-500',
+                hex: '#10B981',
+            };
+        }
+        if (lower.includes('weather') || lower.includes('flood') || lower.includes('typhoon')) {
+            return {
+                bg: 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300',
+                dot: 'bg-cyan-500',
+                hex: '#06B6D4',
+            };
+        }
+        return {
+            bg: 'bg-violet-500/15 border-violet-500/30 text-violet-300',
+            dot: 'bg-violet-500',
+            hex: '#8B5CF6',
+        };
+    };
+
+    // Classify 20-Meter Localized Incident Risk:
+    // - Specific Emergency Type: 1 Low (Green), 2 Moderate (Yellow), 3 Mod-High (Orange), 4+ High (Red)
+    // - All Emergency Types:     1-2 Low (Green), 3-4 Moderate (Yellow), 5-8 Mod-High (Orange), 9+ High (Red)
     const classifyClusterRisk = (count: number, isSpecificType: boolean) => {
         const highMin = isSpecificType ? 4 : 9;
-        const modMin = isSpecificType ? 3 : 5;
+        const modHighMin = isSpecificType ? 3 : 5;
+        const modMin = isSpecificType ? 2 : 3;
+
         const isRed = count >= highMin;
-        const isOrange = !isRed && count >= modMin;
+        const isOrange = !isRed && count >= modHighMin;
+        const isYellow = !isRed && !isOrange && count >= modMin;
+        const isGreen = !isRed && !isOrange && !isYellow && count > 0;
+
+        const color = isRed
+            ? '#E53935'
+            : isOrange
+                ? '#FB8C00'
+                : isYellow
+                    ? '#FDD835'
+                    : '#43A047';
+
+        const level = isRed
+            ? 'HIGH RISK'
+            : isOrange
+                ? 'MODERATE-HIGH RISK'
+                : isYellow
+                    ? 'MODERATE RISK'
+                    : 'LOW RISK';
+
+        const classification = isRed
+            ? 'High Risk Area'
+            : isOrange
+                ? 'Moderate-High Risk Area'
+                : isYellow
+                    ? 'Moderate Risk Area'
+                    : 'Low Risk Area';
 
         return {
             isRed,
             isOrange,
-            color: isRed ? '#EF4444' : isOrange ? '#F97316' : '#EAB308',
-            level: isRed ? 'High' : isOrange ? 'Moderate' : 'Low',
-            classification: isRed
-                ? 'High Incident Concentration'
-                : isOrange
-                ? 'Moderate Incident Concentration'
-                : 'Low Incident Concentration',
+            isYellow,
+            isGreen,
+            color,
+            level,
+            classification,
             intensity: (isRed ? 'Critical' : isOrange ? 'High' : 'Moderate') as HotspotRecord['intensity'],
             intensityClass: (isRed ? 'critical' : isOrange ? 'high' : 'moderate') as HotspotRecord['intensity_class'],
             badgeText: isRed
@@ -744,12 +1001,16 @@ export default function AccidentHeatmapView({
                     ? 'High (4+)'
                     : 'High (9+)'
                 : isOrange
-                ? isSpecificType
-                    ? 'Moderate (3)'
-                    : 'Moderate (5-8)'
-                : isSpecificType
-                ? 'Low (1-2)'
-                : 'Low (1-4)',
+                    ? isSpecificType
+                        ? 'Mod-High (3)'
+                        : 'Mod-High (5-8)'
+                    : isYellow
+                        ? isSpecificType
+                            ? 'Moderate (2)'
+                            : 'Moderate (3-4)'
+                        : isSpecificType
+                            ? 'Low (1)'
+                            : 'Low (1-2)',
         };
     };
 
@@ -905,69 +1166,273 @@ export default function AccidentHeatmapView({
         isSpecificEmergencyType,
     ]);
 
-    // GeoJSON Feature Collection for 20-Meter Cluster Monochromatic Radial Glows from activeHotspots
-    const clustersGeojson = useMemo(() => {
-        const features = activeHotspots.map((spot) => ({
-            type: 'Feature' as const,
-            properties: {
-                cluster_key: spot.cluster_key,
-                color: spot.color,
-                incident_count: spot.incident_count,
-                classification: spot.classification,
-                location_name: spot.location_name,
-                is_red: classifyClusterRisk(spot.incident_count, isSpecificEmergencyType).isRed,
-            },
-            geometry: {
-                type: 'Point' as const,
-                coordinates: [spot.longitude, spot.latitude],
-            },
-        }));
+    // Set of manual pin IDs (polygons and points) that are absorbed/superseded by a NEWER manual polygon area of matching emergency type
+    const absorbedManualPinIds = useMemo(() => {
+        // Collect all manual polygons sorted by manual_pin_id descending (NEWEST FIRST)
+        const polyRecords = activeIncidents
+            .filter(
+                (inc) =>
+                    inc.is_manual_pin &&
+                    inc.geometry_type === 'POLYGON' &&
+                    Array.isArray(inc.polygon_coordinates) &&
+                    inc.polygon_coordinates.length >= 3
+            )
+            .sort((a, b) => (b.manual_pin_id || 0) - (a.manual_pin_id || 0));
+
+        if (polyRecords.length === 0) return new Set<number>();
+
+        const absorbedIds = new Set<number>();
+
+        for (let i = 0; i < polyRecords.length; i++) {
+            const newer = polyRecords[i];
+            const newerId = newer.manual_pin_id || 0;
+            if (absorbedIds.has(newerId)) continue; // Skip if this newer polygon was itself absorbed by an even newer one
+
+            const ring = newer.polygon_coordinates!;
+
+            // 1. Check all older manual polygons (created before 'newer')
+            for (let j = i + 1; j < polyRecords.length; j++) {
+                const older = polyRecords[j];
+                const olderId = older.manual_pin_id || 0;
+                if (absorbedIds.has(olderId)) continue;
+
+                if (!isHazardTypeMatch(newer.incident_type, older.incident_type)) continue;
+
+                // Older polygon is absorbed if its centroid is inside newer polygon,
+                // or if newer centroid is inside older polygon,
+                // or if any vertex overlaps
+                const olderCentroidInNewer =
+                    typeof older.longitude === 'number' &&
+                    typeof older.latitude === 'number' &&
+                    isPointInPolygon([older.longitude, older.latitude], ring);
+
+                const newerCentroidInOlder =
+                    typeof newer.longitude === 'number' &&
+                    typeof newer.latitude === 'number' &&
+                    older.polygon_coordinates &&
+                    isPointInPolygon([newer.longitude, newer.latitude], older.polygon_coordinates);
+
+                let vertexOverlap = false;
+                if (!olderCentroidInNewer && !newerCentroidInOlder && older.polygon_coordinates) {
+                    vertexOverlap = older.polygon_coordinates.some((pt) =>
+                        Array.isArray(pt) && pt.length >= 2 && isPointInPolygon([pt[0], pt[1]], ring)
+                    );
+                }
+
+                if (olderCentroidInNewer || newerCentroidInOlder || vertexOverlap) {
+                    absorbedIds.add(olderId);
+                }
+            }
+
+            // 2. Check all older manual POINT pins inside this newer polygon
+            activeIncidents.forEach((inc) => {
+                if (
+                    inc.is_manual_pin &&
+                    inc.geometry_type === 'POINT' &&
+                    (inc.manual_pin_id || 0) < newerId &&
+                    !absorbedIds.has(inc.manual_pin_id || 0)
+                ) {
+                    if (
+                        isHazardTypeMatch(newer.incident_type, inc.incident_type) &&
+                        typeof inc.longitude === 'number' &&
+                        typeof inc.latitude === 'number' &&
+                        isPointInPolygon([inc.longitude, inc.latitude], ring)
+                    ) {
+                        absorbedIds.add(inc.manual_pin_id || 0);
+                    }
+                }
+            });
+        }
+
+        return absorbedIds;
+    }, [activeIncidents]);
+
+    // GeoJSON Feature Collection for Saved Manual Incident-Prone Polygons (MODE B: USER-DRAWN ENCLOSED AREAS)
+    // NOTE: When an older manual polygon/pin is superseded/absorbed by a newer one, the old one is suppressed!
+    const savedPronePolygonsGeojson = useMemo(() => {
+        const polyRecords = activeIncidents.filter(
+            (inc) =>
+                inc.is_manual_pin &&
+                inc.geometry_type === 'POLYGON' &&
+                !absorbedManualPinIds.has(inc.manual_pin_id || 0) &&
+                Array.isArray(inc.polygon_coordinates) &&
+                inc.polygon_coordinates.length >= 3
+        );
 
         return {
             type: 'FeatureCollection' as const,
-            features,
+            features: polyRecords.map((rec) => {
+                let ring = [...rec.polygon_coordinates!];
+                if (
+                    ring[0][0] !== ring[ring.length - 1][0] ||
+                    ring[0][1] !== ring[ring.length - 1][1]
+                ) {
+                    ring.push(ring[0]);
+                }
+                const color = getRiskColorHex(rec.risk_level);
+                return {
+                    type: 'Feature' as const,
+                    properties: {
+                        id: rec.id,
+                        incident_id: rec.incident_id,
+                        manual_pin_id: rec.manual_pin_id,
+                        area_name: rec.area_name || rec.incident_type,
+                        incident_type: rec.incident_type,
+                        risk_level: rec.risk_level || 'Moderate',
+                        barangay: rec.barangay,
+                        description: rec.description,
+                        color: color,
+                    },
+                    geometry: {
+                        type: 'Polygon' as const,
+                        coordinates: [ring],
+                    },
+                };
+            }),
         };
-    }, [activeHotspots]);
+    }, [activeIncidents, absorbedManualPinIds]);
 
-    // Exact 20-Meter True-Scale Geographic Radius Polygons for each Same-Type Cluster
-    const clustersPerimeterGeojson = useMemo(() => {
+    // Cluster keys of hotspots that are absorbed by any active (non-superseded) manual polygon prone area
+    const absorbedHotspotClusterKeys = useMemo(() => {
+        const polyRecords = activeIncidents.filter(
+            (inc) =>
+                inc.is_manual_pin &&
+                inc.geometry_type === 'POLYGON' &&
+                !absorbedManualPinIds.has(inc.manual_pin_id || 0) &&
+                Array.isArray(inc.polygon_coordinates) &&
+                inc.polygon_coordinates.length >= 3
+        );
+        if (polyRecords.length === 0) return new Set<string>();
+
+        const keys = new Set<string>();
+        activeHotspots.forEach((spot) => {
+            const isAbsorbed = polyRecords.some((poly) => {
+                const matchesType = isHazardTypeMatch(
+                    poly.incident_type,
+                    spot.incident_type || spot.most_common_type
+                );
+                return (
+                    matchesType &&
+                    isPointInPolygon([spot.longitude, spot.latitude], poly.polygon_coordinates!)
+                );
+            });
+            if (isAbsorbed) {
+                keys.add(spot.cluster_key);
+            }
+        });
+        return keys;
+    }, [activeIncidents, activeHotspots, absorbedManualPinIds]);
+
+    // GeoJSON Feature Collection for 20-Meter Cluster Monochromatic Radial Glows from activeHotspots
+    // Exact Localized Risk Zone Polygons Strictly Clipped to Barangay Boundaries (Never Crosses Border)
+    // NOTE: When absorbed by a matching manual prone polygon, the generic 20m circle is suppressed!
+    const clippedRiskZonesGeojson = useMemo(() => {
         const steps = 48;
         const earthRadius = 6371000;
 
-        const features = activeHotspots.map((spot) => {
-            const radiusM = spot.radius_meters || 20;
-            const latRad = (spot.latitude * Math.PI) / 180;
-            const dLat = (radiusM / earthRadius) * (180 / Math.PI);
-            const dLng = ((radiusM / earthRadius) * (180 / Math.PI)) / Math.cos(latRad);
+        const normalize = (name: string) =>
+            (name || '')
+                .toLowerCase()
+                .replace(/^(brgy\.?|barangay)\s*/i, '')
+                .replace(/[^a-z0-9]/g, '');
 
-            const ring: [number, number][] = [];
-            for (let i = 0; i <= steps; i++) {
-                const angle = (i / steps) * 2 * Math.PI;
-                ring.push([
-                    spot.longitude + dLng * Math.cos(angle),
-                    spot.latitude + dLat * Math.sin(angle),
-                ]);
-            }
+        const features = activeHotspots
+            .map((spot) => {
+                // If absorbed by an authorized manual prone area of the same emergency type,
+                // suppress the 20-meter circle so the clean manual polygon takes visual precedence!
+                if (absorbedHotspotClusterKeys.has(spot.cluster_key)) {
+                    return null;
+                }
 
-            return {
-                type: 'Feature' as const,
-                properties: {
-                    cluster_key: spot.cluster_key,
-                    color: spot.color,
-                    incident_count: spot.incident_count,
-                },
-                geometry: {
+                const radiusM = spot.radius_meters || 25;
+                const latRad = (spot.latitude * Math.PI) / 180;
+                const dLat = (radiusM / earthRadius) * (180 / Math.PI);
+                const dLng = ((radiusM / earthRadius) * (180 / Math.PI)) / Math.cos(latRad);
+
+                const ring: [number, number][] = [];
+                for (let i = 0; i <= steps; i++) {
+                    const angle = (i / steps) * 2 * Math.PI;
+                    ring.push([
+                        spot.longitude + dLng * Math.cos(angle),
+                        spot.latitude + dLat * Math.sin(angle),
+                    ]);
+                }
+
+                const typeFreq: Record<string, number> = {};
+                spot.incidents?.forEach((i) => {
+                    const t = i.incident_type || 'Unspecified';
+                    typeFreq[t] = (typeFreq[t] || 0) + 1;
+                });
+                const breakdown = Object.entries(typeFreq)
+                    .map(([tName, c]) => ({
+                        type: tName,
+                        count: c,
+                        percentage: spot.incident_count > 0 ? Math.round((c / spot.incident_count) * 100) : 0,
+                        color: getTypeBadgeColor(tName).hex,
+                    }))
+                    .sort((a, b) => b.count - a.count);
+
+                const dominant = breakdown.length > 0 ? breakdown[0] : null;
+                const rawBrgy = (spot.barangay || '').trim();
+                const brgyName = rawBrgy && rawBrgy.toLowerCase() !== 'opol'
+                    ? (rawBrgy.toLowerCase().startsWith('brgy') ? rawBrgy : `Brgy. ${rawBrgy}`)
+                    : 'Barangay Area';
+
+                let finalGeometry: any = {
                     type: 'Polygon' as const,
                     coordinates: [ring],
-                },
-            };
-        });
+                };
+
+                // Clip against the incident's barangay boundary polygon so color NEVER crosses the border!
+                if (barangayGeojson?.features?.length) {
+                    const spotNorm = normalize(spot.barangay);
+                    const brgyFeature = barangayGeojson.features.find((f: any) => {
+                        const raw = f.properties?.name || f.properties?.barangay_name || '';
+                        return normalize(raw) === spotNorm;
+                    });
+
+                    if (brgyFeature) {
+                        try {
+                            const spotPoly = polygon([ring]);
+                            const clipped = intersect(featureCollection([spotPoly, brgyFeature]));
+                            if (clipped?.geometry) {
+                                finalGeometry = clipped.geometry;
+                            }
+                        } catch {
+                            // Fallback to unclipped polygon if geometric degenerate
+                        }
+                    }
+                }
+
+                const risk = classifyClusterRisk(spot.incident_count, isSpecificEmergencyType);
+
+                return {
+                    type: 'Feature' as const,
+                    properties: {
+                        cluster_key: spot.cluster_key,
+                        color: spot.color || risk.color,
+                        risk_level: spot.level || risk.level,
+                        risk_color: spot.color || risk.color,
+                        incident_count: spot.incident_count,
+                        barangay_name: brgyName,
+                        location_name: spot.location_name,
+                        dominant_type: dominant ? dominant.type : spot.incident_type || 'None',
+                        dominant_percentage: dominant ? dominant.percentage : 100,
+                        type_breakdown_json: JSON.stringify(breakdown),
+                        radius_meters: radiusM,
+                        classification: spot.classification,
+                        is_red: risk.isRed,
+                    },
+                    geometry: finalGeometry,
+                };
+            })
+            .filter(Boolean) as any[];
 
         return {
             type: 'FeatureCollection' as const,
             features,
         };
-    }, [activeHotspots]);
+    }, [activeHotspots, isSpecificEmergencyType, barangayGeojson, absorbedHotspotClusterKeys]);
 
     // Compute slight visual pixel offset ONLY when two DIFFERENT incident-type clusters occupy virtually identical GPS points (~<=3m)
     const clusterPinOffsets = useMemo(() => {
@@ -1004,6 +1469,37 @@ export default function AccidentHeatmapView({
             selectedHotspot
         );
     }, [selectedHotspot, activeHotspots]);
+
+    // Parent manual polygon if current activeSelectedHotspot is absorbed inside one (prioritizes newest active polygon)
+    const parentManualPolygon = useMemo(() => {
+        if (!activeSelectedHotspot) return null;
+        const polyRecords = activeIncidents
+            .filter(
+                (inc) =>
+                    inc.is_manual_pin &&
+                    inc.geometry_type === 'POLYGON' &&
+                    !absorbedManualPinIds.has(inc.manual_pin_id || 0) &&
+                    Array.isArray(inc.polygon_coordinates) &&
+                    inc.polygon_coordinates.length >= 3
+            )
+            .sort((a, b) => (b.manual_pin_id || 0) - (a.manual_pin_id || 0));
+
+        return (
+            polyRecords.find((poly) => {
+                const matchesType = isHazardTypeMatch(
+                    poly.incident_type,
+                    activeSelectedHotspot.incident_type || activeSelectedHotspot.most_common_type
+                );
+                return (
+                    matchesType &&
+                    isPointInPolygon(
+                        [activeSelectedHotspot.longitude, activeSelectedHotspot.latitude],
+                        poly.polygon_coordinates!
+                    )
+                );
+            }) || null
+        );
+    }, [activeSelectedHotspot, activeIncidents, absorbedManualPinIds]);
 
     // Incidents inside the currently clicked pin/cluster, sorted NEWEST FIRST (latest first, oldest last)
     const inspectedIncidents = useMemo<IncidentRecord[]>(() => {
@@ -1042,6 +1538,81 @@ export default function AccidentHeatmapView({
         }
     }, [safeIncidentIdx, activeSelectedHotspot?.cluster_key]);
 
+    // Filter GeoJSON boundary for filtered/selected barangays to highlight perimeter border
+    const highlightedBarangayGeojson = useMemo(() => {
+        if (!barangayGeojson?.features) return null;
+        if (!selectedBarangays || selectedBarangays.length === 0) {
+            return null;
+        }
+
+        const normalize = (name: string) =>
+            (name || '')
+                .toLowerCase()
+                .replace(/^(brgy\.?|barangay)\s*/i, '')
+                .replace(/[^a-z0-9]/g, '');
+
+        const normalizedSelected = selectedBarangays.map(normalize);
+
+        const matchingFeatures = barangayGeojson.features.filter((f: any) => {
+            const rawName = f.properties?.name || f.properties?.barangay_name || '';
+            const name = normalize(rawName);
+            return normalizedSelected.includes(name);
+        });
+
+        if (matchingFeatures.length === 0) return null;
+
+        return {
+            type: 'FeatureCollection' as const,
+            features: matchingFeatures,
+        };
+    }, [barangayGeojson, selectedBarangays]);
+
+    // Automatically fly / fit map bounds to the filtered barangay(s)
+    useEffect(() => {
+        if (!highlightedBarangayGeojson?.features?.length || !mapRef.current) return;
+
+        let minLng = Infinity;
+        let maxLng = -Infinity;
+        let minLat = Infinity;
+        let maxLat = -Infinity;
+        let hasValidCoords = false;
+
+        const processCoord = (coord: any) => {
+            if (Array.isArray(coord) && typeof coord[0] === 'number') {
+                const [lng, lat] = coord;
+                if (!isNaN(lng) && !isNaN(lat) && lng > 0 && lat > 0) {
+                    minLng = Math.min(minLng, lng);
+                    maxLng = Math.max(maxLng, lng);
+                    minLat = Math.min(minLat, lat);
+                    maxLat = Math.max(maxLat, lat);
+                    hasValidCoords = true;
+                }
+            } else if (Array.isArray(coord)) {
+                coord.forEach(processCoord);
+            }
+        };
+
+        highlightedBarangayGeojson.features.forEach((f: any) => {
+            if (f.geometry?.coordinates) {
+                processCoord(f.geometry.coordinates);
+            }
+        });
+
+        if (hasValidCoords && isFinite(minLng) && isFinite(maxLng)) {
+            mapRef.current.fitBounds(
+                [
+                    [minLng, minLat],
+                    [maxLng, maxLat],
+                ],
+                {
+                    padding: { top: 70, bottom: 70, left: 60, right: 360 },
+                    duration: 1200,
+                    maxZoom: 15.5,
+                }
+            );
+        }
+    }, [highlightedBarangayGeojson]);
+
     // Fly/zoom in to clicked pin or Ranked Hotspot and open inline Right Panel inspector
     const focusHotspotOnMap = (spot: HotspotRecord) => {
         setSelectedHotspot(spot);
@@ -1073,51 +1644,6 @@ export default function AccidentHeatmapView({
         closeInspectorPanel();
     };
 
-    // Color mapper for emergency incident types (Strict Color Coding: Fire = Red, Medical = Blue, Vehicular = Orange, Rescue = Green)
-    const getTypeBadgeColor = (type: string) => {
-        const lower = (type || '').toLowerCase();
-        if (lower.includes('fire')) {
-            return {
-                bg: 'bg-red-500/15 border-red-500/30 text-red-300',
-                dot: 'bg-red-500',
-                hex: '#EF4444',
-            };
-        }
-        if (lower.includes('vehicular') || lower.includes('accident') || lower.includes('traffic') || lower.includes('collision')) {
-            return {
-                bg: 'bg-orange-500/15 border-orange-500/30 text-orange-300',
-                dot: 'bg-orange-500',
-                hex: '#F97316',
-            };
-        }
-        if (lower.includes('medical') || lower.includes('cardiac') || lower.includes('trauma')) {
-            return {
-                bg: 'bg-blue-500/15 border-blue-500/30 text-blue-300',
-                dot: 'bg-blue-500',
-                hex: '#3B82F6',
-            };
-        }
-        if (lower.includes('search') || lower.includes('rescue') || lower.includes('drown') || lower.includes('water')) {
-            return {
-                bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
-                dot: 'bg-emerald-500',
-                hex: '#10B981',
-            };
-        }
-        if (lower.includes('weather') || lower.includes('flood') || lower.includes('typhoon')) {
-            return {
-                bg: 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300',
-                dot: 'bg-cyan-500',
-                hex: '#06B6D4',
-            };
-        }
-        return {
-            bg: 'bg-violet-500/15 border-violet-500/30 text-violet-300',
-            dot: 'bg-violet-500',
-            hex: '#8B5CF6',
-        };
-    };
-
     // Helper to format cluster header label ensuring Barangay is prominently displayed
     const getClusterBarangayLabel = (spot: HotspotRecord) => {
         const rawBrgy = (spot.barangay || '').trim();
@@ -1137,6 +1663,175 @@ export default function AccidentHeatmapView({
         }
 
         return brgyPrefix;
+    };
+
+    // =========================================================================
+    // LOCALIZED INCIDENT RISK ZONES (CLIPPED TO BARANGAY BOUNDARY)
+    // =========================================================================
+    const onMapMouseMove = (evt: any) => {
+        if (!showRiskZones) {
+            if (hoveredBarangayRef.current) {
+                hoveredBarangayRef.current = null;
+                setHoveredBarangay(null);
+            }
+            return;
+        }
+        const feature = evt.features && evt.features.find((f: any) => f.layer?.id === 'clipped-risk-fill');
+        if (feature && feature.properties) {
+            const p = feature.properties;
+            const key = p.cluster_key;
+            if (hoveredBarangayRef.current?.normName === key) {
+                return;
+            }
+
+            let breakdown: Array<{ type: string; count: number; percentage: number; color: string }> = [];
+            try {
+                if (p.type_breakdown_json) {
+                    breakdown = JSON.parse(p.type_breakdown_json);
+                }
+            } catch {
+                breakdown = [];
+            }
+
+            const data = {
+                barangayName: p.barangay_name || 'Barangay Area',
+                locationName: p.location_name || '',
+                normName: key,
+                riskLevel: p.risk_level || 'LOW RISK',
+                riskColor: p.risk_color || '#43A047',
+                riskLabel: `${p.risk_level || 'Risk Area'} (${p.incident_count} records)`,
+                riskBadgeBg: 'bg-slate-700/60',
+                riskTextColor: 'text-white',
+                incidentCount: Number(p.incident_count) || 0,
+                dominantType: p.dominant_type || 'None',
+                dominantPercentage: Number(p.dominant_percentage) || 0,
+                typeBreakdown: breakdown,
+                radiusMeters: Number(p.radius_meters) || 20,
+            };
+
+            hoveredBarangayRef.current = data;
+            setHoveredBarangay(data);
+        } else {
+            if (hoveredBarangayRef.current) {
+                hoveredBarangayRef.current = null;
+                setHoveredBarangay(null);
+            }
+        }
+    };
+
+    const onMapMouseLeave = () => {
+        if (hoveredBarangayRef.current) {
+            hoveredBarangayRef.current = null;
+            setHoveredBarangay(null);
+        }
+    };
+
+    const inspectProneArea = (inc: IncidentRecord) => {
+        // Collect all active system incidents (non-manual pins) inside this polygon area with matching emergency/hazard type
+        const ring = inc.polygon_coordinates || [];
+        const absorbed = ring.length >= 3
+            ? activeIncidents.filter(
+                (other) =>
+                    !other.is_manual_pin &&
+                    typeof other.latitude === 'number' &&
+                    typeof other.longitude === 'number' &&
+                    isPointInPolygon([other.longitude, other.latitude], ring) &&
+                    isHazardTypeMatch(inc.incident_type, other.incident_type)
+            )
+            : [];
+
+        // Collect older manual pins/polygons that are absorbed / superseded by this newer manual polygon
+        const supersededManualAreas = ring.length >= 3
+            ? activeIncidents.filter(
+                (other) =>
+                    other.is_manual_pin &&
+                    other.manual_pin_id !== inc.manual_pin_id &&
+                    absorbedManualPinIds.has(other.manual_pin_id || 0) &&
+                    typeof other.latitude === 'number' &&
+                    typeof other.longitude === 'number' &&
+                    isPointInPolygon([other.longitude, other.latitude], ring)
+            )
+            : [];
+
+        const spot: HotspotRecord = {
+            cluster_key: `poly_${inc.id}`,
+            latitude: inc.latitude || OPOL_CENTER.latitude,
+            longitude: inc.longitude || OPOL_CENTER.longitude,
+            location_name: inc.area_name || inc.address || inc.incident_type,
+            barangay: inc.barangay || 'Opol',
+            incident_type: inc.incident_type,
+            most_common_type: inc.incident_type,
+            incident_count: absorbed.length > 0 ? absorbed.length : 1,
+            intensity: (inc.risk_level as any) || 'Moderate',
+            intensity_class: (inc.risk_level?.toLowerCase() as any) || 'moderate',
+            color: getRiskColorHex(inc.risk_level),
+            incident_ids: [inc.id, ...absorbed.map((a) => a.id)],
+            incidents: [inc, ...absorbed],
+            superseded_manual_areas: supersededManualAreas,
+            recent_incidents: [
+                {
+                    id: inc.id,
+                    type: inc.incident_type,
+                    date: inc.formatted_date || '',
+                    status: inc.status,
+                },
+                ...absorbed.map((a) => ({
+                    id: a.id,
+                    type: a.incident_type,
+                    date: a.formatted_date || '',
+                    status: a.status,
+                })),
+            ],
+            meets_threshold: true,
+            badge_text: absorbed.length > 0 ? `${absorbed.length} Absorbed` : 'Prone Area',
+        };
+        focusHotspotOnMap(spot);
+    };
+
+    const onMapClick = (evt: any) => {
+        // 1. Check if user clicked on a saved incident-prone polygon area
+        const proneFeature = evt.features && evt.features.find((f: any) => f.layer?.id === 'saved-prone-polygons-fill');
+        if (proneFeature && proneFeature.properties) {
+            const id = Number(proneFeature.properties.id);
+            const matched = activeIncidents.find((i) => i.id === id);
+            if (matched) {
+                inspectProneArea(matched);
+                return;
+            }
+        }
+
+        if (!showRiskZones) return;
+        const feature = evt.features && evt.features.find((f: any) => f.layer?.id === 'clipped-risk-fill');
+        if (feature && feature.properties) {
+            const p = feature.properties;
+            let breakdown: Array<{ type: string; count: number; percentage: number; color: string }> = [];
+            try {
+                if (p.type_breakdown_json) {
+                    breakdown = JSON.parse(p.type_breakdown_json);
+                }
+            } catch {
+                breakdown = [];
+            }
+
+            const data = {
+                barangayName: p.barangay_name || 'Barangay Area',
+                locationName: p.location_name || '',
+                normName: p.cluster_key,
+                riskLevel: p.risk_level || 'LOW RISK',
+                riskColor: p.risk_color || '#43A047',
+                riskLabel: `${p.risk_level || 'Risk Area'} (${p.incident_count} records)`,
+                riskBadgeBg: 'bg-slate-700/60',
+                riskTextColor: 'text-white',
+                incidentCount: Number(p.incident_count) || 0,
+                dominantType: p.dominant_type || 'None',
+                dominantPercentage: Number(p.dominant_percentage) || 0,
+                typeBreakdown: breakdown,
+                radiusMeters: Number(p.radius_meters) || 20,
+            };
+
+            hoveredBarangayRef.current = data;
+            setHoveredBarangay(data);
+        }
     };
 
     // Top identified hotspot name
@@ -1203,26 +1898,25 @@ export default function AccidentHeatmapView({
                                 </div>
                             )}
 
-                            {/* Add Manual Heatmap Pin Button */}
+                            {/* Add Incident-Prone Area Button (Mode A: Pin / Mode B: Draw Polygon) */}
                             <button
                                 type="button"
                                 onClick={() => setIsManualModalOpen(true)}
                                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#F61509] hover:bg-rose-600 text-white text-xs font-bold shadow-md shadow-[#F61509]/25 transition-colors cursor-pointer"
-                                title="Manually add a hazard or incident pin on the heatmap"
+                                title="Add an incident-prone area: Pin Location or Draw Polygon Area"
                             >
                                 <Plus className="w-3.5 h-3.5" />
-                                <span>Add Manual Pin</span>
+                                <span>Add Prone Area</span>
                             </button>
 
                             {/* Full Screen Toggle */}
                             <button
                                 type="button"
                                 onClick={() => setIsFullScreen(!isFullScreen)}
-                                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold shadow-2xs transition-colors cursor-pointer ${
-                                    isFullScreen
-                                        ? 'bg-[#F61509] hover:bg-rose-600 border-rose-500 text-white shadow-md shadow-[#F61509]/25'
-                                        : 'bg-white dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200/80 dark:border-white/10 text-slate-700 dark:text-slate-200'
-                                }`}
+                                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold shadow-2xs transition-colors cursor-pointer ${isFullScreen
+                                    ? 'bg-[#F61509] hover:bg-rose-600 border-rose-500 text-white shadow-md shadow-[#F61509]/25'
+                                    : 'bg-white dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200/80 dark:border-white/10 text-slate-700 dark:text-slate-200'
+                                    }`}
                                 title={isFullScreen ? 'Exit Full Screen (Esc)' : 'Expand Full Screen'}
                             >
                                 {isFullScreen ? (
@@ -1259,11 +1953,10 @@ export default function AccidentHeatmapView({
                                         setSelectedPeriod(preset.id);
                                         applyFilters({ period: preset.id });
                                     }}
-                                    className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
-                                        selectedPeriod === preset.id
-                                            ? 'bg-[#F61509] text-white font-semibold shadow-sm shadow-[#F61509]/25'
-                                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                    }`}
+                                    className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${selectedPeriod === preset.id
+                                        ? 'bg-[#F61509] text-white font-semibold shadow-sm shadow-[#F61509]/25'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                        }`}
                                 >
                                     {preset.label}
                                 </button>
@@ -1367,12 +2060,24 @@ export default function AccidentHeatmapView({
                     <div className="flex items-center gap-1.5">
                         <button
                             type="button"
+                            onClick={() => setShowRiskZones(!showRiskZones)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${showRiskZones
+                                ? 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-200 dark:border-emerald-500/35 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-slate-50 dark:bg-slate-800/90 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                            title="Toggle color-coded geographical incident risk zones"
+                        >
+                            <Shield className="w-3.5 h-3.5" />
+                            <span>Risk Zones</span>
+                        </button>
+
+                        <button
+                            type="button"
                             onClick={() => setShowMarkers(!showMarkers)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
-                                showMarkers
-                                    ? 'bg-rose-50 dark:bg-rose-500/15 border-rose-200 dark:border-rose-500/35 text-rose-700 dark:text-rose-300'
-                                    : 'bg-slate-50 dark:bg-slate-800/90 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                            }`}
+                            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${showMarkers
+                                ? 'bg-rose-50 dark:bg-rose-500/15 border-rose-200 dark:border-rose-500/35 text-rose-700 dark:text-rose-300'
+                                : 'bg-slate-50 dark:bg-slate-800/90 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
                         >
                             <MapPin className="w-3.5 h-3.5" />
                             <span>Pins</span>
@@ -1381,11 +2086,10 @@ export default function AccidentHeatmapView({
                         <button
                             type="button"
                             onClick={() => setShowBarangayBoundaries(!showBarangayBoundaries)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
-                                showBarangayBoundaries
-                                    ? 'bg-indigo-50 dark:bg-indigo-500/15 border-indigo-200 dark:border-indigo-500/35 text-indigo-700 dark:text-indigo-300'
-                                    : 'bg-slate-50 dark:bg-slate-800/90 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                            }`}
+                            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${showBarangayBoundaries
+                                ? 'bg-indigo-50 dark:bg-indigo-500/15 border-indigo-200 dark:border-indigo-500/35 text-indigo-700 dark:text-indigo-300'
+                                : 'bg-slate-50 dark:bg-slate-800/90 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
                         >
                             <Compass className="w-3.5 h-3.5" />
                             <span>Boundaries</span>
@@ -1409,1343 +2113,1579 @@ export default function AccidentHeatmapView({
                             MAIN PANEL: INTERACTIVE INCIDENT HEATMAP
                         ========================================================================= */}
                         <div
-                            className={`${
-                                isInspectingPin
-                                    ? 'lg:col-span-6 xl:col-span-7'
-                                    : 'lg:col-span-8 xl:col-span-9'
-                            } flex flex-col bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-white/10 rounded-2xl overflow-hidden shadow-sm relative min-h-[580px] ${
-                                isFullScreen ? 'xl:h-[calc(100vh-180px)]' : 'xl:h-[calc(100vh-230px)]'
-                            } xl:min-h-[640px] transition-all duration-200`}
+                            className={`${isInspectingPin
+                                ? 'lg:col-span-6 xl:col-span-7'
+                                : 'lg:col-span-8 xl:col-span-9'
+                                } flex flex-col bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-white/10 rounded-2xl overflow-hidden shadow-sm relative min-h-[580px] ${isFullScreen ? 'xl:h-[calc(100vh-180px)]' : 'xl:h-[calc(100vh-230px)]'
+                                } xl:min-h-[640px] transition-all duration-200`}
                         >
-                        {/* Map Container */}
-                        <div ref={mapContainerRef} className="w-full h-full flex-1 relative bg-slate-950">
-                            {import.meta.env.VITE_MAPBOX_TOKEN ? (
-                                <Map
-                                    ref={mapRef}
-                                    style={{ width: '100%', height: '100%' }}
-                                    mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
-                                    {...viewState}
-                                    onMove={(evt) => setViewState(evt.viewState)}
-                                    onLoad={() => mapRef.current?.resize()}
-                                    mapStyle={
-                                        mapStyle === 'dark'
-                                            ? 'mapbox://styles/mapbox/dark-v11'
-                                            : 'mapbox://styles/mapbox/satellite-streets-v12'
-                                    }
-                                    attributionControl={false}
-                                >
-                                    {/* 1. Opol 14 Barangays Boundary Outline & Fill */}
-                                    {showBarangayBoundaries && barangayGeojson && (
-                                        <Source id="opol-barangays-boundary" type="geojson" data={barangayGeojson}>
-                                            <Layer
-                                                id="opol-boundary-fill"
-                                                type="fill"
-                                                paint={{
-                                                    'fill-color': '#64748b',
-                                                    'fill-opacity': 0.02,
-                                                }}
-                                            />
-                                            <Layer
-                                                id="opol-boundary-lines"
-                                                type="line"
-                                                paint={{
-                                                    'line-color': '#475569',
-                                                    'line-width': 1.2,
-                                                    'line-opacity': 0.4,
-                                                    'line-dasharray': [3, 2],
-                                                }}
-                                            />
-                                        </Source>
-                                    )}
-
-                                    {/* 2. 20-Meter Monochromatic Cluster Radial Glow + True 20m Geographic Perimeter Ring */}
-                                    {clustersGeojson && (
-                                        <Source id="clusters-zones-source" type="geojson" data={clustersGeojson}>
-                                            <Layer
-                                                id="clusters-radial-glow"
-                                                type="circle"
-                                                paint={{
-                                                    'circle-radius': [
-                                                        'interpolate',
-                                                        ['exponential', 2],
-                                                        ['zoom'],
-                                                        13, 8,
-                                                        15, 20,
-                                                        16, 38,
-                                                        17, 72,
-                                                        18, 140,
-                                                        19, 280,
-                                                    ],
-                                                    'circle-color': ['get', 'color'],
-                                                    'circle-opacity': 0.36,
-                                                    'circle-blur': 0.72,
-                                                }}
-                                            />
-                                        </Source>
-                                    )}
-                                    {clustersPerimeterGeojson && (
-                                        <Source id="clusters-20m-perimeter-source" type="geojson" data={clustersPerimeterGeojson}>
-                                            <Layer
-                                                id="clusters-20m-perimeter-fill"
-                                                type="fill"
-                                                minzoom={14.5}
-                                                paint={{
-                                                    'fill-color': ['get', 'color'],
-                                                    'fill-opacity': 0.12,
-                                                }}
-                                            />
-                                            <Layer
-                                                id="clusters-20m-perimeter-line"
-                                                type="line"
-                                                minzoom={14.5}
-                                                paint={{
-                                                    'line-color': ['get', 'color'],
-                                                    'line-width': 1.5,
-                                                    'line-opacity': 0.65,
-                                                    'line-dasharray': [3, 2],
-                                                }}
-                                            />
-                                        </Source>
-                                    )}
-
-                                    {/* 3. Floating Cluster Label Pills & Pulsing Red Beat */}
-                                    {activeHotspots.map((spot, idx) => {
-                                        const isSelected = selectedHotspot?.cluster_key === spot.cluster_key;
-                                        const risk = classifyClusterRisk(spot.incident_count, isSpecificEmergencyType);
-                                        const isRed = risk.isRed;
-                                        const clusterColor = risk.color;
-                                        const clusterLevel = risk.level;
-
-                                        return (
-                                            <Fragment key={`hotspot-group-${spot.cluster_key}-${idx}`}>
-                                                {/* Pulsing Red Radar Beat Ring at Center of High (4+) Clusters */}
-                                                {isRed && (
-                                                    <Marker
-                                                        longitude={spot.longitude}
-                                                        latitude={spot.latitude}
-                                                        anchor="center"
-                                                    >
-                                                        <div className="relative flex items-center justify-center pointer-events-none">
-                                                            <span className="w-16 h-16 rounded-full bg-red-500/40 animate-ping absolute" />
-                                                            <span className="w-4 h-4 rounded-full bg-red-500/60 animate-pulse absolute" />
-                                                        </div>
-                                                    </Marker>
-                                                )}
-
-                                                {/* Floating Cluster Label Pill (Above the combined pin, prominently displaying Barangay) */}
-                                                <Marker
-                                                    longitude={spot.longitude}
-                                                    latitude={spot.latitude}
-                                                    anchor="bottom"
-                                                    offset={[0, -44]}
-                                                    onClick={(e) => {
-                                                        e.originalEvent.stopPropagation();
-                                                        focusHotspotOnMap(spot);
+                            {/* Map Container */}
+                            <div ref={mapContainerRef} className="w-full h-full flex-1 relative bg-slate-950">
+                                {import.meta.env.VITE_MAPBOX_TOKEN ? (
+                                    <Map
+                                        ref={mapRef}
+                                        style={{ width: '100%', height: '100%' }}
+                                        mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+                                        {...viewState}
+                                        onMove={(evt) => setViewState(evt.viewState)}
+                                        onLoad={() => mapRef.current?.resize()}
+                                        mapStyle={
+                                            mapStyle === 'dark'
+                                                ? 'mapbox://styles/mapbox/dark-v11'
+                                                : 'mapbox://styles/mapbox/satellite-streets-v12'
+                                        }
+                                        attributionControl={false}
+                                        interactiveLayerIds={
+                                            showRiskZones
+                                                ? ['clipped-risk-fill', 'saved-prone-polygons-fill']
+                                                : ['saved-prone-polygons-fill']
+                                        }
+                                        onMouseMove={onMapMouseMove}
+                                        onMouseLeave={onMapMouseLeave}
+                                        onClick={onMapClick}
+                                        cursor={hoveredBarangay ? 'pointer' : 'default'}
+                                    >
+                                        {/* 1. Opol 14 Barangays Boundary Outline (Reference Lines Only - NO COLOR FILL) */}
+                                        {showBarangayBoundaries && barangayGeojson && (
+                                            <Source id="opol-barangays-boundary" type="geojson" data={barangayGeojson}>
+                                                <Layer
+                                                    id="opol-boundary-lines"
+                                                    type="line"
+                                                    paint={{
+                                                        'line-color': '#64748b',
+                                                        'line-width': 1.5,
+                                                        'line-opacity': 0.65,
+                                                        'line-dasharray': [3, 2],
                                                     }}
-                                                >
-                                                    <div
-                                                        className={`group cursor-pointer flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/95 hover:bg-slate-800 border shadow-2xl transition-all duration-200 hover:scale-105 select-none ${
-                                                            isSelected ? 'border-white ring-2 ring-white scale-105' : 'border-white/20'
-                                                        }`}
-                                                        title={`Click to inspect all ${spot.incident_count} incidents in this 20m cluster`}
-                                                    >
-                                                        <span
-                                                            className="w-2.5 h-2.5 rounded-full flex-shrink-0 animate-pulse"
-                                                            style={{ backgroundColor: clusterColor }}
-                                                        />
-                                                        <span className="text-xs font-bold text-slate-100 whitespace-nowrap">
-                                                            {getClusterBarangayLabel(spot)}
-                                                        </span>
-                                                        <span
-                                                            className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md whitespace-nowrap"
-                                                            style={{
-                                                                color: clusterColor,
-                                                                backgroundColor: `${clusterColor}25`,
-                                                            }}
-                                                        >
-                                                            {clusterLevel} ({spot.incident_count})
-                                                        </span>
-                                                    </div>
-                                                </Marker>
-                                            </Fragment>
-                                        );
-                                    })}
+                                                />
+                                            </Source>
+                                        )}
 
-                                    {/* 4. Combined Center Pins (1 Pin at Exact Centroid per Same-Type 20m Cluster) */}
-                                    {showMarkers &&
-                                        activeHotspots.map((spot, idx) => {
-                                            const clusterType = spot.incident_type || spot.most_common_type || 'Emergency';
-                                            const badge = getTypeBadgeColor(clusterType);
-                                            const isCombined = spot.incident_count > 1;
-                                            const singleIncident = spot.incidents && spot.incidents.length === 1 ? spot.incidents[0] : null;
-                                            const pinOffset = clusterPinOffsets[spot.cluster_key] || [0, 0];
+                                        {/* 1.5 Highlighted Filtered Barangay Boundary (Clean crisp border) */}
+                                        {highlightedBarangayGeojson && (
+                                            <Source id="opol-highlighted-barangay-boundary" type="geojson" data={highlightedBarangayGeojson}>
+                                                <Layer
+                                                    id="opol-highlighted-barangay-line"
+                                                    type="line"
+                                                    paint={{
+                                                        'line-color': '#06b6d4',
+                                                        'line-width': 2.5,
+                                                        'line-opacity': 0.95,
+                                                    }}
+                                                />
+                                            </Source>
+                                        )}
+
+                                        {/* 2. LOCALIZED INCIDENT RISK ZONES (STRICTLY CLIPPED TO BARANGAY BOUNDARY - NEVER CROSSES BORDER) */}
+                                        {showRiskZones && clippedRiskZonesGeojson && (
+                                            <Source id="clipped-risk-zones-source" type="geojson" data={clippedRiskZonesGeojson}>
+                                                <Layer
+                                                    id="clipped-risk-fill"
+                                                    type="fill"
+                                                    paint={{
+                                                        'fill-color': ['get', 'color'],
+                                                        'fill-opacity': mapStyle === 'satellite' ? 0.48 : 0.42,
+                                                        'fill-antialias': true,
+                                                    }}
+                                                />
+                                            </Source>
+                                        )}
+
+                                        {/* 2.5 SAVED INCIDENT-PRONE AREA POLYGONS (MODE B: USER-DRAWN ENCLOSED AREAS) */}
+                                        {savedPronePolygonsGeojson.features.length > 0 && (
+                                            <Source id="saved-prone-polygons-source" type="geojson" data={savedPronePolygonsGeojson}>
+                                                <Layer
+                                                    id="saved-prone-polygons-fill"
+                                                    type="fill"
+                                                    paint={{
+                                                        'fill-color': ['get', 'color'],
+                                                        'fill-opacity': mapStyle === 'satellite' ? 0.45 : 0.38,
+                                                        'fill-antialias': true,
+                                                    }}
+                                                />
+                                                <Layer
+                                                    id="saved-prone-polygons-stroke"
+                                                    type="line"
+                                                    paint={{
+                                                        'line-color': ['get', 'color'],
+                                                        'line-width': 2.2,
+                                                        'line-opacity': 0.9,
+                                                    }}
+                                                />
+                                            </Source>
+                                        )}
+
+                                        {/* 3. Pulsing Red Radar Beat Ring at Center of High (4+) Clusters */}
+                                        {activeHotspots.map((spot, idx) => {
+                                            const risk = classifyClusterRisk(spot.incident_count, isSpecificEmergencyType);
+                                            if (!risk.isRed || absorbedHotspotClusterKeys.has(spot.cluster_key)) return null;
 
                                             return (
                                                 <Marker
-                                                    key={`combined-pin-${spot.cluster_key}-${idx}`}
+                                                    key={`red-pulse-${spot.cluster_key}-${idx}`}
                                                     longitude={spot.longitude}
                                                     latitude={spot.latitude}
-                                                    anchor="bottom"
-                                                    offset={pinOffset}
-                                                    onClick={(e) => {
-                                                        e.originalEvent.stopPropagation();
-                                                        focusHotspotOnMap(spot);
-                                                    }}
+                                                    anchor="center"
                                                 >
-                                                    <div
-                                                        className="cursor-pointer group relative flex flex-col items-center"
-                                                        title={
-                                                            isCombined
-                                                                ? `${clusterType} • ${spot.incident_count} combined incidents within 20m (Brgy. ${spot.barangay})`
-                                                                : `#INC-${singleIncident?.id ?? ''}: ${clusterType} (${spot.location_name || spot.barangay})`
-                                                        }
-                                                    >
-                                                        {/* Teardrop Emergency Pin (Single or Combined Center Pin with Count) */}
-                                                        <div className="relative transition-transform duration-200 group-hover:scale-125 group-hover:-translate-y-1">
-                                                            <svg
-                                                                width={isCombined ? 30 : 24}
-                                                                height={isCombined ? 40 : 32}
-                                                                viewBox="0 0 24 32"
-                                                                fill="none"
-                                                                xmlns="http://www.w3.org/2000/svg"
-                                                                className="filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.65)]"
-                                                            >
-                                                                {/* Teardrop Pin Body pointing down to exact center coordinates */}
-                                                                <path
-                                                                    d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
-                                                                    fill={badge.hex}
-                                                                    stroke="#FFFFFF"
-                                                                    strokeWidth="2"
-                                                                    strokeLinejoin="round"
-                                                                />
-                                                                {isCombined ? (
-                                                                    <>
-                                                                        {/* Combined Cluster Center Circle with Incident Count */}
-                                                                        <circle cx="12" cy="11.5" r="7.2" fill="#0f172a" />
-                                                                        <text
-                                                                            x="12"
-                                                                            y="14.7"
-                                                                            textAnchor="middle"
-                                                                            fill="#FFFFFF"
-                                                                            fontSize={spot.incident_count >= 10 ? '8' : '9.5'}
-                                                                            fontWeight="800"
-                                                                            fontFamily="system-ui, -apple-system, sans-serif"
-                                                                        >
-                                                                            {spot.incident_count}
-                                                                        </text>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        {/* Single Incident Inner Target */}
-                                                                        <circle cx="12" cy="11.5" r="4.8" fill="#FFFFFF" />
-                                                                        <circle cx="12" cy="11.5" r="2.6" fill={badge.hex} />
-                                                                    </>
-                                                                )}
-                                                            </svg>
-                                                            {/* Ground shadow beneath the pin point */}
-                                                            <div className="w-2.5 h-1 rounded-full bg-black/60 blur-[1px] mx-auto -mt-0.5" />
-                                                        </div>
-
-                                                        {/* Floating Tooltip on Hover */}
-                                                        <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center pointer-events-none z-50">
-                                                            <div className="px-2.5 py-1.5 rounded-lg bg-slate-950/95 border border-white/20 shadow-2xl text-[11px] text-white whitespace-nowrap flex items-center gap-2">
-                                                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: badge.hex }} />
-                                                                <span className="font-bold">
-                                                                    {spot.unique_types && spot.unique_types.length > 1
-                                                                        ? `${clusterType} +${spot.unique_types.length - 1} more`
-                                                                        : clusterType}
-                                                                </span>
-                                                                {isCombined ? (
-                                                                    <span className="text-amber-300 font-bold text-[10px]">
-                                                                        {spot.incident_count} combined (20m)
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-slate-400 font-mono text-[10px]">
-                                                                        #INC-{singleIncident?.id}
-                                                                    </span>
-                                                                )}
-                                                                <span className="text-slate-400 text-[10px]">Brgy. {spot.barangay}</span>
-                                                            </div>
-                                                            <div className="w-2 h-2 bg-slate-950 rotate-45 -mt-1 border-r border-b border-white/20" />
-                                                        </div>
+                                                    <div className="relative flex items-center justify-center pointer-events-none">
+                                                        <span className="w-16 h-16 rounded-full bg-red-500/40 animate-ping absolute" />
+                                                        <span className="w-4 h-4 rounded-full bg-red-500/60 animate-pulse absolute" />
                                                     </div>
                                                 </Marker>
                                             );
                                         })}
 
-                                </Map>
-                            ) : (
-                                <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center bg-slate-950">
-                                    <AlertTriangle className="w-12 h-12 text-amber-500 mb-3" />
-                                    <h3 className="text-base font-bold text-white mb-1">Mapbox Token Not Configured</h3>
-                                    <p className="text-xs text-slate-400 max-w-sm">
-                                        Please ensure <code className="text-cyan-400 font-mono">VITE_MAPBOX_TOKEN</code> is set in your .env configuration.
-                                    </p>
-                                </div>
-                            )}
+                                        {/* 4. Combined Center Pins (1 Pin at Exact Centroid per Same-Type 20m Cluster) */}
+                                        {showMarkers &&
+                                            activeHotspots.map((spot, idx) => {
+                                                const clusterType = spot.incident_type || spot.most_common_type || 'Emergency';
+                                                const badge = getTypeBadgeColor(clusterType);
+                                                const isCombined = spot.incident_count > 1;
+                                                const singleIncident = spot.incidents && spot.incidents.length === 1 ? spot.incidents[0] : null;
+                                                const pinOffset = clusterPinOffsets[spot.cluster_key] || [0, 0];
+                                                const isAbsorbed = absorbedHotspotClusterKeys.has(spot.cluster_key);
 
-                            {/* ON-MAP FLOATING LEGEND (Bottom Left, like reference image) */}
-                            <div className="absolute bottom-3 left-3 bg-[#0b1329]/95 border border-white/15 backdrop-blur-md rounded-xl p-3 shadow-2xl max-w-[280px] z-10 text-xs">
-                                {/* Section 1: Cluster Risk Level (Glow) */}
-                                <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-white/10">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
-                                        <Flame className="w-3.5 h-3.5 text-amber-400" />
-                                        <span>20m Cluster Risk</span>
-                                    </span>
-                                    <span className="text-[9px] text-amber-400 font-mono font-bold">Radius: 20m</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-1 mb-2.5">
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="w-3 h-3 rounded-full bg-yellow-400 shadow-sm" />
-                                        <span className="text-[10px] text-yellow-300 font-bold">
-                                            {isSpecificEmergencyType ? 'Low (1–2)' : 'Low (1–4)'}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="w-3 h-3 rounded-full bg-orange-500 shadow-sm" />
-                                        <span className="text-[10px] text-orange-300 font-bold">
-                                            {isSpecificEmergencyType ? 'Moderate (3)' : 'Moderate (5–8)'}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="w-3 h-3 rounded-full bg-red-500 shadow-sm" />
-                                        <span className="text-[10px] text-red-300 font-bold">
-                                            {isSpecificEmergencyType ? 'High (4+)' : 'High (9+)'}
-                                        </span>
-                                    </div>
-                                </div>
+                                                return (
+                                                    <Marker
+                                                        key={`combined-pin-${spot.cluster_key}-${idx}`}
+                                                        longitude={spot.longitude}
+                                                        latitude={spot.latitude}
+                                                        anchor="bottom"
+                                                        offset={pinOffset}
+                                                        onClick={(e) => {
+                                                            e.originalEvent.stopPropagation();
+                                                            focusHotspotOnMap(spot);
+                                                        }}
+                                                    >
+                                                        <div
+                                                            className="cursor-pointer group relative flex flex-col items-center"
+                                                            title={
+                                                                isAbsorbed
+                                                                    ? `${clusterType} • ${spot.incident_count} incidents [Absorbed in Prone Area] (Brgy. ${spot.barangay})`
+                                                                    : isCombined
+                                                                        ? `${clusterType} • ${spot.incident_count} combined incidents within 20m (Brgy. ${spot.barangay})`
+                                                                        : `#INC-${singleIncident?.id ?? ''}: ${clusterType} (${spot.location_name || spot.barangay})`
+                                                            }
+                                                        >
+                                                            {/* Teardrop Emergency Pin (Single or Combined Center Pin with Count) */}
+                                                            <div className="relative transition-transform duration-200 group-hover:scale-125 group-hover:-translate-y-1">
+                                                                <svg
+                                                                    width={isCombined ? 30 : 24}
+                                                                    height={isCombined ? 40 : 32}
+                                                                    viewBox="0 0 24 32"
+                                                                    fill="none"
+                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                    className="filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.65)]"
+                                                                >
+                                                                    {/* Teardrop Pin Body pointing down to exact center coordinates */}
+                                                                    <path
+                                                                        d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
+                                                                        fill={badge.hex}
+                                                                        stroke="#FFFFFF"
+                                                                        strokeWidth="2"
+                                                                        strokeLinejoin="round"
+                                                                    />
+                                                                    {isCombined ? (
+                                                                        <>
+                                                                            {/* Combined Cluster Center Circle with Incident Count */}
+                                                                            <circle cx="12" cy="11.5" r="7.2" fill="#0f172a" />
+                                                                            <text
+                                                                                x="12"
+                                                                                y="14.7"
+                                                                                textAnchor="middle"
+                                                                                fill="#FFFFFF"
+                                                                                fontSize={spot.incident_count >= 10 ? '8' : '9.5'}
+                                                                                fontWeight="800"
+                                                                                fontFamily="system-ui, -apple-system, sans-serif"
+                                                                            >
+                                                                                {spot.incident_count}
+                                                                            </text>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            {/* Single Incident Inner Target */}
+                                                                            <circle cx="12" cy="11.5" r="4.8" fill="#FFFFFF" />
+                                                                            <circle cx="12" cy="11.5" r="2.6" fill={badge.hex} />
+                                                                        </>
+                                                                    )}
+                                                                </svg>
+                                                                {/* Ground shadow beneath the pin point */}
+                                                                <div className="w-2.5 h-1 rounded-full bg-black/60 blur-[1px] mx-auto -mt-0.5" />
+                                                            </div>
 
-                                {/* Section 2: Incident Pin Color Coding */}
-                                <div className="pt-2 border-t border-white/10">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
-                                        Incident Pins (Emergency Type)
-                                    </span>
-                                    <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10px]">
-                                        <div className="flex items-center gap-1.5">
-                                            <svg width="12" height="16" viewBox="0 0 24 32" fill="none" className="flex-shrink-0">
-                                                <path
-                                                    d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
-                                                    fill="#EF4444"
-                                                    stroke="#FFFFFF"
-                                                    strokeWidth="2"
-                                                />
-                                                <circle cx="12" cy="11.5" r="4" fill="#FFFFFF" />
-                                            </svg>
-                                            <span className="text-slate-200 truncate">Fire</span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <svg width="12" height="16" viewBox="0 0 24 32" fill="none" className="flex-shrink-0">
-                                                <path
-                                                    d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
-                                                    fill="#3B82F6"
-                                                    stroke="#FFFFFF"
-                                                    strokeWidth="2"
-                                                />
-                                                <circle cx="12" cy="11.5" r="4" fill="#FFFFFF" />
-                                            </svg>
-                                            <span className="text-slate-200 truncate">Medical</span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <svg width="12" height="16" viewBox="0 0 24 32" fill="none" className="flex-shrink-0">
-                                                <path
-                                                    d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
-                                                    fill="#F97316"
-                                                    stroke="#FFFFFF"
-                                                    strokeWidth="2"
-                                                />
-                                                <circle cx="12" cy="11.5" r="4" fill="#FFFFFF" />
-                                            </svg>
-                                            <span className="text-slate-200 truncate">Vehicular</span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <svg width="12" height="16" viewBox="0 0 24 32" fill="none" className="flex-shrink-0">
-                                                <path
-                                                    d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
-                                                    fill="#10B981"
-                                                    stroke="#FFFFFF"
-                                                    strokeWidth="2"
-                                                />
-                                                <circle cx="12" cy="11.5" r="4" fill="#FFFFFF" />
-                                            </svg>
-                                            <span className="text-slate-200 truncate">Rescue</span>
-                                        </div>
+                                                            {/* Floating Tooltip on Hover */}
+                                                            <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center pointer-events-none z-50">
+                                                                <div className="px-2.5 py-1.5 rounded-lg bg-slate-950/95 border border-white/20 shadow-2xl text-[11px] text-white whitespace-nowrap flex items-center gap-2">
+                                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: badge.hex }} />
+                                                                    <span className="font-bold">
+                                                                        {spot.unique_types && spot.unique_types.length > 1
+                                                                            ? `${clusterType} +${spot.unique_types.length - 1} more`
+                                                                            : clusterType}
+                                                                    </span>
+                                                                    {isCombined ? (
+                                                                        <span className="text-amber-300 font-bold text-[10px]">
+                                                                            {spot.incident_count} combined (20m)
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-400 font-mono text-[10px]">
+                                                                            #INC-{singleIncident?.id}
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="text-slate-400 text-[10px]">Brgy. {spot.barangay}</span>
+                                                                </div>
+                                                                <div className="w-2 h-2 bg-slate-950 rotate-45 -mt-1 border-r border-b border-white/20" />
+                                                            </div>
+                                                        </div>
+                                                    </Marker>
+                                                );
+                                            })}
+
+                                    </Map>
+                                ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center bg-slate-950">
+                                        <AlertTriangle className="w-12 h-12 text-amber-500 mb-3" />
+                                        <h3 className="text-base font-bold text-white mb-1">Mapbox Token Not Configured</h3>
+                                        <p className="text-xs text-slate-400 max-w-sm">
+                                            Please ensure <code className="text-cyan-400 font-mono">VITE_MAPBOX_TOKEN</code> is set in your .env configuration.
+                                        </p>
                                     </div>
-                                </div>
-                            </div>
+                                )}
 
-                            {/* ON-MAP CONTROLS (Top Right) */}
-                            <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-10">
-                                <button
-                                    type="button"
-                                    onClick={() => mapRef.current?.zoomIn()}
-                                    className="w-8 h-8 rounded-lg bg-[#0b1329]/90 hover:bg-slate-800 border border-white/15 text-slate-200 hover:text-white flex items-center justify-center font-bold text-sm shadow-md transition-colors"
-                                    title="Zoom In"
-                                >
-                                    +
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => mapRef.current?.zoomOut()}
-                                    className="w-8 h-8 rounded-lg bg-[#0b1329]/90 hover:bg-slate-800 border border-white/15 text-slate-200 hover:text-white flex items-center justify-center font-bold text-sm shadow-md transition-colors"
-                                    title="Zoom Out"
-                                >
-                                    −
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={resetMapView}
-                                    className="w-8 h-8 rounded-lg bg-[#0b1329]/90 hover:bg-slate-800 border border-white/15 text-cyan-300 hover:text-cyan-200 flex items-center justify-center shadow-md transition-colors"
-                                    title="Reset to Opol Extent"
-                                >
-                                    <Compass className="w-4 h-4" />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                                {/* INTERACTIVE HOVER / TAP STATISTICS HUD (Top Left, Responsive) */}
+                                {hoveredBarangay && (
+                                    <div
+                                        className="absolute top-3 left-3 z-20 max-w-[calc(100%-4.5rem)] sm:max-w-xs md:max-w-sm bg-[#0b1329]/95 backdrop-blur-md border border-white/20 rounded-2xl p-4 shadow-2xl transition-all duration-150 text-xs text-slate-200 pointer-events-auto"
+                                        style={{
+                                            borderLeftColor:
+                                                hoveredBarangay.riskColor !== 'transparent'
+                                                    ? hoveredBarangay.riskColor
+                                                    : undefined,
+                                            borderLeftWidth:
+                                                hoveredBarangay.riskColor !== 'transparent' ? '4px' : undefined,
+                                            boxShadow: `0 20px 35px -10px rgba(0,0,0,0.8), 0 0 25px -4px ${hoveredBarangay.riskColor !== 'transparent'
+                                                ? hoveredBarangay.riskColor
+                                                : 'rgba(255,255,255,0.1)'
+                                                }40`,
+                                        }}
+                                    >
+                                        {/* Header: Barangay Name + Close Button */}
+                                        <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-white/10">
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span
+                                                        className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
+                                                        style={{
+                                                            backgroundColor:
+                                                                hoveredBarangay.riskColor !== 'transparent'
+                                                                    ? hoveredBarangay.riskColor
+                                                                    : '#64748B',
+                                                        }}
+                                                    />
+                                                    <h4 className="font-bold text-sm text-white leading-tight truncate">
+                                                        {hoveredBarangay.barangayName}
+                                                    </h4>
+                                                </div>
+                                                <p className="text-[10px] text-cyan-400 font-medium mt-0.5 truncate">
+                                                    {hoveredBarangay.locationName || 'Localized Incident Area'} • Heatmap Risk Zone
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    hoveredBarangayRef.current = null;
+                                                    setHoveredBarangay(null);
+                                                }}
+                                                className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                                                title="Dismiss Statistics"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
 
-                    {/* =========================================================================
-                        RIGHT PANEL: EXPANDED INLINE INCIDENT INSPECTOR (ON PIN CLICK) OR COMPACT RANKED HOTSPOTS
-                    ========================================================================= */}
-                    <aside
-                        className={`${
-                            isInspectingPin
-                                ? 'lg:col-span-6 xl:col-span-5'
-                                : 'lg:col-span-4 xl:col-span-3'
-                        } flex flex-col bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-white/10 rounded-2xl overflow-hidden shadow-sm min-h-[580px] ${
-                            isFullScreen ? 'xl:h-[calc(100vh-180px)]' : 'xl:h-[calc(100vh-230px)]'
-                        } xl:min-h-[640px] transition-all duration-200`}
-                    >
-                        {activeSelectedHotspot && currentInspectedIncident ? (
-                            <>
-                                {/* INSPECTOR HEADER + CLOSE (X) */}
-                                <div className="p-3.5 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.03] shrink-0">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                                                <span
-                                                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                                                    style={{
-                                                        backgroundColor: getTypeBadgeColor(
-                                                            currentInspectedIncident.incident_type
-                                                        ).hex,
-                                                    }}
-                                                />
-                                                <span className="text-[11px] font-mono font-bold text-rose-600 dark:text-rose-400">
-                                                    {currentInspectedIncident.incident_number ||
-                                                        `#INC-${currentInspectedIncident.id}`}
+                                        {/* Risk Level Badge & Incident Count */}
+                                        <div className="grid grid-cols-2 gap-2 my-2.5">
+                                            <div className="p-2 rounded-xl bg-white/[0.04] border border-white/10 flex flex-col justify-center">
+                                                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">
+                                                    Risk Level
                                                 </span>
                                                 <span
-                                                    className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full border"
+                                                    className="font-bold text-[11px] mt-0.5 truncate"
                                                     style={{
-                                                        backgroundColor: `${activeSelectedHotspot.color}20`,
-                                                        borderColor: `${activeSelectedHotspot.color}55`,
-                                                        color: activeSelectedHotspot.color,
+                                                        color:
+                                                            hoveredBarangay.riskColor !== 'transparent'
+                                                                ? hoveredBarangay.riskColor
+                                                                : '#94A3B8',
                                                     }}
                                                 >
-                                                    {activeSelectedHotspot.badge_text ||
-                                                        `${inspectedIncidents.length} in 20m`}
+                                                    {hoveredBarangay.riskLevel}
                                                 </span>
                                             </div>
-                                            <h2 className="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate">
-                                                {currentInspectedIncident.incident_type}
-                                            </h2>
-                                            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                                                Brgy. {currentInspectedIncident.barangay || activeSelectedHotspot.barangay}
-                                            </p>
+                                            <div className="p-2 rounded-xl bg-white/[0.04] border border-white/10 flex flex-col justify-center">
+                                                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">
+                                                    Total Incidents
+                                                </span>
+                                                <div className="flex items-baseline gap-1 mt-0.5">
+                                                    <span className="font-extrabold text-base text-white">
+                                                        {hoveredBarangay.incidentCount}
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-400">
+                                                        in risk area
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        <button
-                                            type="button"
-                                            onClick={closeInspectorPanel}
-                                            className="p-1.5 rounded-lg bg-slate-200/70 dark:bg-slate-800 hover:bg-rose-500/15 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer shrink-0"
-                                            title="Close details & return to Ranked Hotspots (zooms out map)"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
+                                        {/* Dominant Incident Type Banner */}
+                                        {hoveredBarangay.incidentCount > 0 && (
+                                            <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/10 mb-2.5">
+                                                <div className="flex items-center justify-between text-[10px] mb-1">
+                                                    <span className="text-slate-400 font-medium">Dominant Type:</span>
+                                                    <span className="font-bold text-white truncate max-w-[160px]">
+                                                        {hoveredBarangay.dominantType}
+                                                    </span>
+                                                </div>
+                                                <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full transition-all duration-300"
+                                                        style={{
+                                                            width: `${hoveredBarangay.dominantPercentage}%`,
+                                                            backgroundColor:
+                                                                hoveredBarangay.typeBreakdown[0]?.color || '#3B82F6',
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div className="text-right text-[9px] text-slate-400 mt-1 font-mono font-bold">
+                                                    {hoveredBarangay.dominantPercentage}% of cluster records
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Emergency Type Distribution Breakdown */}
+                                        {hoveredBarangay.typeBreakdown.length > 0 ? (
+                                            <div className="space-y-1.5 pt-1 border-t border-white/10 max-h-36 overflow-y-auto pr-1">
+                                                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block mb-1">
+                                                    Incident Distribution
+                                                </span>
+                                                {hoveredBarangay.typeBreakdown.map((item, bIdx) => (
+                                                    <div key={`type-dist-${bIdx}`} className="space-y-0.5">
+                                                        <div className="flex items-center justify-between text-[10px]">
+                                                            <span className="text-slate-300 truncate max-w-[140px] flex items-center gap-1.5">
+                                                                <span
+                                                                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                                                                    style={{ backgroundColor: item.color }}
+                                                                />
+                                                                {item.type}
+                                                            </span>
+                                                            <span className="font-mono text-[10px] text-slate-300 shrink-0">
+                                                                <strong className="text-white">{item.count}</strong> ({item.percentage}%)
+                                                            </span>
+                                                        </div>
+                                                        <div className="w-full h-1 rounded-full bg-slate-800/80 overflow-hidden">
+                                                            <div
+                                                                className="h-full rounded-full"
+                                                                style={{
+                                                                    width: `${item.percentage}%`,
+                                                                    backgroundColor: item.color,
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-[11px] text-slate-400 italic text-center py-2">
+                                                No qualifying incidents in this risk area under current filters.
+                                            </p>
+                                        )}
+
+                                        {/* Footer Area Notice */}
+                                        <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[9px] text-slate-400">
+                                            <span>Incident Risk Zone</span>
+                                            <span className="text-slate-500 font-mono">20m Localized</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ON-MAP FLOATING LEGEND (Bottom Left) */}
+                                {showRiskZones && (
+                                    <div className="absolute bottom-3 left-3 bg-[#0b1329]/90 border border-white/10 backdrop-blur-md rounded-xl px-3.5 py-2.5 shadow-2xl z-10 w-[236px] select-none pointer-events-auto transition-all">
+                                        <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-white/10">
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                                                Risk Classification
+                                            </span>
+                                            <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">
+                                                Incidents
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-x-3.5 gap-y-1.5 text-[10px]">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="w-2 h-2 rounded-full bg-[#E53935] shadow-[0_0_6px_#E53935] shrink-0" />
+                                                    <span className="text-slate-200 font-medium">High</span>
+                                                </div>
+                                                <span className="text-red-400 font-mono font-bold text-[10px]">
+                                                    {isSpecificEmergencyType ? '4+' : '9+'}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="w-2 h-2 rounded-full bg-[#FB8C00] shadow-[0_0_6px_#FB8C00] shrink-0" />
+                                                    <span className="text-slate-200 font-medium">Mod-High</span>
+                                                </div>
+                                                <span className="text-orange-400 font-mono font-bold text-[10px]">
+                                                    {isSpecificEmergencyType ? '3' : '5–8'}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="w-2 h-2 rounded-full bg-[#FDD835] shadow-[0_0_6px_#FDD835] shrink-0" />
+                                                    <span className="text-slate-200 font-medium">Moderate</span>
+                                                </div>
+                                                <span className="text-yellow-300 font-mono font-bold text-[10px]">
+                                                    {isSpecificEmergencyType ? '2' : '3–4'}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="w-2 h-2 rounded-full bg-[#43A047] shadow-[0_0_6px_#43A047] shrink-0" />
+                                                    <span className="text-slate-200 font-medium">Low</span>
+                                                </div>
+                                                <span className="text-emerald-400 font-mono font-bold text-[10px]">
+                                                    {isSpecificEmergencyType ? '1' : '1–2'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/10 text-[9.5px] text-slate-400">
+                                            <span className="flex items-center gap-1.5">
+                                                <span className="w-1.5 h-1.5 rounded-full border border-slate-500/80 shrink-0" />
+                                                <span>No incidents</span>
+                                            </span>
+                                            <span className="text-slate-500 font-mono text-[9px]">No color</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ON-MAP CONTROLS (Top Right) */}
+                                <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-10">
+                                    <button
+                                        type="button"
+                                        onClick={() => mapRef.current?.zoomIn()}
+                                        className="w-8 h-8 rounded-lg bg-[#0b1329]/90 hover:bg-slate-800 border border-white/15 text-slate-200 hover:text-white flex items-center justify-center font-bold text-sm shadow-md transition-colors"
+                                        title="Zoom In"
+                                    >
+                                        +
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => mapRef.current?.zoomOut()}
+                                        className="w-8 h-8 rounded-lg bg-[#0b1329]/90 hover:bg-slate-800 border border-white/15 text-slate-200 hover:text-white flex items-center justify-center font-bold text-sm shadow-md transition-colors"
+                                        title="Zoom Out"
+                                    >
+                                        −
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={resetMapView}
+                                        className="w-8 h-8 rounded-lg bg-[#0b1329]/90 hover:bg-slate-800 border border-white/15 text-cyan-300 hover:text-cyan-200 flex items-center justify-center shadow-md transition-colors"
+                                        title="Reset to Opol Extent"
+                                    >
+                                        <Compass className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* =========================================================================
+                        RIGHT PANEL: EXPANDED INLINE INCIDENT INSPECTOR (ON PIN CLICK) OR COMPACT RANKED HOTSPOTS
+                    ========================================================================= */}
+                        <aside
+                            className={`${isInspectingPin
+                                ? 'lg:col-span-6 xl:col-span-5'
+                                : 'lg:col-span-4 xl:col-span-3'
+                                } flex flex-col bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-white/10 rounded-2xl overflow-hidden shadow-sm min-h-[580px] ${isFullScreen ? 'xl:h-[calc(100vh-180px)]' : 'xl:h-[calc(100vh-230px)]'
+                                } xl:min-h-[640px] transition-all duration-200`}
+                        >
+                            {activeSelectedHotspot && currentInspectedIncident ? (
+                                <>
+                                    {/* INSPECTOR HEADER + CLOSE (X) */}
+                                    <div className="p-3.5 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.03] shrink-0">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                                    <span
+                                                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                                                        style={{
+                                                            backgroundColor: getTypeBadgeColor(
+                                                                currentInspectedIncident.incident_type
+                                                            ).hex,
+                                                        }}
+                                                    />
+                                                    <span className="text-[11px] font-mono font-bold text-rose-600 dark:text-rose-400">
+                                                        {currentInspectedIncident.incident_number ||
+                                                            `#INC-${currentInspectedIncident.id}`}
+                                                    </span>
+                                                    <span
+                                                        className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full border"
+                                                        style={{
+                                                            backgroundColor: `${activeSelectedHotspot.color}20`,
+                                                            borderColor: `${activeSelectedHotspot.color}55`,
+                                                            color: activeSelectedHotspot.color,
+                                                        }}
+                                                    >
+                                                        {activeSelectedHotspot.badge_text ||
+                                                            `${inspectedIncidents.length} in 20m`}
+                                                    </span>
+                                                </div>
+                                                <h2 className="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate">
+                                                    {currentInspectedIncident.area_name || currentInspectedIncident.incident_type}
+                                                </h2>
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                                    Brgy. {currentInspectedIncident.barangay || activeSelectedHotspot.barangay}
+                                                </p>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={closeInspectorPanel}
+                                                className="p-1.5 rounded-lg bg-slate-200/70 dark:bg-slate-800 hover:bg-rose-500/15 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer shrink-0"
+                                                title="Close details & return to Ranked Hotspots (zooms out map)"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+
+                                        {/* MULTI-INCIDENT STEPPER (< Prev / Next >) — Newest First */}
+                                        {inspectedIncidents.length > 1 && (
+                                            <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-2">
+                                                <button
+                                                    type="button"
+                                                    disabled={safeIncidentIdx === 0}
+                                                    onClick={() => {
+                                                        setActiveIncidentIdx((prev) => Math.max(0, prev - 1));
+                                                        setCopiedCoord(false);
+                                                    }}
+                                                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:border-rose-500 hover:text-rose-600 dark:hover:text-rose-400 disabled:opacity-35 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                                    title="Previous (Newer Incident)"
+                                                >
+                                                    <ChevronLeft className="w-4 h-4" />
+                                                </button>
+
+                                                <div className="text-center leading-tight">
+                                                    <div className="text-[11px] font-bold text-slate-900 dark:text-white">
+                                                        {activeSelectedHotspot?.cluster_key.startsWith('poly_') ? (
+                                                            safeIncidentIdx === 0
+                                                                ? 'Prone Area Boundary'
+                                                                : `Absorbed Incident ${safeIncidentIdx} of ${inspectedIncidents.length - 1}`
+                                                        ) : (
+                                                            `Incident ${safeIncidentIdx + 1} of ${inspectedIncidents.length}`
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400">
+                                                        {activeSelectedHotspot?.cluster_key.startsWith('poly_') ? (
+                                                            safeIncidentIdx === 0
+                                                                ? `${inspectedIncidents.length - 1} system incident(s) absorbed`
+                                                                : (inspectedIncidents[safeIncidentIdx]?.formatted_date || 'System Incident')
+                                                        ) : safeIncidentIdx === 0 ? (
+                                                            'Latest incident'
+                                                        ) : safeIncidentIdx === inspectedIncidents.length - 1 ? (
+                                                            'Earliest incident'
+                                                        ) : (
+                                                            'Newest → Oldest'
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    disabled={safeIncidentIdx >= inspectedIncidents.length - 1}
+                                                    onClick={() => {
+                                                        setActiveIncidentIdx((prev) =>
+                                                            Math.min(inspectedIncidents.length - 1, prev + 1)
+                                                        );
+                                                        setCopiedCoord(false);
+                                                    }}
+                                                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:border-rose-500 hover:text-rose-600 dark:hover:text-rose-400 disabled:opacity-35 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                                    title="Next (Older Incident)"
+                                                >
+                                                    <ChevronRight className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {/* MULTI-INCIDENT STEPPER (< Prev / Next >) — Newest First */}
-                                    {inspectedIncidents.length > 1 && (
-                                        <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-2">
-                                            <button
-                                                type="button"
-                                                disabled={safeIncidentIdx === 0}
-                                                onClick={() => {
-                                                    setActiveIncidentIdx((prev) => Math.max(0, prev - 1));
-                                                    setCopiedCoord(false);
-                                                }}
-                                                className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:border-rose-500 hover:text-rose-600 dark:hover:text-rose-400 disabled:opacity-35 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                                                title="Previous (Newer Incident)"
-                                            >
-                                                <ChevronLeft className="w-4 h-4" />
-                                            </button>
+                                    {/* SCROLLABLE COMPLETE INCIDENT DETAILS BODY */}
+                                    <div ref={inspectorScrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
+                                        {/* Status, Priority, & Report Source Badges (Clean Manual Pin Badge when manual) */}
+                                        {currentInspectedIncident.is_manual_pin ? (
+                                            <div className="space-y-2">
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded border bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30">
+                                                        {currentInspectedIncident.geometry_type === 'POLYGON' ? (
+                                                            <>
+                                                                <Shapes className="w-2.5 h-2.5 text-cyan-400" />
+                                                                <span>Prone Area (Polygon)</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <MapPin className="w-2.5 h-2.5 text-rose-400" />
+                                                                <span>Prone Area (Pin)</span>
+                                                            </>
+                                                        )}
+                                                    </span>
+                                                    {currentInspectedIncident.risk_level && (
+                                                        <span
+                                                            className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded border font-mono"
+                                                            style={{
+                                                                backgroundColor: `${getRiskColorHex(currentInspectedIncident.risk_level)}20`,
+                                                                borderColor: `${getRiskColorHex(currentInspectedIncident.risk_level)}60`,
+                                                                color: getRiskColorHex(currentInspectedIncident.risk_level),
+                                                            }}
+                                                        >
+                                                            <span
+                                                                className="w-1.5 h-1.5 rounded-full"
+                                                                style={{ backgroundColor: getRiskColorHex(currentInspectedIncident.risk_level) }}
+                                                            />
+                                                            {currentInspectedIncident.risk_level} Risk
+                                                        </span>
+                                                    )}
+                                                    {currentInspectedIncident.caller_name && (
+                                                        <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded border bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10">
+                                                            Added by {currentInspectedIncident.caller_name}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {currentInspectedIncident.geometry_type === 'POLYGON' && inspectedIncidents.length > 1 && (
+                                                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+                                                        <span className="font-semibold flex items-center gap-1.5">
+                                                            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                                            <span>Absorbs <strong>{inspectedIncidents.length - 1}</strong> system incidents in this zone</span>
+                                                        </span>
+                                                        <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium font-mono">
+                                                            Use &gt; to view
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {currentInspectedIncident.geometry_type === 'POLYGON' &&
+                                                    activeSelectedHotspot.superseded_manual_areas &&
+                                                    activeSelectedHotspot.superseded_manual_areas.length > 0 && (
+                                                        <div className="p-2.5 rounded-xl bg-violet-500/10 border border-violet-500/30 text-[11px] text-violet-800 dark:text-violet-300 flex items-center justify-between gap-2">
+                                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                                <Shapes className="w-4 h-4 text-violet-500 shrink-0" />
+                                                                <span className="truncate">
+                                                                    Absorbs &amp; supersedes previous manual area{activeSelectedHotspot.superseded_manual_areas.length > 1 ? 's' : ''}:{' '}
+                                                                    <strong>
+                                                                        {activeSelectedHotspot.superseded_manual_areas
+                                                                            .map((s) => s.area_name || s.incident_number)
+                                                                            .join(', ')}
+                                                                    </strong>
+                                                                </span>
+                                                            </div>
+                                                            {activeSelectedHotspot.superseded_manual_areas.map((oldArea) => (
+                                                                <button
+                                                                    key={`del-old-${oldArea.id}`}
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setConfirmDeletePin(oldArea);
+                                                                    }}
+                                                                    className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-300 border border-rose-500/30 text-[10px] font-bold transition-colors cursor-pointer"
+                                                                    title={`Delete old superseded area ${oldArea.area_name || oldArea.incident_number}`}
+                                                                >
+                                                                    <Trash2 className="w-3 h-3" />
+                                                                    <span>Delete Old Area</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    <span
+                                                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${currentInspectedIncident.status === 'resolved'
+                                                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                                                            : currentInspectedIncident.status === 'verified'
+                                                                ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30'
+                                                                : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                                                            }`}
+                                                    >
+                                                        {currentInspectedIncident.status}
+                                                    </span>
 
-                                            <div className="text-center leading-tight">
-                                                <div className="text-[11px] font-bold text-slate-900 dark:text-white">
-                                                    Incident {safeIncidentIdx + 1} of {inspectedIncidents.length}
+                                                    <span
+                                                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${(currentInspectedIncident.priority || '').toLowerCase() === 'critical'
+                                                            ? 'bg-rose-500/15 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                                                            : (currentInspectedIncident.priority || '').toLowerCase() === 'high'
+                                                                ? 'bg-orange-500/15 border-orange-500/30 text-orange-700 dark:text-orange-300'
+                                                                : 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300'
+                                                            }`}
+                                                    >
+                                                        Priority: {currentInspectedIncident.priority || 'Moderate'}
+                                                    </span>
+
+                                                    {currentInspectedIncident.report_source === 'walk_in' ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                                                            <UserCheck className="w-2.5 h-2.5" />
+                                                            Walk-In
+                                                        </span>
+                                                    ) : currentInspectedIncident.report_source === 'phone_sim' ||
+                                                        currentInspectedIncident.report_source === 'dispatcher' ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/30">
+                                                            <PhoneCall className="w-2.5 h-2.5" />
+                                                            Phone / SIM
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                                                            <Smartphone className="w-2.5 h-2.5" />
+                                                            Resident App
+                                                        </span>
+                                                    )}
                                                 </div>
-                                                <div className="text-[9px] font-semibold text-slate-500 dark:text-slate-400">
-                                                    {safeIncidentIdx === 0
-                                                        ? 'Latest incident'
-                                                        : safeIncidentIdx === inspectedIncidents.length - 1
-                                                        ? 'Earliest incident'
-                                                        : 'Newest → Oldest'}
-                                                </div>
+                                                {activeSelectedHotspot && absorbedHotspotClusterKeys.has(activeSelectedHotspot.cluster_key) && (
+                                                    <div className="p-2.5 rounded-xl bg-violet-500/10 border border-violet-500/30 text-[11px] text-violet-800 dark:text-violet-300 flex items-center justify-between gap-2">
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            <Shapes className="w-4 h-4 text-violet-500 shrink-0" />
+                                                            <span className="truncate">
+                                                                Absorbed in <strong>{parentManualPolygon?.area_name || 'Manual Prone Area'}</strong>
+                                                            </span>
+                                                        </div>
+                                                        {parentManualPolygon && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setConfirmDeletePin(parentManualPolygon)}
+                                                                className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-300 border border-rose-500/30 text-[10px] font-bold transition-colors cursor-pointer"
+                                                                title="Delete only this manual polygon area (incidents will NOT be deleted)"
+                                                            >
+                                                                <Trash2 className="w-3 h-3" />
+                                                                <span>Delete Area</span>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* 1. Incident Photo Evidence — Resident & Responder Photos (Click to Enlarge with < > Arrows) */}
+                                        <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-2">
+                                            <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                                                    <Camera className="w-3.5 h-3.5" />
+                                                    Incident Photos ({currentInspectedIncident.images?.length || 0})
+                                                </span>
+                                                {currentInspectedIncident.images && currentInspectedIncident.images.length > 0 && (
+                                                    <div className="flex items-center gap-1">
+                                                        {currentInspectedIncident.images.some((i) => i.source_role !== 'responder') && (
+                                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                                                                Resident:{' '}
+                                                                {
+                                                                    currentInspectedIncident.images.filter(
+                                                                        (i) => i.source_role !== 'responder'
+                                                                    ).length
+                                                                }
+                                                            </span>
+                                                        )}
+                                                        {currentInspectedIncident.images.some((i) => i.source_role === 'responder') && (
+                                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/25">
+                                                                Responder:{' '}
+                                                                {
+                                                                    currentInspectedIncident.images.filter(
+                                                                        (i) => i.source_role === 'responder'
+                                                                    ).length
+                                                                }
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
 
-                                            <button
-                                                type="button"
-                                                disabled={safeIncidentIdx >= inspectedIncidents.length - 1}
-                                                onClick={() => {
-                                                    setActiveIncidentIdx((prev) =>
-                                                        Math.min(inspectedIncidents.length - 1, prev + 1)
-                                                    );
-                                                    setCopiedCoord(false);
-                                                }}
-                                                className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:border-rose-500 hover:text-rose-600 dark:hover:text-rose-400 disabled:opacity-35 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                                                title="Next (Older Incident)"
-                                            >
-                                                <ChevronRight className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* SCROLLABLE COMPLETE INCIDENT DETAILS BODY */}
-                                <div ref={inspectorScrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
-                                    {/* Status, Priority, & Report Source Badges (Clean Manual Pin Badge when manual) */}
-                                    {currentInspectedIncident.is_manual_pin ? (
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded border bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30">
-                                                <MapPin className="w-2.5 h-2.5" />
-                                                Manual Heatmap Pin
-                                            </span>
-                                            {currentInspectedIncident.caller_name && (
-                                                <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded border bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10">
-                                                    Added by {currentInspectedIncident.caller_name}
-                                                </span>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                            <span
-                                                className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${
-                                                    currentInspectedIncident.status === 'resolved'
-                                                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                                                        : currentInspectedIncident.status === 'verified'
-                                                        ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30'
-                                                        : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
-                                                }`}
-                                            >
-                                                {currentInspectedIncident.status}
-                                            </span>
-
-                                            <span
-                                                className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${
-                                                    (currentInspectedIncident.priority || '').toLowerCase() === 'critical'
-                                                        ? 'bg-rose-500/15 border-rose-500/30 text-rose-700 dark:text-rose-300'
-                                                        : (currentInspectedIncident.priority || '').toLowerCase() === 'high'
-                                                        ? 'bg-orange-500/15 border-orange-500/30 text-orange-700 dark:text-orange-300'
-                                                        : 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300'
-                                                }`}
-                                            >
-                                                Priority: {currentInspectedIncident.priority || 'Moderate'}
-                                            </span>
-
-                                            {currentInspectedIncident.report_source === 'walk_in' ? (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                                                    <UserCheck className="w-2.5 h-2.5" />
-                                                    Walk-In
-                                                </span>
-                                            ) : currentInspectedIncident.report_source === 'phone_sim' ||
-                                              currentInspectedIncident.report_source === 'dispatcher' ? (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/30">
-                                                    <PhoneCall className="w-2.5 h-2.5" />
-                                                    Phone / SIM
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                                                    <Smartphone className="w-2.5 h-2.5" />
-                                                    Resident App
-                                                </span>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* 1. Incident Photo Evidence — Resident & Responder Photos (Click to Enlarge with < > Arrows) */}
-                                    <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-2">
-                                        <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
-                                                <Camera className="w-3.5 h-3.5" />
-                                                Incident Photos ({currentInspectedIncident.images?.length || 0})
-                                            </span>
-                                            {currentInspectedIncident.images && currentInspectedIncident.images.length > 0 && (
-                                                <div className="flex items-center gap-1">
-                                                    {currentInspectedIncident.images.some((i) => i.source_role !== 'responder') && (
-                                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
-                                                            Resident:{' '}
-                                                            {
-                                                                currentInspectedIncident.images.filter(
-                                                                    (i) => i.source_role !== 'responder'
-                                                                ).length
-                                                            }
-                                                        </span>
-                                                    )}
-                                                    {currentInspectedIncident.images.some((i) => i.source_role === 'responder') && (
-                                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/25">
-                                                            Responder:{' '}
-                                                            {
-                                                                currentInspectedIncident.images.filter(
-                                                                    (i) => i.source_role === 'responder'
-                                                                ).length
-                                                            }
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {currentInspectedIncident.images && currentInspectedIncident.images.length > 0 ? (
-                                            <div
-                                                className={`grid gap-2 ${
-                                                    currentInspectedIncident.images.length === 1
+                                            {currentInspectedIncident.images && currentInspectedIncident.images.length > 0 ? (
+                                                <div
+                                                    className={`grid gap-2 ${currentInspectedIncident.images.length === 1
                                                         ? 'grid-cols-1'
                                                         : 'grid-cols-2'
-                                                }`}
-                                            >
-                                                {currentInspectedIncident.images.map((img, imgIdx) => {
-                                                    const isResponderPhoto = img.source_role === 'responder';
-                                                    const isBw = isPhotoGrayscale(img);
-                                                    return (
-                                                        <div
-                                                            role="button"
-                                                            tabIndex={0}
-                                                            key={`panel-img-${img.id || imgIdx}`}
-                                                            onClick={() =>
-                                                                setLightboxState({
-                                                                    images: currentInspectedIncident.images || [],
-                                                                    index: imgIdx,
-                                                                })
-                                                            }
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                                    e.preventDefault();
+                                                        }`}
+                                                >
+                                                    {currentInspectedIncident.images.map((img, imgIdx) => {
+                                                        const isResponderPhoto = img.source_role === 'responder';
+                                                        const isBw = isPhotoGrayscale(img);
+                                                        return (
+                                                            <div
+                                                                role="button"
+                                                                tabIndex={0}
+                                                                key={`panel-img-${img.id || imgIdx}`}
+                                                                onClick={() =>
                                                                     setLightboxState({
                                                                         images: currentInspectedIncident.images || [],
                                                                         index: imgIdx,
-                                                                    });
+                                                                    })
                                                                 }
-                                                            }}
-                                                            className="group relative rounded-lg overflow-hidden border border-slate-200 dark:border-white/10 aspect-video bg-slate-950 cursor-pointer block w-full text-left"
-                                                        >
-                                                            <img
-                                                                src={img.url}
-                                                                alt={`${img.source_label || 'Incident Photo'} ${imgIdx + 1}`}
-                                                                className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-200 ${
-                                                                    isBw ? 'grayscale' : ''
-                                                                }`}
-                                                            />
-                                                            {/* Resident / Responder Photo Badge */}
-                                                            <span
-                                                                className={`absolute top-1.5 left-1.5 z-10 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide shadow-md backdrop-blur-sm ${
-                                                                    isResponderPhoto
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                                        e.preventDefault();
+                                                                        setLightboxState({
+                                                                            images: currentInspectedIncident.images || [],
+                                                                            index: imgIdx,
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                className="group relative rounded-lg overflow-hidden border border-slate-200 dark:border-white/10 aspect-video bg-slate-950 cursor-pointer block w-full text-left"
+                                                            >
+                                                                <img
+                                                                    src={img.url}
+                                                                    alt={`${img.source_label || 'Incident Photo'} ${imgIdx + 1}`}
+                                                                    className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-200 ${isBw ? 'grayscale' : ''
+                                                                        }`}
+                                                                />
+                                                                {/* Resident / Responder Photo Badge */}
+                                                                <span
+                                                                    className={`absolute top-1.5 left-1.5 z-10 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide shadow-md backdrop-blur-sm ${isResponderPhoto
                                                                         ? 'bg-sky-600/90 text-white'
                                                                         : 'bg-emerald-600/90 text-white'
-                                                                }`}
-                                                            >
-                                                                {isResponderPhoto ? 'Responder' : 'Resident'}
-                                                            </span>
-
-                                                            {/* Per-Photo Black & White / Color Toggle Button */}
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    togglePhotoGrayscale(img);
-                                                                }}
-                                                                className={`absolute top-1.5 right-1.5 z-20 px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide shadow-md backdrop-blur-sm border transition-colors cursor-pointer ${
-                                                                    isBw
-                                                                        ? 'bg-white text-slate-900 border-white hover:bg-slate-200'
-                                                                        : 'bg-slate-950/80 text-slate-100 border-white/25 hover:bg-slate-900'
-                                                                }`}
-                                                                title={
-                                                                    isBw
-                                                                        ? 'Switch this photo back to Color'
-                                                                        : 'Switch this photo to Black & White (for sensitive/graphic content)'
-                                                                }
-                                                            >
-                                                                {isBw ? 'Color' : 'B&W'}
-                                                            </button>
-
-                                                            <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                                                                <span className="text-[10px] font-bold text-white bg-black/70 px-2 py-1 rounded-md flex items-center gap-1">
-                                                                    <Maximize2 className="w-3 h-3" />
-                                                                    Enlarge
+                                                                        }`}
+                                                                >
+                                                                    {isResponderPhoto ? 'Responder' : 'Resident'}
                                                                 </span>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        ) : (
-                                            <p className="text-[11px] italic text-slate-500 dark:text-slate-400 py-1">
-                                                No photo evidence uploaded for this incident.
-                                            </p>
-                                        )}
-                                    </div>
 
-                                    {/* 2. Location & GPS */}
-                                    <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-1.5">
-                                        <div className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
-                                            <MapPin className="w-3.5 h-3.5" />
-                                            Location &amp; GPS
-                                        </div>
-                                        <p className="text-[11px] font-semibold text-slate-900 dark:text-white leading-snug">
-                                            {currentInspectedIncident.address || 'Opol, Misamis Oriental'}
-                                        </p>
-                                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/70 dark:border-white/5">
-                                            <span className="font-mono text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">
-                                                {currentInspectedIncident.latitude && currentInspectedIncident.longitude
-                                                    ? `${currentInspectedIncident.latitude.toFixed(6)}, ${currentInspectedIncident.longitude.toFixed(6)}`
-                                                    : 'No GPS'}
-                                            </span>
-                                            {currentInspectedIncident.latitude && currentInspectedIncident.longitude && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(
-                                                            `${currentInspectedIncident.latitude}, ${currentInspectedIncident.longitude}`
-                                                        );
-                                                        setCopiedCoord(true);
-                                                        setTimeout(() => setCopiedCoord(false), 2000);
-                                                    }}
-                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10 text-[10px] font-semibold text-slate-600 dark:text-slate-300 cursor-pointer"
-                                                >
-                                                    {copiedCoord ? (
-                                                        <>
-                                                            <Check className="w-3 h-3 text-emerald-500" />
-                                                            <span className="text-emerald-600 dark:text-emerald-400">Copied</span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Copy className="w-3 h-3" />
-                                                            <span>Copy</span>
-                                                        </>
-                                                    )}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* 3. Description / Chief Complaint */}
-                                    {(currentInspectedIncident.description || currentInspectedIncident.chief_complaint) && (
-                                        <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-1">
-                                            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                                                <FileText className="w-3.5 h-3.5" />
-                                                Chief Complaint / Description
-                                            </div>
-                                            <p className="text-[11px] text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
-                                                {currentInspectedIncident.description || currentInspectedIncident.chief_complaint}
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    {/* 4. Responders & Emergency Units Dispatched */}
-                                    <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-2">
-                                        <div className="text-[10px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
-                                            <Truck className="w-3.5 h-3.5" />
-                                            Responders &amp; Units ({currentInspectedIncident.dispatches?.length || 0})
-                                        </div>
-
-                                        {currentInspectedIncident.dispatches &&
-                                        currentInspectedIncident.dispatches.length > 0 ? (
-                                            <div className="space-y-2">
-                                                {currentInspectedIncident.dispatches.map((disp, dIdx) => (
-                                                    <div
-                                                        key={`panel-disp-${disp.id}-${dIdx}`}
-                                                        className="p-2 rounded-lg bg-white dark:bg-slate-950/60 border border-slate-200/70 dark:border-white/5 space-y-1 text-[11px]"
-                                                    >
-                                                        <div className="flex items-center justify-between gap-1.5">
-                                                            <span className="font-bold text-slate-900 dark:text-white truncate">
-                                                                {disp.ambulance_unit}
-                                                            </span>
-                                                            <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/25 shrink-0">
-                                                                {disp.status}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-slate-600 dark:text-slate-300">
-                                                            <span className="text-slate-400">Driver:</span>{' '}
-                                                            <strong className="text-slate-900 dark:text-slate-100">
-                                                                {disp.driver_name}
-                                                            </strong>
-                                                        </div>
-                                                        {disp.crew_members && disp.crew_members.length > 0 && (
-                                                            <div className="text-slate-600 dark:text-slate-300">
-                                                                <span className="text-slate-400">Responders / Crew:</span>{' '}
-                                                                <strong className="text-slate-900 dark:text-slate-100">
-                                                                    {disp.crew_members.join(', ')}
-                                                                </strong>
-                                                            </div>
-                                                        )}
-                                                        {(disp.dispatched_at || disp.arrived_at || disp.completed_at) && (
-                                                            <div className="pt-1 border-t border-slate-200/60 dark:border-white/5 text-[10px] text-slate-500 dark:text-slate-400 space-y-0.5">
-                                                                {disp.dispatched_at && (
-                                                                    <div>Dispatched: {disp.dispatched_at}</div>
-                                                                )}
-                                                                {disp.arrived_at && <div>Arrived: {disp.arrived_at}</div>}
-                                                                {disp.completed_at && (
-                                                                    <div>Completed: {disp.completed_at}</div>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <p className="text-[11px] italic text-slate-500 dark:text-slate-400">
-                                                No responder unit dispatched for this incident.
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    {/* 5. Caller / Reporter */}
-                                    <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-1">
-                                        <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-                                            <User className="w-3.5 h-3.5" />
-                                            Caller / Reporter
-                                        </div>
-                                        <div className="flex items-center justify-between gap-2 text-[11px]">
-                                            <span className="font-semibold text-slate-900 dark:text-white truncate">
-                                                {currentInspectedIncident.caller_name || 'Anonymous / Walk-In'}
-                                            </span>
-                                            <span className="font-mono text-[10px] text-slate-600 dark:text-slate-300 shrink-0">
-                                                {currentInspectedIncident.caller_phone || 'None'}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* 6. Patients Catered / PCR */}
-                                    <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-2">
-                                        <div className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
-                                            <HeartPulse className="w-3.5 h-3.5" />
-                                            Patients Catered ({currentInspectedIncident.patients?.length || 0})
-                                        </div>
-
-                                        {currentInspectedIncident.patients &&
-                                        currentInspectedIncident.patients.length > 0 ? (
-                                            <div className="space-y-2">
-                                                {currentInspectedIncident.patients.map((pat, pIdx) => (
-                                                    <div
-                                                        key={`panel-pat-${pat.id || pIdx}`}
-                                                        className="p-2 rounded-lg bg-white dark:bg-slate-950/60 border border-slate-200/70 dark:border-white/5 space-y-1 text-[11px]"
-                                                    >
-                                                        <div className="flex items-center justify-between gap-1.5">
-                                                            <span className="font-bold text-slate-900 dark:text-white truncate">
-                                                                {pIdx + 1}. {pat.name}
-                                                            </span>
-                                                            {pat.disposition && (
-                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 shrink-0">
-                                                                    {pat.disposition}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                                            {pat.gender || 'Unspecified'}
-                                                            {pat.age ? ` • ${pat.age} yrs old` : ''}
-                                                            {pat.destination_hospital
-                                                                ? ` • ${pat.destination_hospital}`
-                                                                : ''}
-                                                        </div>
-                                                        {pat.chief_complaint && (
-                                                            <p className="text-[10px] text-slate-700 dark:text-slate-300">
-                                                                {pat.chief_complaint}
-                                                            </p>
-                                                        )}
-                                                        <div className="pt-1 flex items-center gap-1.5 flex-wrap">
-                                                            {pat.pcr_record ? (
+                                                                {/* Per-Photo Black & White / Color Toggle Button */}
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => printPatientCareRecord(pat.pcr_record)}
-                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#F61509] hover:bg-rose-600 text-white text-[10px] font-semibold transition-colors cursor-pointer shadow-xs"
-                                                                    title="Open full Patient Care Record Print Preview (stays on Heatmap)"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        togglePhotoGrayscale(img);
+                                                                    }}
+                                                                    className={`absolute top-1.5 right-1.5 z-20 px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide shadow-md backdrop-blur-sm border transition-colors cursor-pointer ${isBw
+                                                                        ? 'bg-white text-slate-900 border-white hover:bg-slate-200'
+                                                                        : 'bg-slate-950/80 text-slate-100 border-white/25 hover:bg-slate-900'
+                                                                        }`}
+                                                                    title={
+                                                                        isBw
+                                                                            ? 'Switch this photo back to Color'
+                                                                            : 'Switch this photo to Black & White (for sensitive/graphic content)'
+                                                                    }
                                                                 >
-                                                                    <Eye className="w-3 h-3" />
-                                                                    View PCR
+                                                                    {isBw ? 'Color' : 'B&W'}
                                                                 </button>
-                                                            ) : null}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <p className="text-[11px] italic text-slate-500 dark:text-slate-400">
-                                                No patients recorded for this incident.
-                                            </p>
-                                        )}
-                                    </div>
 
-                                    {/* 7. Incident Timeline */}
-                                    <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-1.5">
-                                        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                                            <Clock className="w-3.5 h-3.5" />
-                                            Timeline
+                                                                <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                                                    <span className="text-[10px] font-bold text-white bg-black/70 px-2 py-1 rounded-md flex items-center gap-1">
+                                                                        <Maximize2 className="w-3 h-3" />
+                                                                        Enlarge
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <p className="text-[11px] italic text-slate-500 dark:text-slate-400 py-1">
+                                                    No photo evidence uploaded for this incident.
+                                                </p>
+                                            )}
                                         </div>
-                                        <div className="space-y-1 text-[10px]">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="text-slate-500 dark:text-slate-400">Reported:</span>
-                                                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                                    {currentInspectedIncident.reported_at ||
-                                                        currentInspectedIncident.formatted_date ||
-                                                        'N/A'}
+
+                                        {/* 2. Location & GPS */}
+                                        <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-1.5">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                                                <MapPin className="w-3.5 h-3.5" />
+                                                Location &amp; GPS
+                                            </div>
+                                            <p className="text-[11px] font-semibold text-slate-900 dark:text-white leading-snug">
+                                                {currentInspectedIncident.address || 'Opol, Misamis Oriental'}
+                                            </p>
+                                            <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/70 dark:border-white/5">
+                                                <span className="font-mono text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                                                    {currentInspectedIncident.latitude && currentInspectedIncident.longitude
+                                                        ? `${currentInspectedIncident.latitude.toFixed(6)}, ${currentInspectedIncident.longitude.toFixed(6)}`
+                                                        : 'No GPS'}
+                                                </span>
+                                                {currentInspectedIncident.latitude && currentInspectedIncident.longitude && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(
+                                                                `${currentInspectedIncident.latitude}, ${currentInspectedIncident.longitude}`
+                                                            );
+                                                            setCopiedCoord(true);
+                                                            setTimeout(() => setCopiedCoord(false), 2000);
+                                                        }}
+                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10 text-[10px] font-semibold text-slate-600 dark:text-slate-300 cursor-pointer"
+                                                    >
+                                                        {copiedCoord ? (
+                                                            <>
+                                                                <Check className="w-3 h-3 text-emerald-500" />
+                                                                <span className="text-emerald-600 dark:text-emerald-400">Copied</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Copy className="w-3 h-3" />
+                                                                <span>Copy</span>
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* 3. Description / Chief Complaint */}
+                                        {(currentInspectedIncident.description || currentInspectedIncident.chief_complaint) && (
+                                            <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-1">
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                                                    <FileText className="w-3.5 h-3.5" />
+                                                    Chief Complaint / Description
+                                                </div>
+                                                <p className="text-[11px] text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
+                                                    {currentInspectedIncident.description || currentInspectedIncident.chief_complaint}
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* 4. Responders & Emergency Units Dispatched */}
+                                        <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-2">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
+                                                <Truck className="w-3.5 h-3.5" />
+                                                Responders &amp; Units ({currentInspectedIncident.dispatches?.length || 0})
+                                            </div>
+
+                                            {currentInspectedIncident.dispatches &&
+                                                currentInspectedIncident.dispatches.length > 0 ? (
+                                                <div className="space-y-2">
+                                                    {currentInspectedIncident.dispatches.map((disp, dIdx) => (
+                                                        <div
+                                                            key={`panel-disp-${disp.id}-${dIdx}`}
+                                                            className="p-2 rounded-lg bg-white dark:bg-slate-950/60 border border-slate-200/70 dark:border-white/5 space-y-1 text-[11px]"
+                                                        >
+                                                            <div className="flex items-center justify-between gap-1.5">
+                                                                <span className="font-bold text-slate-900 dark:text-white truncate">
+                                                                    {disp.ambulance_unit}
+                                                                </span>
+                                                                <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/25 shrink-0">
+                                                                    {disp.status}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-slate-600 dark:text-slate-300">
+                                                                <span className="text-slate-400">Driver:</span>{' '}
+                                                                <strong className="text-slate-900 dark:text-slate-100">
+                                                                    {disp.driver_name}
+                                                                </strong>
+                                                            </div>
+                                                            {disp.crew_members && disp.crew_members.length > 0 && (
+                                                                <div className="text-slate-600 dark:text-slate-300">
+                                                                    <span className="text-slate-400">Responders / Crew:</span>{' '}
+                                                                    <strong className="text-slate-900 dark:text-slate-100">
+                                                                        {disp.crew_members.join(', ')}
+                                                                    </strong>
+                                                                </div>
+                                                            )}
+                                                            {(disp.dispatched_at || disp.arrived_at || disp.completed_at) && (
+                                                                <div className="pt-1 border-t border-slate-200/60 dark:border-white/5 text-[10px] text-slate-500 dark:text-slate-400 space-y-0.5">
+                                                                    {disp.dispatched_at && (
+                                                                        <div>Dispatched: {disp.dispatched_at}</div>
+                                                                    )}
+                                                                    {disp.arrived_at && <div>Arrived: {disp.arrived_at}</div>}
+                                                                    {disp.completed_at && (
+                                                                        <div>Completed: {disp.completed_at}</div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-[11px] italic text-slate-500 dark:text-slate-400">
+                                                    No responder unit dispatched for this incident.
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {/* 5. Caller / Reporter */}
+                                        <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-1">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                                                <User className="w-3.5 h-3.5" />
+                                                Caller / Reporter
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2 text-[11px]">
+                                                <span className="font-semibold text-slate-900 dark:text-white truncate">
+                                                    {currentInspectedIncident.caller_name || 'Anonymous / Walk-In'}
+                                                </span>
+                                                <span className="font-mono text-[10px] text-slate-600 dark:text-slate-300 shrink-0">
+                                                    {currentInspectedIncident.caller_phone || 'None'}
                                                 </span>
                                             </div>
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="text-slate-500 dark:text-slate-400">Verified:</span>
-                                                <span className="font-semibold text-blue-600 dark:text-blue-300">
-                                                    {currentInspectedIncident.verified_at || 'Pending'}
-                                                </span>
+                                        </div>
+
+                                        {/* 6. Patients Catered / PCR */}
+                                        <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-2">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                                                <HeartPulse className="w-3.5 h-3.5" />
+                                                Patients Catered ({currentInspectedIncident.patients?.length || 0})
                                             </div>
-                                            {currentInspectedIncident.verified_by && (
+
+                                            {currentInspectedIncident.patients &&
+                                                currentInspectedIncident.patients.length > 0 ? (
+                                                <div className="space-y-2">
+                                                    {currentInspectedIncident.patients.map((pat, pIdx) => (
+                                                        <div
+                                                            key={`panel-pat-${pat.id || pIdx}`}
+                                                            className="p-2 rounded-lg bg-white dark:bg-slate-950/60 border border-slate-200/70 dark:border-white/5 space-y-1 text-[11px]"
+                                                        >
+                                                            <div className="flex items-center justify-between gap-1.5">
+                                                                <span className="font-bold text-slate-900 dark:text-white truncate">
+                                                                    {pIdx + 1}. {pat.name}
+                                                                </span>
+                                                                {pat.disposition && (
+                                                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 shrink-0">
+                                                                        {pat.disposition}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                                {pat.gender || 'Unspecified'}
+                                                                {pat.age ? ` • ${pat.age} yrs old` : ''}
+                                                                {pat.destination_hospital
+                                                                    ? ` • ${pat.destination_hospital}`
+                                                                    : ''}
+                                                            </div>
+                                                            {pat.chief_complaint && (
+                                                                <p className="text-[10px] text-slate-700 dark:text-slate-300">
+                                                                    {pat.chief_complaint}
+                                                                </p>
+                                                            )}
+                                                            <div className="pt-1 flex items-center gap-1.5 flex-wrap">
+                                                                {pat.pcr_record ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => printPatientCareRecord(pat.pcr_record)}
+                                                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#F61509] hover:bg-rose-600 text-white text-[10px] font-semibold transition-colors cursor-pointer shadow-xs"
+                                                                        title="Open full Patient Care Record Print Preview (stays on Heatmap)"
+                                                                    >
+                                                                        <Eye className="w-3 h-3" />
+                                                                        View PCR
+                                                                    </button>
+                                                                ) : null}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-[11px] italic text-slate-500 dark:text-slate-400">
+                                                    No patients recorded for this incident.
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {/* 7. Incident Timeline */}
+                                        <div className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/70 dark:border-white/5 space-y-1.5">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                                                <Clock className="w-3.5 h-3.5" />
+                                                Timeline
+                                            </div>
+                                            <div className="space-y-1 text-[10px]">
                                                 <div className="flex items-center justify-between gap-2">
-                                                    <span className="text-slate-500 dark:text-slate-400">Verified By:</span>
-                                                    <span className="font-medium text-slate-700 dark:text-slate-300 truncate">
-                                                        {currentInspectedIncident.verified_by}
+                                                    <span className="text-slate-500 dark:text-slate-400">Reported:</span>
+                                                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                        {currentInspectedIncident.reported_at ||
+                                                            currentInspectedIncident.formatted_date ||
+                                                            'N/A'}
                                                     </span>
                                                 </div>
-                                            )}
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="text-slate-500 dark:text-slate-400">Resolved:</span>
-                                                <span className="font-semibold text-emerald-600 dark:text-emerald-300">
-                                                    {currentInspectedIncident.resolved_at ||
-                                                        (currentInspectedIncident.status === 'resolved'
-                                                            ? 'Resolved'
-                                                            : 'Ongoing')}
-                                                </span>
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-slate-500 dark:text-slate-400">Verified:</span>
+                                                    <span className="font-semibold text-blue-600 dark:text-blue-300">
+                                                        {currentInspectedIncident.verified_at || 'Pending'}
+                                                    </span>
+                                                </div>
+                                                {currentInspectedIncident.verified_by && (
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="text-slate-500 dark:text-slate-400">Verified By:</span>
+                                                        <span className="font-medium text-slate-700 dark:text-slate-300 truncate">
+                                                            {currentInspectedIncident.verified_by}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-slate-500 dark:text-slate-400">Resolved:</span>
+                                                    <span className="font-semibold text-emerald-600 dark:text-emerald-300">
+                                                        {currentInspectedIncident.resolved_at ||
+                                                            (currentInspectedIncident.status === 'resolved'
+                                                                ? 'Resolved'
+                                                                : 'Ongoing')}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                {/* INSPECTOR FOOTER */}
-                                <div className="p-2.5 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.02] flex items-center justify-between gap-2 shrink-0 flex-wrap">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                                            {currentInspectedIncident.time_ago}
-                                        </span>
-                                        {currentInspectedIncident.is_manual_pin && currentInspectedIncident.manual_pin_id && (
-                                            <button
-                                                type="button"
-                                                disabled={deletingPinId === currentInspectedIncident.manual_pin_id}
-                                                onClick={() => setConfirmDeletePin(currentInspectedIncident)}
-                                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 dark:hover:bg-rose-500/25 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
-                                                title="Delete this manual heatmap pin"
-                                            >
-                                                <Trash2 className="w-3 h-3" />
-                                                <span>Delete Pin</span>
-                                            </button>
-                                        )}
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={closeInspectorPanel}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-semibold transition-colors cursor-pointer"
-                                    >
-                                        <X className="w-3 h-3" />
-                                        Back to Hotspots
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                {/* RANKED HOTSPOTS HEADER */}
-                                <div className="p-3.5 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02]">
-                                    <div className="flex items-center justify-between mb-1">
+                                    {/* INSPECTOR FOOTER */}
+                                    <div className="p-2.5 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.02] flex items-center justify-between gap-2 shrink-0 flex-wrap">
                                         <div className="flex items-center gap-2">
-                                            <Flame className="w-4 h-4 text-rose-500" />
-                                            <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                                                Ranked Hotspots
-                                            </h2>
-                                        </div>
-                                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25">
-                                            {activeHotspots.length} Areas
-                                        </span>
-                                    </div>
-                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                                        High-frequency incident areas ({minThreshold === 1 ? 'Showing all risk levels' : `Showing ${minThreshold}+ incidents`})
-                                    </p>
-                                </div>
-
-                                {/* Hotspots List */}
-                                <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                                    {activeHotspots.length === 0 ? (
-                                        <div className="py-14 px-4 text-center">
-                                            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                                            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                                No Hotspots at Threshold ≥{minThreshold}
-                                            </p>
-                                            <p className="text-[11px] text-slate-500 mt-1 mb-3">
-                                                No geographical area has reached the selected recurring volume in this period.
-                                            </p>
-                                            {minThreshold > 1 && (
+                                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                {currentInspectedIncident.time_ago}
+                                            </span>
+                                            {currentInspectedIncident.is_manual_pin && currentInspectedIncident.manual_pin_id ? (
                                                 <button
                                                     type="button"
-                                                    onClick={() => {
-                                                        setMinThreshold(1);
-                                                        applyFilters({ min_threshold: 1 });
-                                                    }}
-                                                    className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 dark:hover:bg-rose-500/25 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold transition-colors cursor-pointer"
+                                                    disabled={deletingPinId === currentInspectedIncident.manual_pin_id}
+                                                    onClick={() => setConfirmDeletePin(currentInspectedIncident)}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 dark:hover:bg-rose-500/25 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                                                    title="Delete this manual prone area / pin"
                                                 >
-                                                    Show Single Occurrences (≥1)
+                                                    <Trash2 className="w-3 h-3" />
+                                                    <span>
+                                                        {currentInspectedIncident.geometry_type === 'POLYGON'
+                                                            ? 'Delete Area'
+                                                            : 'Delete Pin'}
+                                                    </span>
                                                 </button>
-                                            )}
+                                            ) : activeSelectedHotspot?.cluster_key.startsWith('poly_') && inspectedIncidents[0]?.manual_pin_id ? (
+                                                <button
+                                                    type="button"
+                                                    disabled={deletingPinId === inspectedIncidents[0].manual_pin_id}
+                                                    onClick={() => setConfirmDeletePin(inspectedIncidents[0])}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 dark:hover:bg-rose-500/25 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                                                    title="Delete only this manual polygon area (system incidents stay safe)"
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                    <span>Delete Area</span>
+                                                </button>
+                                            ) : parentManualPolygon ? (
+                                                <button
+                                                    type="button"
+                                                    disabled={deletingPinId === parentManualPolygon.manual_pin_id}
+                                                    onClick={() => setConfirmDeletePin(parentManualPolygon)}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 dark:hover:bg-rose-500/25 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                                                    title="Delete only the manual polygon area (system incidents will NOT be deleted)"
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                    <span>Delete Area</span>
+                                                </button>
+                                            ) : null}
                                         </div>
-                                    ) : (
-                                        activeHotspots.map((spot, idx) => {
-                                            const isSelected = selectedHotspot?.cluster_key === spot.cluster_key;
-                                            return (
-                                                <div
-                                                    key={spot.cluster_key}
-                                                    onClick={() => focusHotspotOnMap(spot)}
-                                                    className={`p-3 rounded-xl border transition-all cursor-pointer relative ${
-                                                        isSelected
+                                        <button
+                                            type="button"
+                                            onClick={closeInspectorPanel}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-semibold transition-colors cursor-pointer"
+                                        >
+                                            <X className="w-3 h-3" />
+                                            Back to Hotspots
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    {/* RANKED HOTSPOTS HEADER */}
+                                    <div className="p-3.5 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02]">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <div className="flex items-center gap-2">
+                                                <Flame className="w-4 h-4 text-rose-500" />
+                                                <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                                                    Ranked Hotspots
+                                                </h2>
+                                            </div>
+                                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25">
+                                                {activeHotspots.length} Areas
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                                            High-frequency incident areas ({minThreshold === 1 ? 'Showing all risk levels' : `Showing ${minThreshold}+ incidents`})
+                                        </p>
+                                    </div>
+
+                                    {/* Hotspots List */}
+                                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                                        {activeHotspots.length === 0 ? (
+                                            <div className="py-14 px-4 text-center">
+                                                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                                                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                    No Hotspots at Threshold ≥{minThreshold}
+                                                </p>
+                                                <p className="text-[11px] text-slate-500 mt-1 mb-3">
+                                                    No geographical area has reached the selected recurring volume in this period.
+                                                </p>
+                                                {minThreshold > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setMinThreshold(1);
+                                                            applyFilters({ min_threshold: 1 });
+                                                        }}
+                                                        className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 dark:hover:bg-rose-500/25 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold transition-colors cursor-pointer"
+                                                    >
+                                                        Show Single Occurrences (≥1)
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            activeHotspots.map((spot, idx) => {
+                                                const isSelected = selectedHotspot?.cluster_key === spot.cluster_key;
+                                                return (
+                                                    <div
+                                                        key={spot.cluster_key}
+                                                        onClick={() => focusHotspotOnMap(spot)}
+                                                        className={`p-3 rounded-xl border transition-all cursor-pointer relative ${isSelected
                                                             ? 'bg-rose-50/70 dark:bg-slate-800/90 border-rose-500 ring-1 ring-rose-500/40 shadow-sm'
                                                             : 'bg-slate-50/80 dark:bg-slate-800/40 hover:bg-slate-100/90 dark:hover:bg-slate-800/70 border-slate-200/60 dark:border-white/5 hover:border-rose-500/35'
-                                                    }`}
-                                                >
-                                                    <div className="flex items-start justify-between gap-2 mb-2">
-                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-start justify-between gap-2 mb-2">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <span
+                                                                    className="w-6 h-6 rounded-lg font-black text-xs flex items-center justify-center text-white shadow-sm shrink-0"
+                                                                    style={{ backgroundColor: spot.color }}
+                                                                >
+                                                                    #{spot.rank ?? idx + 1}
+                                                                </span>
+                                                                <div className="min-w-0">
+                                                                    <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-tight truncate">
+                                                                        {spot.location_name}
+                                                                    </h3>
+                                                                    <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">
+                                                                        Brgy. {spot.barangay}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
                                                             <span
-                                                                className="w-6 h-6 rounded-lg font-black text-xs flex items-center justify-center text-white shadow-sm shrink-0"
-                                                                style={{ backgroundColor: spot.color }}
+                                                                className="text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full border shadow-2xs shrink-0"
+                                                                style={{
+                                                                    backgroundColor: `${spot.color}20`,
+                                                                    borderColor: `${spot.color}55`,
+                                                                    color: spot.color,
+                                                                }}
                                                             >
-                                                                #{spot.rank ?? idx + 1}
+                                                                {spot.badge_text ||
+                                                                    classifyClusterRisk(
+                                                                        spot.incident_count,
+                                                                        isSpecificEmergencyType
+                                                                    ).badgeText}
                                                             </span>
-                                                            <div className="min-w-0">
-                                                                <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-tight truncate">
-                                                                    {spot.location_name}
-                                                                </h3>
-                                                                <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">
-                                                                    Brgy. {spot.barangay}
-                                                                </p>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-white dark:bg-slate-950/60 text-[10px] border border-slate-200/70 dark:border-white/5 mb-2">
+                                                            <div>
+                                                                <span className="text-slate-500 dark:text-slate-400 block text-[9px]">
+                                                                    Incident Count
+                                                                </span>
+                                                                <span className="font-extrabold text-amber-600 dark:text-amber-300 text-xs">
+                                                                    {spot.incident_count} Incidents
+                                                                </span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-slate-500 dark:text-slate-400 block text-[9px]">
+                                                                    Dominant Type
+                                                                </span>
+                                                                <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">
+                                                                    {spot.most_common_type}
+                                                                </span>
                                                             </div>
                                                         </div>
 
-                                                        <span
-                                                            className="text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full border shadow-2xs shrink-0"
-                                                            style={{
-                                                                backgroundColor: `${spot.color}20`,
-                                                                borderColor: `${spot.color}55`,
-                                                                color: spot.color,
-                                                            }}
-                                                        >
-                                                            {spot.badge_text ||
-                                                                classifyClusterRisk(
-                                                                    spot.incident_count,
-                                                                    isSpecificEmergencyType
-                                                                ).badgeText}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-white dark:bg-slate-950/60 text-[10px] border border-slate-200/70 dark:border-white/5 mb-2">
-                                                        <div>
-                                                            <span className="text-slate-500 dark:text-slate-400 block text-[9px]">
-                                                                Incident Count
-                                                            </span>
-                                                            <span className="font-extrabold text-amber-600 dark:text-amber-300 text-xs">
-                                                                {spot.incident_count} Incidents
-                                                            </span>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-slate-500 dark:text-slate-400 block text-[9px]">
-                                                                Dominant Type
-                                                            </span>
-                                                            <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">
-                                                                {spot.most_common_type}
-                                                            </span>
+                                                        <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                                                            <span>Click to zoom &amp; inspect</span>
+                                                            <ChevronRight className="w-3.5 h-3.5 text-rose-500" />
                                                         </div>
                                                     </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
 
-                                                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
-                                                        <span>Click to zoom &amp; inspect</span>
-                                                        <ChevronRight className="w-3.5 h-3.5 text-rose-500" />
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    )}
-                                </div>
-
-                                {/* Right Panel Disclaimer Note */}
-                                <div className="p-3 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed flex items-start gap-1.5">
-                                    <Info className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
-                                    <p>
-                                        Hotspots reflect historical incident density. Click any pin or hotspot to inspect complete details.
-                                    </p>
-                                </div>
-                            </>
-                        )}
-                    </aside>
-                </div>
+                                    {/* Right Panel Disclaimer Note */}
+                                    <div className="p-3 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed flex items-start gap-1.5">
+                                        <Info className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
+                                        <p>
+                                            Hotspots reflect historical incident density. Click any pin or hotspot to inspect complete details.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+                        </aside>
+                    </div>
                 </div>
 
-            {/* FULLSCREEN PHOTO ENLARGER LIGHTBOX WITH < > ARROWS */}
-            {lightboxState && lightboxState.images.length > 0 && (
-                <div
-                    className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-black/90 backdrop-blur-md"
-                    onClick={() => setLightboxState(null)}
-                >
-                    {/* Top Bar: Counter + Resident/Responder Source Badge + Close */}
+                {/* FULLSCREEN PHOTO ENLARGER LIGHTBOX WITH < > ARROWS */}
+                {lightboxState && lightboxState.images.length > 0 && (
                     <div
-                        className="absolute top-4 inset-x-4 z-20 flex items-center justify-between gap-2 flex-wrap"
-                        onClick={(e) => e.stopPropagation()}
+                        className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+                        onClick={() => setLightboxState(null)}
                     >
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="px-3 py-1.5 rounded-xl bg-slate-900/90 text-white border border-white/15 text-xs font-bold">
-                                Photo {lightboxState.index + 1} of {lightboxState.images.length}
-                            </span>
-                            {(() => {
-                                const activeImg = lightboxState.images[lightboxState.index];
-                                const isResp = activeImg?.source_role === 'responder';
-                                return (
-                                    <span
-                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
-                                            isResp
-                                                ? 'bg-sky-600/90 text-white border-sky-400/40'
-                                                : 'bg-emerald-600/90 text-white border-emerald-400/40'
-                                        }`}
-                                    >
-                                        {activeImg?.source_label || (isResp ? 'Responder Photo' : 'Resident Photo')}
-                                        {activeImg?.uploaded_by ? ` • ${activeImg.uploaded_by}` : ''}
-                                        {activeImg?.captured_at ? ` • ${activeImg.captured_at}` : ''}
-                                    </span>
-                                );
-                            })()}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {(() => {
-                                const activeImg = lightboxState.images[lightboxState.index];
-                                const isBw = isPhotoGrayscale(activeImg);
-                                return (
-                                    <button
-                                        type="button"
-                                        onClick={() => togglePhotoGrayscale(activeImg)}
-                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                                            isBw
-                                                ? 'bg-white text-slate-900 border-white hover:bg-slate-200'
-                                                : 'bg-slate-900/90 hover:bg-slate-800 text-white border-white/20'
-                                        }`}
-                                        title={
-                                            isBw
-                                                ? 'Switch this photo back to Color'
-                                                : 'Switch this photo to Black & White'
-                                        }
-                                    >
-                                        <span
-                                            className={`w-2.5 h-2.5 rounded-full border ${
-                                                isBw
-                                                    ? 'bg-gradient-to-r from-rose-500 via-amber-400 to-sky-500 border-slate-400'
-                                                    : 'bg-gradient-to-r from-black to-white border-white/50'
-                                            }`}
-                                        />
-                                        <span>{isBw ? 'Switch to Color' : 'Black & White'}</span>
-                                    </button>
-                                );
-                            })()}
-                            <button
-                                type="button"
-                                onClick={() => setLightboxState(null)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-white/20 text-xs font-bold transition-all cursor-pointer"
-                            >
-                                <X className="w-4 h-4" />
-                                <span>Close</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Center Image + Left/Right < > Arrows */}
-                    <div
-                        className="relative max-w-5xl max-h-[78vh] w-full flex items-center justify-center px-12 sm:px-16"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {lightboxState.images.length > 1 && (
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    setLightboxState((prev) =>
-                                        prev
-                                            ? {
-                                                  ...prev,
-                                                  index: (prev.index - 1 + prev.images.length) % prev.images.length,
-                                              }
-                                            : null
-                                    )
-                                }
-                                className="absolute left-1 sm:left-2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-900/90 hover:bg-[#F61509] text-white border border-white/20 flex items-center justify-center shadow-xl transition-colors cursor-pointer"
-                                title="Previous Photo"
-                            >
-                                <ChevronLeft className="w-6 h-6" />
-                            </button>
-                        )}
-
-                        <img
-                            src={lightboxState.images[lightboxState.index]?.url}
-                            alt={`Incident Photo ${lightboxState.index + 1}`}
-                            className={`max-w-full max-h-[78vh] object-contain rounded-xl border border-white/10 shadow-2xl select-none transition-all duration-200 ${
-                                isPhotoGrayscale(lightboxState.images[lightboxState.index]) ? 'grayscale' : ''
-                            }`}
-                        />
-
-                        {lightboxState.images.length > 1 && (
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    setLightboxState((prev) =>
-                                        prev
-                                            ? {
-                                                  ...prev,
-                                                  index: (prev.index + 1) % prev.images.length,
-                                              }
-                                            : null
-                                    )
-                                }
-                                className="absolute right-1 sm:right-2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-900/90 hover:bg-[#F61509] text-white border border-white/20 flex items-center justify-center shadow-xl transition-colors cursor-pointer"
-                                title="Next Photo"
-                            >
-                                <ChevronRight className="w-6 h-6" />
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Thumbnail Strip when multiple photos */}
-                    {lightboxState.images.length > 1 && (
+                        {/* Top Bar: Counter + Resident/Responder Source Badge + Close */}
                         <div
-                            className="mt-4 flex items-center gap-2 overflow-x-auto max-w-3xl px-2 py-1"
+                            className="absolute top-4 inset-x-4 z-20 flex items-center justify-between gap-2 flex-wrap"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            {lightboxState.images.map((img, i) => (
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="px-3 py-1.5 rounded-xl bg-slate-900/90 text-white border border-white/15 text-xs font-bold">
+                                    Photo {lightboxState.index + 1} of {lightboxState.images.length}
+                                </span>
+                                {(() => {
+                                    const activeImg = lightboxState.images[lightboxState.index];
+                                    const isResp = activeImg?.source_role === 'responder';
+                                    return (
+                                        <span
+                                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${isResp
+                                                ? 'bg-sky-600/90 text-white border-sky-400/40'
+                                                : 'bg-emerald-600/90 text-white border-emerald-400/40'
+                                                }`}
+                                        >
+                                            {activeImg?.source_label || (isResp ? 'Responder Photo' : 'Resident Photo')}
+                                            {activeImg?.uploaded_by ? ` • ${activeImg.uploaded_by}` : ''}
+                                            {activeImg?.captured_at ? ` • ${activeImg.captured_at}` : ''}
+                                        </span>
+                                    );
+                                })()}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {(() => {
+                                    const activeImg = lightboxState.images[lightboxState.index];
+                                    const isBw = isPhotoGrayscale(activeImg);
+                                    return (
+                                        <button
+                                            type="button"
+                                            onClick={() => togglePhotoGrayscale(activeImg)}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${isBw
+                                                ? 'bg-white text-slate-900 border-white hover:bg-slate-200'
+                                                : 'bg-slate-900/90 hover:bg-slate-800 text-white border-white/20'
+                                                }`}
+                                            title={
+                                                isBw
+                                                    ? 'Switch this photo back to Color'
+                                                    : 'Switch this photo to Black & White'
+                                            }
+                                        >
+                                            <span
+                                                className={`w-2.5 h-2.5 rounded-full border ${isBw
+                                                    ? 'bg-gradient-to-r from-rose-500 via-amber-400 to-sky-500 border-slate-400'
+                                                    : 'bg-gradient-to-r from-black to-white border-white/50'
+                                                    }`}
+                                            />
+                                            <span>{isBw ? 'Switch to Color' : 'Black & White'}</span>
+                                        </button>
+                                    );
+                                })()}
                                 <button
-                                    key={`lb-thumb-${img.id || i}`}
                                     type="button"
-                                    onClick={() => setLightboxState((prev) => (prev ? { ...prev, index: i } : null))}
-                                    className={`w-14 h-10 rounded-lg overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
-                                        i === lightboxState.index
+                                    onClick={() => setLightboxState(null)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white border border-white/20 text-xs font-bold transition-all cursor-pointer"
+                                >
+                                    <X className="w-4 h-4" />
+                                    <span>Close</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Center Image + Left/Right < > Arrows */}
+                        <div
+                            className="relative max-w-5xl max-h-[78vh] w-full flex items-center justify-center px-12 sm:px-16"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {lightboxState.images.length > 1 && (
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setLightboxState((prev) =>
+                                            prev
+                                                ? {
+                                                    ...prev,
+                                                    index: (prev.index - 1 + prev.images.length) % prev.images.length,
+                                                }
+                                                : null
+                                        )
+                                    }
+                                    className="absolute left-1 sm:left-2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-900/90 hover:bg-[#F61509] text-white border border-white/20 flex items-center justify-center shadow-xl transition-colors cursor-pointer"
+                                    title="Previous Photo"
+                                >
+                                    <ChevronLeft className="w-6 h-6" />
+                                </button>
+                            )}
+
+                            <img
+                                src={lightboxState.images[lightboxState.index]?.url}
+                                alt={`Incident Photo ${lightboxState.index + 1}`}
+                                className={`max-w-full max-h-[78vh] object-contain rounded-xl border border-white/10 shadow-2xl select-none transition-all duration-200 ${isPhotoGrayscale(lightboxState.images[lightboxState.index]) ? 'grayscale' : ''
+                                    }`}
+                            />
+
+                            {lightboxState.images.length > 1 && (
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setLightboxState((prev) =>
+                                            prev
+                                                ? {
+                                                    ...prev,
+                                                    index: (prev.index + 1) % prev.images.length,
+                                                }
+                                                : null
+                                        )
+                                    }
+                                    className="absolute right-1 sm:right-2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-900/90 hover:bg-[#F61509] text-white border border-white/20 flex items-center justify-center shadow-xl transition-colors cursor-pointer"
+                                    title="Next Photo"
+                                >
+                                    <ChevronRight className="w-6 h-6" />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Thumbnail Strip when multiple photos */}
+                        {lightboxState.images.length > 1 && (
+                            <div
+                                className="mt-4 flex items-center gap-2 overflow-x-auto max-w-3xl px-2 py-1"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {lightboxState.images.map((img, i) => (
+                                    <button
+                                        key={`lb-thumb-${img.id || i}`}
+                                        type="button"
+                                        onClick={() => setLightboxState((prev) => (prev ? { ...prev, index: i } : null))}
+                                        className={`w-14 h-10 rounded-lg overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${i === lightboxState.index
                                             ? 'border-[#F61509] scale-105 opacity-100'
                                             : 'border-white/20 opacity-60 hover:opacity-100'
-                                    }`}
-                                >
-                                    <img
-                                        src={img.url}
-                                        alt={`Thumb ${i + 1}`}
-                                        className={`w-full h-full object-cover ${
-                                            isPhotoGrayscale(img) ? 'grayscale' : ''
-                                        }`}
-                                    />
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-            {/* MANUAL HEATMAP PIN POPUP MODAL (SYNCED WITH ACTIVE FILTERS & EXISTING PINS) */}
-            <ManualPinModal
-                open={isManualModalOpen}
-                onClose={() => setIsManualModalOpen(false)}
-                onSaved={() => {
-                    toast.success('Manual heatmap pin saved.');
-                    router.reload({
-                        only: [
-                            'incidents',
-                            'hotspots',
-                            'analytics',
-                            'customPinTypes',
-                            'availableYears',
-                            'totalIncidentsCount',
-                            'validCoordinatesCount',
-                        ],
-                        data: buildFilterParams(),
-                    });
-                }}
-                userRole={userRole}
-                incidentTypes={incidentTypes}
-                opolBarangays={opolBarangays}
-                existingHotspots={activeHotspots}
-                barangayGeojson={barangayGeojson}
-                activeFilterSummary={activeFilterSummary}
-                getTypeColorHex={(typeName) => getTypeBadgeColor(typeName).hex}
-            />
-
-            {/* PROFESSIONAL DELETE CONFIRMATION MODAL FOR MANUAL PINS */}
-            {confirmDeletePin && (
-                <div
-                    className="fixed inset-0 z-[110] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
-                    onClick={() => deletingPinId === null && setConfirmDeletePin(null)}
-                >
-                    <div
-                        className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 shadow-2xl overflow-hidden text-slate-900 dark:text-slate-100 animate-in zoom-in-95 duration-150"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {/* Header with Rose Danger Icon */}
-                        <div className="p-5 pb-4 flex items-start gap-3.5">
-                            <div className="w-11 h-11 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-500 shrink-0">
-                                <Trash2 className="w-5 h-5" />
+                                            }`}
+                                    >
+                                        <img
+                                            src={img.url}
+                                            alt={`Thumb ${i + 1}`}
+                                            className={`w-full h-full object-cover ${isPhotoGrayscale(img) ? 'grayscale' : ''
+                                                }`}
+                                        />
+                                    </button>
+                                ))}
                             </div>
-                            <div className="min-w-0 flex-1">
-                                <h3 className="text-base font-bold text-slate-900 dark:text-white leading-snug">
-                                    Delete Manual Heatmap Pin?
-                                </h3>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                                    This pin will be permanently removed from the Incident Heatmap and its cluster will automatically recalculate. This action cannot be undone.
+                        )}
+                    </div>
+                )}
+                {/* MANUAL HEATMAP PIN POPUP MODAL (SYNCED WITH ACTIVE FILTERS & EXISTING PINS) */}
+                <ManualPinModal
+                    open={isManualModalOpen}
+                    onClose={() => setIsManualModalOpen(false)}
+                    onSaved={(newPin?: any) => {
+                        toast.success('Incident-prone area saved successfully.');
+                        if (newPin && newPin.id) {
+                            const formatted = formatManualPinRecord(newPin);
+                            setLocalIncidents((prev) => [
+                                formatted,
+                                ...prev.filter((p) => p.manual_pin_id !== newPin.id),
+                            ]);
+                        }
+                        const currentRoute =
+                            typeof window !== 'undefined' && window.location.pathname
+                                ? window.location.pathname
+                                : userRole === 'admin'
+                                    ? '/admin/accident-heatmap'
+                                    : '/dispatcher/accident-heatmap';
+                        router.get(currentRoute, buildFilterParams(), {
+                            preserveState: false,
+                            preserveScroll: true,
+                            replace: true,
+                        });
+                    }}
+                    userRole={userRole}
+                    incidentTypes={incidentTypes}
+                    opolBarangays={opolBarangays}
+                    existingHotspots={activeHotspots}
+                    existingPronePolygons={savedPronePolygonsGeojson}
+                    initialCenter={viewState}
+                    barangayGeojson={barangayGeojson}
+                    activeFilterSummary={activeFilterSummary}
+                    getTypeColorHex={(typeName) => getTypeBadgeColor(typeName).hex}
+                />
+
+                {/* PROFESSIONAL DELETE CONFIRMATION MODAL FOR MANUAL PINS */}
+                {confirmDeletePin && (
+                    <div
+                        className="fixed inset-0 z-[110] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+                        onClick={() => deletingPinId === null && setConfirmDeletePin(null)}
+                    >
+                        <div
+                            className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 shadow-2xl overflow-hidden text-slate-900 dark:text-slate-100 animate-in zoom-in-95 duration-150"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Header with Rose Danger Icon */}
+                            <div className="p-5 pb-3 flex items-start gap-3.5">
+                                <div className="w-11 h-11 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-500 shrink-0">
+                                    <Trash2 className="w-5 h-5" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <h3 className="text-base font-bold text-slate-900 dark:text-white leading-snug">
+                                        {confirmDeletePin.geometry_type === 'POLYGON'
+                                            ? 'Delete Manual Prone Area?'
+                                            : 'Delete Manual Pin?'}
+                                    </h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                                        Are you sure you want to remove this {confirmDeletePin.geometry_type === 'POLYGON' ? 'manual polygon boundary' : 'manual pin'} from the map?
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    disabled={deletingPinId !== null}
+                                    onClick={() => setConfirmDeletePin(null)}
+                                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            {/* EXPLICIT SAFETY REASSURANCE NOTICE */}
+                            <div className="mx-5 mb-3.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-start gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                                <div className="leading-relaxed">
+                                    <p className="font-bold">
+                                        Only this manual {confirmDeletePin.geometry_type === 'POLYGON' ? 'polygon area' : 'pin'} will be deleted.
+                                    </p>
+                                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">
+                                        Real system incidents, emergency dispatches, and victim records will <strong>NOT</strong> be deleted and will remain completely safe.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Pin / Area Summary Card */}
+                            <div className="mx-5 mb-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-white/10 space-y-1.5 text-xs">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="font-bold text-slate-900 dark:text-white truncate">
+                                        {confirmDeletePin.area_name || confirmDeletePin.incident_type}
+                                    </span>
+                                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/25 shrink-0">
+                                        {confirmDeletePin.geometry_type === 'POLYGON' ? 'POLYGON AREA' : 'PIN'}
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-slate-600 dark:text-slate-300 flex items-start gap-1.5">
+                                    <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                                    <span className="line-clamp-2">
+                                        Brgy. {confirmDeletePin.barangay || 'Opol'}
+                                        {confirmDeletePin.address ? ` • ${confirmDeletePin.address}` : ''}
+                                    </span>
                                 </p>
                             </div>
-                            <button
-                                type="button"
-                                disabled={deletingPinId !== null}
-                                onClick={() => setConfirmDeletePin(null)}
-                                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
 
-                        {/* Pin Summary Card */}
-                        <div className="mx-5 mb-5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-white/10 space-y-1 text-xs">
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="font-bold text-slate-900 dark:text-white truncate">
-                                    {confirmDeletePin.incident_type}
-                                </span>
-                                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/25 shrink-0">
-                                    {confirmDeletePin.incident_number || `PIN-${confirmDeletePin.manual_pin_id}`}
-                                </span>
+                            {/* Actions Footer */}
+                            <div className="px-5 py-3.5 bg-slate-50/80 dark:bg-white/[0.02] border-t border-slate-200/80 dark:border-white/10 flex items-center justify-end gap-2.5">
+                                <button
+                                    type="button"
+                                    disabled={deletingPinId !== null}
+                                    onClick={() => setConfirmDeletePin(null)}
+                                    className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={deletingPinId !== null}
+                                    onClick={() => handleDeleteManualPin(confirmDeletePin)}
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F61509] hover:bg-rose-600 text-white text-xs font-bold shadow-md shadow-[#F61509]/25 transition-colors cursor-pointer disabled:opacity-60"
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>
+                                        {deletingPinId !== null
+                                            ? 'Deleting...'
+                                            : confirmDeletePin.geometry_type === 'POLYGON'
+                                                ? 'Yes, Delete Manual Area'
+                                                : 'Yes, Delete Manual Pin'}
+                                    </span>
+                                </button>
                             </div>
-                            <p className="text-[11px] text-slate-600 dark:text-slate-300 flex items-start gap-1.5">
-                                <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
-                                <span className="line-clamp-2">{confirmDeletePin.address}</span>
-                            </p>
-                        </div>
-
-                        {/* Actions Footer */}
-                        <div className="px-5 py-3.5 bg-slate-50/80 dark:bg-white/[0.02] border-t border-slate-200/80 dark:border-white/10 flex items-center justify-end gap-2.5">
-                            <button
-                                type="button"
-                                disabled={deletingPinId !== null}
-                                onClick={() => setConfirmDeletePin(null)}
-                                className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                disabled={deletingPinId !== null}
-                                onClick={() => handleDeleteManualPin(confirmDeletePin)}
-                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F61509] hover:bg-rose-600 text-white text-xs font-bold shadow-md shadow-[#F61509]/25 transition-colors cursor-pointer disabled:opacity-60"
-                            >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>{deletingPinId !== null ? 'Deleting...' : 'Yes, Delete Pin'}</span>
-                            </button>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
             </div>
         </Layout>
     );

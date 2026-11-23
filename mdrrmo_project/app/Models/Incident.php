@@ -236,13 +236,13 @@ class Incident extends Model
             // 3. Resolve from textual address of incident scene
             $fullText = $this->incident_address ?? '';
             if (!empty($fullText)) {
+                if (stripos($fullText, 'luyong') !== false) {
+                    return 'Luyongbonbon';
+                }
                 foreach (self::OPOL_BARANGAYS as $bName) {
-                    if (stripos($fullText, $bName) !== false) {
+                    if ($bName !== 'Luyongbonbon' && stripos($fullText, $bName) !== false) {
                         return $bName;
                     }
-                }
-                if (stripos($fullText, 'luyong bonbon') !== false || stripos($fullText, 'luyong-bonbon') !== false) {
-                    return 'Luyongbonbon';
                 }
             }
 

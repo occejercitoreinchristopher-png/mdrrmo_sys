@@ -37,6 +37,9 @@ class DispatchController extends Controller
             ->where('vehicle_type', '!=', 'Station')
             ->get();
 
+        // Auto-heal any stale busy responder profiles without active dispatches
+        ResponderProfile::syncBusyAvailability();
+
         // Fetch available responders (both permanent team members and relievers)
         $responders = User::where('role', 'responder')
             ->with('responderProfile')

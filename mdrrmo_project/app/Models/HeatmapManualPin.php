@@ -11,6 +11,7 @@ class HeatmapManualPin extends Model
     protected $casts = [
         'pin_latitude' => 'float',
         'pin_longitude' => 'float',
+        'polygon_coordinates' => 'array',
     ];
 
     public function incidentType()

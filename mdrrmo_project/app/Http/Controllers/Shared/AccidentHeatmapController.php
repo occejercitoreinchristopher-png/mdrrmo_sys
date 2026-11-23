@@ -440,25 +440,55 @@ class AccidentHeatmapController extends Controller
                     ])->values()->all()
                     : [];
 
+                $geomType = strtoupper((string) ($pin->geometry_type ?: 'POINT'));
+                $areaName = $pin->area_name ?: ($resolvedTypeName . ($geomType === 'POLYGON' ? ' Zone' : ''));
+                $riskLevel = $pin->risk_level ?: 'Moderate';
+                $prefixCode = $geomType === 'POLYGON' ? 'POLY-' : 'PIN-';
+
+                // For polygon, if lat/lng is missing, compute centroid from vertices
+                $lat = $pin->pin_latitude !== null ? (float) $pin->pin_latitude : null;
+                $lng = $pin->pin_longitude !== null ? (float) $pin->pin_longitude : null;
+                $polyCoords = $pin->polygon_coordinates;
+                if (($lat === null || $lng === null) && !empty($polyCoords) && is_array($polyCoords)) {
+                    $sumLat = 0;
+                    $sumLng = 0;
+                    $ptCount = 0;
+                    foreach ($polyCoords as $pt) {
+                        if (is_array($pt) && count($pt) >= 2) {
+                            $sumLng += (float) $pt[0];
+                            $sumLat += (float) $pt[1];
+                            $ptCount++;
+                        }
+                    }
+                    if ($ptCount > 0) {
+                        $lat = round($sumLat / $ptCount, 7);
+                        $lng = round($sumLng / $ptCount, 7);
+                    }
+                }
+
                 return [
                     'id' => -1 * (int) $pin->id,
                     'incident_id' => -1 * (int) $pin->id,
                     'manual_pin_id' => (int) $pin->id,
                     'is_manual_pin' => true,
-                    'incident_number' => 'PIN-' . str_pad($pin->id, 4, '0', STR_PAD_LEFT),
+                    'geometry_type' => $geomType,
+                    'area_name' => $areaName,
+                    'risk_level' => $riskLevel,
+                    'polygon_coordinates' => $polyCoords,
+                    'incident_number' => $prefixCode . str_pad($pin->id, 4, '0', STR_PAD_LEFT),
                     'incident_type' => $resolvedTypeName,
                     'incident_type_id' => $pin->incident_type_id,
                     'type_filter_key' => $typeFilterKey,
                     'status' => 'manual_pin',
                     'priority' => 'Manual Pin',
-                    'address' => $pin->pin_address,
-                    'purok_or_location' => $pin->pin_address,
+                    'address' => $pin->pin_address ?: $areaName,
+                    'purok_or_location' => $pin->pin_address ?: $areaName,
                     'barangay' => $resolvedBarangay,
                     'description' => $pin->pin_description ?? '',
-                    'chief_complaint' => $pin->pin_description ?: $resolvedTypeName,
-                    'latitude' => (float) $pin->pin_latitude,
-                    'longitude' => (float) $pin->pin_longitude,
-                    'has_coords' => true,
+                    'chief_complaint' => $pin->pin_description ?: $areaName,
+                    'latitude' => $lat,
+                    'longitude' => $lng,
+                    'has_coords' => ($lat !== null && $lng !== null),
                     'caller_name' => $pin->creator?->name ?? 'MDRRMO Personnel',
                     'caller_phone' => null,
                     'report_source' => 'manual_pin',
@@ -557,16 +587,25 @@ class AccidentHeatmapController extends Controller
     }
 
     /**
-     * Store a new Manual Heatmap Pin in strict 3NF (heatmap_manual_pins table).
+     * Store a new Incident-Prone Area (Manual Pin or Polygon Area) in strict 3NF (heatmap_manual_pins table).
      */
     public function storeManualPin(Request $request)
     {
+        $geomType = strtoupper(trim((string) $request->input('geometry_type', 'POINT')));
+        if (! in_array($geomType, ['POINT', 'POLYGON'], true)) {
+            $geomType = 'POINT';
+        }
+
         $validated = $request->validate([
+            'geometry_type' => ['nullable', 'string', 'in:POINT,POLYGON'],
+            'area_name' => ['nullable', 'string', 'max:150'],
+            'risk_level' => ['nullable', 'string', 'in:High,Moderate-High,Moderate,Low'],
             'incident_type_id' => ['nullable', 'integer', 'exists:incident_types,id'],
             'custom_pin_type' => ['nullable', 'string', 'max:100'],
-            'pin_address' => ['required', 'string', 'max:255'],
-            'pin_latitude' => ['required', 'numeric', 'between:-90,90'],
-            'pin_longitude' => ['required', 'numeric', 'between:-180,180'],
+            'pin_address' => [$geomType === 'POINT' ? 'required' : 'nullable', 'string', 'max:255'],
+            'pin_latitude' => [$geomType === 'POINT' ? 'required' : 'nullable', 'numeric', 'between:-90,90'],
+            'pin_longitude' => [$geomType === 'POINT' ? 'required' : 'nullable', 'numeric', 'between:-180,180'],
+            'polygon_coordinates' => [$geomType === 'POLYGON' ? 'required' : 'nullable'],
             'pin_description' => ['nullable', 'string', 'max:255'],
             'barangay_name' => ['nullable', 'string', 'max:100'],
             'pin_images' => ['nullable', 'array', 'max:5'],
@@ -588,11 +627,54 @@ class AccidentHeatmapController extends Controller
             $customPinType = null;
         }
 
+        // Process polygon coordinates if POLYGON geometry
+        $parsedPolyCoords = null;
+        $lat = isset($validated['pin_latitude']) ? (float) $validated['pin_latitude'] : null;
+        $lng = isset($validated['pin_longitude']) ? (float) $validated['pin_longitude'] : null;
+
+        if ($geomType === 'POLYGON') {
+            $rawPoly = $validated['polygon_coordinates'] ?? null;
+            if (is_string($rawPoly)) {
+                $rawPoly = json_decode($rawPoly, true);
+            }
+            if (! is_array($rawPoly) || count($rawPoly) < 3) {
+                return response()->json([
+                    'message' => 'A polygon must have at least 3 distinct vertices.',
+                    'errors' => ['polygon_coordinates' => ['A polygon must have at least 3 distinct vertices.']],
+                ], 422);
+            }
+            $parsedPolyCoords = $rawPoly;
+
+            // Compute centroid if lat/lng not provided
+            if ($lat === null || $lng === null) {
+                $sumLat = 0;
+                $sumLng = 0;
+                $ptCount = 0;
+                foreach ($parsedPolyCoords as $pt) {
+                    if (is_array($pt) && count($pt) >= 2) {
+                        $sumLng += (float) $pt[0];
+                        $sumLat += (float) $pt[1];
+                        $ptCount++;
+                    }
+                }
+                if ($ptCount > 0) {
+                    $lat = round($sumLat / $ptCount, 7);
+                    $lng = round($sumLng / $ptCount, 7);
+                }
+            }
+        }
+
+        $address = trim((string) ($validated['pin_address'] ?? ''));
+        if ($address === '') {
+            $areaName = trim((string) ($validated['area_name'] ?? ''));
+            $address = $areaName !== '' ? $areaName : ($geomType === 'POLYGON' ? 'Incident-Prone Polygon Area' : 'Opol, Misamis Oriental');
+        }
+
         // Strict 3NF: resolve barangay_id FK from barangays table
         $barangayName = trim((string) ($validated['barangay_name'] ?? ''));
         if ($barangayName === '') {
             foreach (Incident::OPOL_BARANGAYS as $b) {
-                if (stripos($validated['pin_address'], $b) !== false) {
+                if (stripos($address, $b) !== false) {
                     $barangayName = $b;
                     break;
                 }
@@ -607,12 +689,18 @@ class AccidentHeatmapController extends Controller
         }
 
         $pin = HeatmapManualPin::create([
+            'geometry_type' => $geomType,
+            'area_name' => isset($validated['area_name']) && trim($validated['area_name']) !== ''
+                ? mb_substr(trim($validated['area_name']), 0, 150)
+                : null,
+            'polygon_coordinates' => $parsedPolyCoords,
+            'risk_level' => $validated['risk_level'] ?? 'Moderate',
             'incident_type_id' => $incidentTypeId,
             'custom_pin_type' => $customPinType,
             'barangay_id' => $barangayId,
-            'pin_address' => mb_substr(trim($validated['pin_address']), 0, 255),
-            'pin_latitude' => (float) $validated['pin_latitude'],
-            'pin_longitude' => (float) $validated['pin_longitude'],
+            'pin_address' => mb_substr($address, 0, 255),
+            'pin_latitude' => $lat,
+            'pin_longitude' => $lng,
             'pin_description' => isset($validated['pin_description']) && trim($validated['pin_description']) !== ''
                 ? mb_substr(trim($validated['pin_description']), 0, 255)
                 : null,
@@ -744,10 +832,13 @@ class AccidentHeatmapController extends Controller
         $circleRadiusMeters = 20.0;
         $nonOverlapMeters = $circleRadiusMeters * 2.0; // 40m: prevents two 20m-radius circles from overlapping
 
-        // 1. Filter incidents with valid geographical coordinates
+        // 1. Filter incidents with valid geographical coordinates (polygons rendered as enclosed areas, not point pins)
         $validIncidents = [];
         foreach ($incidents as $inc) {
             if (!empty($inc['has_coords']) && $inc['latitude'] !== null && $inc['longitude'] !== null) {
+                if (!empty($inc['is_manual_pin']) && ($inc['geometry_type'] ?? '') === 'POLYGON') {
+                    continue;
+                }
                 $validIncidents[] = $inc;
             }
         }
