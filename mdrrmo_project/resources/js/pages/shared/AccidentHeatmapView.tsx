@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo, Fragment } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import { toast } from 'sonner';
 import { intersect } from '@turf/intersect';
+import { union } from '@turf/union';
 import { featureCollection, polygon } from '@turf/helpers';
 import DispatcherLayout from '@/dispatcher/layouts/DispatcherLayout';
 import AdminLayout from '@/admin/layouts/AdminLayout';
@@ -171,6 +172,7 @@ interface HotspotRecord {
     meets_threshold: boolean;
     rank?: number;
     superseded_manual_areas?: IncidentRecord[];
+    union_geometry?: any;
 }
 
 interface AnalyticsData {
@@ -1016,120 +1018,163 @@ export default function AccidentHeatmapView({
         };
     };
 
-    // 2. Reactive Active Hotspots: mirrors backend Option A nearest-cluster non-overlapping 20m circle logic
-    //    - When "All Emergency Types" is selected: combines all nearby incidents regardless of type (1-4 Low, 5-8 Mod, 9+ High)
-    //    - When a specific Emergency Type is selected: re-clusters ONLY that emergency type cleanly (1-2 Low, 3 Mod, 4+ High)
-    const activeHotspots = useMemo(() => {
-        const isFilterActive =
-            selectedEmergencyTypes.length > 0 ||
-            selectedBarangays.length > 0 ||
-            selectedYears.length > 0 ||
-            selectedMonths.length > 0 ||
-            (selectedStatus && selectedStatus !== 'all');
+    /**
+     * Generate a 20-meter circular buffer polygon around a geographic [lng, lat] point.
+     * Uses geodesic spherical earth formula with 36 vertices.
+     */
+    const create20mCirclePolygon = (lng: number, lat: number, radiusMeters = 20, steps = 36) => {
+        const earthRadius = 6371000;
+        const latRad = (lat * Math.PI) / 180;
+        const dLat = (radiusMeters / earthRadius) * (180 / Math.PI);
+        const dLng = ((radiusMeters / earthRadius) * (180 / Math.PI)) / Math.cos(latRad);
 
-        if (!isFilterActive) {
-            return hotspots
-                .filter((h) => h.incident_count >= minThreshold)
-                .map((h) => {
-                    const risk = classifyClusterRisk(h.incident_count, false);
-                    return {
-                        ...h,
-                        color: risk.color,
-                        classification: risk.classification,
-                        intensity: risk.intensity,
-                        intensity_class: risk.intensityClass,
-                        badge_text: risk.badgeText,
-                    };
-                });
+        const ring: [number, number][] = [];
+        for (let i = 0; i < steps; i++) {
+            const angle = (i / steps) * 2 * Math.PI;
+            ring.push([
+                Number((lng + dLng * Math.cos(angle)).toFixed(7)),
+                Number((lat + dLat * Math.sin(angle)).toFixed(7)),
+            ]);
         }
+        ring.push(ring[0]);
+        return polygon([ring]);
+    };
 
+    // =========================================================================
+    // INTELLIGENT OVERLAPPING 20-METER INCIDENT CIRCLE MERGING
+    // (DYNAMIC GEOGRAPHICAL BUFFER UNION)
+    // 1. Every incident has an exact 20-meter radius circular buffer.
+    // 2. Any incident circles within 40m (20m + 20m) overlap and are merged into
+    //    a continuous, unified hazard zone via @turf/union.
+    // 3. Isolated incident circles (distance > 40m) remain clean 20m circles.
+    // 4. Bypasses static server heatmap clusters so all active incidents and their
+    //    dynamic 20m buffer unions are immediately visualizable on the map.
+    // =========================================================================
+    const activeHotspots = useMemo(() => {
         const circleRadiusMeters = 20.0;
-        const nonOverlapMeters = circleRadiusMeters * 2.0; // 40m anti-overlap threshold
+        const overlapThresholdMeters = circleRadiusMeters * 2.0; // 40m overlap threshold
 
+        // Get all valid incident coordinates (excluding manual polygons which are drawn separately)
         const valid = activeIncidents
-            .filter((i) => i.has_coords && i.latitude !== null && i.longitude !== null)
+            .filter((i) => i.has_coords && i.latitude !== null && i.longitude !== null && i.geometry_type !== 'POLYGON')
             .sort((a, b) => a.id - b.id);
 
-        const rawClusters: Array<{
-            cluster_key: string;
-            latitude: number;
-            longitude: number;
-            location_name: string;
-            barangay: string;
-            incidents: IncidentRecord[];
-        }> = [];
+        if (valid.length === 0) return [];
 
-        let counter = 1;
-        for (const inc of valid) {
-            const lat = Number(inc.latitude);
-            const lng = Number(inc.longitude);
-
-            let closestIdx = -1;
-            let closestDist = nonOverlapMeters + 0.0001;
-            let closestCount = -1;
-
-            for (let idx = 0; idx < rawClusters.length; idx++) {
-                const c = rawClusters[idx];
-                const dist = haversineMeters(lat, lng, c.latitude, c.longitude);
-                if (dist > nonOverlapMeters) continue;
-
-                const isCloser = dist < closestDist - 0.0001;
-                const isTieLarger = Math.abs(dist - closestDist) <= 0.0001 && c.incidents.length > closestCount;
-                if (isCloser || isTieLarger) {
-                    closestDist = dist;
-                    closestIdx = idx;
-                    closestCount = c.incidents.length;
+        // Adjacency graph for connected components of overlapping 20m circles
+        const adj: number[][] = Array.from({ length: valid.length }, () => []);
+        for (let i = 0; i < valid.length; i++) {
+            const lat1 = Number(valid[i].latitude);
+            const lng1 = Number(valid[i].longitude);
+            for (let j = i + 1; j < valid.length; j++) {
+                const lat2 = Number(valid[j].latitude);
+                const lng2 = Number(valid[j].longitude);
+                const dist = haversineMeters(lat1, lng1, lat2, lng2);
+                if (dist <= overlapThresholdMeters) {
+                    adj[i].push(j);
+                    adj[j].push(i);
                 }
-            }
-
-            if (closestIdx >= 0) {
-                const c = rawClusters[closestIdx];
-                c.incidents.push(inc);
-                const count = c.incidents.length;
-                c.latitude = c.incidents.reduce((s, i) => s + Number(i.latitude), 0) / count;
-                c.longitude = c.incidents.reduce((s, i) => s + Number(i.longitude), 0) / count;
-                if (inc.barangay && inc.barangay.toLowerCase() !== 'opol' && c.barangay.toLowerCase() === 'opol') {
-                    c.barangay = inc.barangay;
-                }
-                const loc = (inc.purok_or_location || inc.address || '').trim();
-                if (loc && loc.length > c.location_name.length && !loc.startsWith('Opol')) {
-                    c.location_name = loc;
-                }
-            } else {
-                rawClusters.push({
-                    cluster_key: `cluster_20m_${counter++}_${inc.id}`,
-                    latitude: lat,
-                    longitude: lng,
-                    location_name: inc.purok_or_location || inc.address || 'Opol, Misamis Oriental',
-                    barangay: inc.barangay || 'Opol',
-                    incidents: [inc],
-                });
             }
         }
 
-        const built: HotspotRecord[] = rawClusters
-            .map((c) => {
-                const sorted = [...c.incidents].sort((a, b) => b.id - a.id);
+        // BFS traversal to partition incidents into merged clusters
+        const visited = new Array(valid.length).fill(false);
+        const clusters: IncidentRecord[][] = [];
+
+        for (let i = 0; i < valid.length; i++) {
+            if (visited[i]) continue;
+            const component: IncidentRecord[] = [];
+            const queue = [i];
+            visited[i] = true;
+
+            while (queue.length > 0) {
+                const curr = queue.shift()!;
+                component.push(valid[curr]);
+
+                for (const neighbor of adj[curr]) {
+                    if (!visited[neighbor]) {
+                        visited[neighbor] = true;
+                        queue.push(neighbor);
+                    }
+                }
+            }
+            clusters.push(component);
+        }
+
+        let clusterCounter = 1;
+        const built: HotspotRecord[] = clusters
+            .map((incidentsInCluster) => {
+                const sorted = [...incidentsInCluster].sort((a, b) => b.id - a.id);
                 const count = sorted.length;
                 const risk = classifyClusterRisk(count, isSpecificEmergencyType);
                 const { color, classification, intensity, intensityClass, badgeText } = risk;
 
+                // Centroid coordinates for marker pin placement
+                const totalLat = sorted.reduce((sum, inc) => sum + Number(inc.latitude), 0);
+                const totalLng = sorted.reduce((sum, inc) => sum + Number(inc.longitude), 0);
+                const centerLat = totalLat / count;
+                const centerLng = totalLng / count;
+
+                // Best location name & barangay
+                const primaryInc = sorted[0];
+                const locCandidate =
+                    sorted
+                        .map((i) => (i.purok_or_location || i.address || '').trim())
+                        .filter((loc) => loc && !loc.startsWith('Opol'))
+                        .sort((a, b) => b.length - a.length)[0] ||
+                    primaryInc.purok_or_location ||
+                    primaryInc.address ||
+                    'Opol, Misamis Oriental';
+
+                const brgy =
+                    sorted.map((i) => i.barangay).find((b) => b && b.toLowerCase() !== 'opol') ||
+                    primaryInc.barangay ||
+                    'Opol';
+
+                // Emergency type frequency breakdown
                 const typeFreq: Record<string, number> = {};
                 sorted.forEach((i) => {
-                    typeFreq[i.incident_type] = (typeFreq[i.incident_type] || 0) + 1;
+                    const t = i.incident_type || 'Unspecified';
+                    typeFreq[t] = (typeFreq[t] || 0) + 1;
                 });
                 const uniqueTypes = Object.entries(typeFreq)
                     .sort((a, b) => b[1] - a[1])
                     .map(([t]) => t);
                 const dominantType = uniqueTypes[0] || 'General Emergency';
 
+                // DYNAMIC GEOGRAPHICAL BUFFER UNION:
+                // Generate 20-meter circle polygons for each incident and union them together
+                const circlePolys = sorted.map((inc) =>
+                    create20mCirclePolygon(Number(inc.longitude), Number(inc.latitude), circleRadiusMeters)
+                );
+
+                let unionGeometry: any = circlePolys[0].geometry;
+                if (circlePolys.length > 1) {
+                    let mergedFeature: any = circlePolys[0];
+                    for (let k = 1; k < circlePolys.length; k++) {
+                        try {
+                            const u = union(featureCollection([mergedFeature, circlePolys[k]]));
+                            if (u && u.geometry) {
+                                mergedFeature = u;
+                                unionGeometry = u.geometry;
+                            }
+                        } catch (err) {
+                            console.warn('Turf union error in 20m cluster, keeping partial buffer:', err);
+                        }
+                    }
+                }
+
+                const clusterKey = `cluster_20m_${clusterCounter++}_${primaryInc.id}`;
+
                 return {
-                    cluster_key: c.cluster_key,
-                    cluster_id: c.cluster_key,
-                    latitude: c.latitude,
-                    longitude: c.longitude,
-                    location_name: c.location_name,
-                    barangay: c.barangay,
+                    cluster_key: clusterKey,
+                    cluster_id: clusterKey,
+                    latitude: centerLat,
+                    longitude: centerLng,
+                    seed_latitude: Number(primaryInc.latitude),
+                    seed_longitude: Number(primaryInc.longitude),
+                    location_name: locCandidate,
+                    barangay: brgy,
                     incident_type: dominantType,
                     most_common_type: dominantType,
                     unique_types: uniqueTypes,
@@ -1147,9 +1192,10 @@ export default function AccidentHeatmapView({
                     intensity,
                     intensity_class: intensityClass,
                     badge_text: badgeText,
-                    radius_meters: 20,
+                    radius_meters: circleRadiusMeters,
                     meets_threshold: count >= minThreshold,
-                };
+                    union_geometry: unionGeometry,
+                } as any;
             })
             .filter((spot) => spot.incident_count >= minThreshold)
             .sort((a, b) => b.incident_count - a.incident_count)
@@ -1157,13 +1203,7 @@ export default function AccidentHeatmapView({
 
         return built;
     }, [
-        hotspots,
         activeIncidents,
-        selectedEmergencyTypes,
-        selectedBarangays,
-        selectedYears,
-        selectedMonths,
-        selectedStatus,
         minThreshold,
         isSpecificEmergencyType,
     ]);
@@ -1360,18 +1400,28 @@ export default function AccidentHeatmapView({
                     return null;
                 }
 
-                const radiusM = spot.radius_meters || 25;
-                const latRad = (spot.latitude * Math.PI) / 180;
-                const dLat = (radiusM / earthRadius) * (180 / Math.PI);
-                const dLng = ((radiusM / earthRadius) * (180 / Math.PI)) / Math.cos(latRad);
+                let finalGeometry: any = null;
 
-                const ring: [number, number][] = [];
-                for (let i = 0; i <= steps; i++) {
-                    const angle = (i / steps) * 2 * Math.PI;
-                    ring.push([
-                        spot.longitude + dLng * Math.cos(angle),
-                        spot.latitude + dLat * Math.sin(angle),
-                    ]);
+                if (spot.union_geometry) {
+                    finalGeometry = spot.union_geometry;
+                } else {
+                    const radiusM = spot.radius_meters || 20;
+                    const latRad = (spot.latitude * Math.PI) / 180;
+                    const dLat = (radiusM / earthRadius) * (180 / Math.PI);
+                    const dLng = ((radiusM / earthRadius) * (180 / Math.PI)) / Math.cos(latRad);
+
+                    const ring: [number, number][] = [];
+                    for (let i = 0; i <= steps; i++) {
+                        const angle = (i / steps) * 2 * Math.PI;
+                        ring.push([
+                            spot.longitude + dLng * Math.cos(angle),
+                            spot.latitude + dLat * Math.sin(angle),
+                        ]);
+                    }
+                    finalGeometry = {
+                        type: 'Polygon' as const,
+                        coordinates: [ring],
+                    };
                 }
 
                 const typeFreq: Record<string, number> = {};
@@ -1394,13 +1444,8 @@ export default function AccidentHeatmapView({
                     ? (rawBrgy.toLowerCase().startsWith('brgy') ? rawBrgy : `Brgy. ${rawBrgy}`)
                     : 'Barangay Area';
 
-                let finalGeometry: any = {
-                    type: 'Polygon' as const,
-                    coordinates: [ring],
-                };
-
                 // Clip against the incident's barangay boundary polygon so color NEVER crosses the border!
-                if (barangayGeojson?.features?.length) {
+                if (barangayGeojson?.features?.length && finalGeometry) {
                     const spotNorm = normalize(spot.barangay);
                     const brgyFeature = barangayGeojson.features.find((f: any) => {
                         const raw = f.properties?.name || f.properties?.barangay_name || '';
@@ -1409,8 +1454,12 @@ export default function AccidentHeatmapView({
 
                     if (brgyFeature) {
                         try {
-                            const spotPoly = polygon([ring]);
-                            const clipped = intersect(featureCollection([spotPoly, brgyFeature]));
+                            const spotPoly = {
+                                type: 'Feature' as const,
+                                properties: {},
+                                geometry: finalGeometry,
+                            };
+                            const clipped = intersect(featureCollection([spotPoly as any, brgyFeature]));
                             if (clipped?.geometry) {
                                 finalGeometry = clipped.geometry;
                             }
@@ -1435,9 +1484,10 @@ export default function AccidentHeatmapView({
                         dominant_type: dominant ? dominant.type : spot.incident_type || 'None',
                         dominant_percentage: dominant ? dominant.percentage : 100,
                         type_breakdown_json: JSON.stringify(breakdown),
-                        radius_meters: radiusM,
+                        radius_meters: spot.radius_meters || 20,
                         classification: spot.classification,
                         is_red: risk.isRed,
+                        is_merged: (spot.incident_count || 1) > 1,
                     },
                     geometry: finalGeometry,
                 };
@@ -2352,6 +2402,15 @@ export default function AccidentHeatmapView({
                                                         'fill-antialias': true,
                                                     }}
                                                 />
+                                                <Layer
+                                                    id="clipped-risk-stroke"
+                                                    type="line"
+                                                    paint={{
+                                                        'line-color': ['get', 'color'],
+                                                        'line-width': 1.8,
+                                                        'line-opacity': 0.85,
+                                                    }}
+                                                />
                                             </Source>
                                         )}
 
@@ -2578,7 +2637,7 @@ export default function AccidentHeatmapView({
                                                     )}
                                                 </div>
                                                 <p className="text-[10px] text-cyan-400 font-medium mt-0.5 truncate">
-                                                    {hoveredBarangay.locationName || 'Localized Incident Area'} • Heatmap Risk Zone
+                                                    {hoveredBarangay.locationName || 'Localized Incident Area'} • {hoveredBarangay.incidentCount > 1 ? 'Merged 20m Buffer Union Zone' : '20m Incident Hazard Zone'}
                                                 </p>
                                             </div>
                                             <button
@@ -2903,7 +2962,9 @@ export default function AccidentHeatmapView({
                                                         }}
                                                     >
                                                         {activeSelectedHotspot.badge_text ||
-                                                            `${inspectedIncidents.length} in 20m`}
+                                                            (inspectedIncidents.length > 1
+                                                                ? `${inspectedIncidents.length} merged in 20m union`
+                                                                : `${inspectedIncidents.length} in 20m`)}
                                                     </span>
                                                 </div>
                                                 <h2 className="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate">
