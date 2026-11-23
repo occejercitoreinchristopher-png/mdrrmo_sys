@@ -39,6 +39,15 @@ const POSITIONS = [
     { value: 'emt', label: 'Emergency Medical Technician (EMT)' },
 ];
 
+const DEFAULT_TEAMS = [
+    { value: 'Alpha', label: 'Team Alpha' },
+    { value: 'Bravo', label: 'Team Bravo' },
+    { value: 'Charlie', label: 'Team Charlie' },
+    { value: 'Delta', label: 'Team Delta' },
+    { value: 'Echo', label: 'Team Echo' },
+    { value: 'Foxtrot', label: 'Team Foxtrot' },
+];
+
 interface UserFormProps {
     user?: User | null;
     onSubmit?: (form: any) => void;
@@ -96,11 +105,17 @@ export default function UserForm({
     const [form, setForm] = useState(() => getInitialForm(user));
     const [ageError, setAgeError] = useState('');
     const [phoneError, setPhoneError] = useState('');
+    const [isCustomTeam, setIsCustomTeam] = useState(() => {
+        const currentTeam = user?.responder_profile?.team;
+        return Boolean(currentTeam && !DEFAULT_TEAMS.some((t) => t.value.toLowerCase() === String(currentTeam).toLowerCase()));
+    });
 
     useEffect(() => {
         setForm(getInitialForm(user));
         setAgeError('');
         setPhoneError('');
+        const currentTeam = user?.responder_profile?.team;
+        setIsCustomTeam(Boolean(currentTeam && !DEFAULT_TEAMS.some((t) => t.value.toLowerCase() === String(currentTeam).toLowerCase())));
     }, [user]);
 
     const set = (field: string) => (e: any) =>
@@ -516,15 +531,55 @@ export default function UserForm({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {!form.is_reliever ? (
-                            <Input
-                                label="Permanent Team Name"
-                                id="team"
-                                value={form.team}
-                                onChange={set('team')}
-                                error={errors.team}
-                                required
-                                placeholder="e.g. Alpha, Bravo, Charlie"
-                            />
+                            <div className="flex flex-col gap-2">
+                                <Select
+                                    label="Permanent Team"
+                                    id="team"
+                                    value={isCustomTeam ? '__custom__' : (form.team || '')}
+                                    onChange={(val) => {
+                                        if (val === '__custom__') {
+                                            setIsCustomTeam(true);
+                                            setForm((f) => ({ ...f, team: '' }));
+                                        } else {
+                                            setIsCustomTeam(false);
+                                            setForm((f) => ({ ...f, team: val }));
+                                        }
+                                    }}
+                                    options={[
+                                        ...DEFAULT_TEAMS,
+                                        { value: '__custom__', label: '✏️ Other / Custom Team Name...' },
+                                    ]}
+                                    error={!isCustomTeam ? errors.team : undefined}
+                                    required
+                                    placeholder="Select a Team (e.g. Team Alpha)"
+                                />
+
+                                {isCustomTeam && (
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex-1">
+                                            <Input
+                                                label="Custom Team Name"
+                                                id="custom_team"
+                                                value={form.team}
+                                                onChange={set('team')}
+                                                error={errors.team}
+                                                required
+                                                placeholder="e.g. Rescue 1, Golf, Hotel"
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setIsCustomTeam(false);
+                                                setForm((f) => ({ ...f, team: 'Alpha' }));
+                                            }}
+                                            className="mt-6 text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer whitespace-nowrap"
+                                        >
+                                            Back to list
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         ) : (
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
