@@ -68,6 +68,7 @@ export default function UserTable({
     onResetPassword,
     onDelete,
     onRestore,
+    onForceDelete,
     roleFilter = null,
     isArchivedTab = false,
 }: UserTableProps) {
