@@ -148,6 +148,7 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
     Route::get('/callers/search', [IncidentController::class, 'searchCallerPhoneNumbers'])->name('callers.search');
     Route::get('/callers/active-hotline', [IncidentController::class, 'getActiveHotlineCall'])->name('callers.active_hotline');
     Route::post('/incidents/{incident}/verify', [IncidentController::class, 'verify'])->name('incidents.verify');
+    Route::get('/incidents/{incident}', [IncidentController::class, 'show'])->name('incidents.show');
     Route::patch('/incidents/{incident}', [IncidentController::class, 'update'])->name('incidents.update');
     Route::post('/incidents/{incident}/reject', [IncidentController::class, 'reject'])->name('incidents.reject');
     Route::post('/incidents/{incident}/resolve', [IncidentController::class, 'resolve'])->name('incidents.resolve');

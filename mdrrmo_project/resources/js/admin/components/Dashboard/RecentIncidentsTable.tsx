@@ -82,7 +82,7 @@ export default function RecentIncidentsTable({ incidents = [] }: { incidents?: a
                                         </td>
                                         <td className="py-3 px-4 text-right">
                                             <a
-                                                href={`/dispatcher/incidents/${incident.id}`}
+                                                href={`/admin/dispatch-logs/${incident.id}`}
                                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors"
                                             >
                                                 <span>Inspect</span>

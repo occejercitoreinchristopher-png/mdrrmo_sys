@@ -645,6 +645,15 @@ class IncidentController extends Controller
         return redirect()->route('dispatcher.dispatches', ['incident_id' => $incident->id]);
     }
 
+    public function show(Incident $incident)
+    {
+        if ($incident->incident_status === 'resolved' || $incident->is_prank) {
+            return redirect()->route('dispatcher.incidents.records', ['incident_id' => $incident->id]);
+        }
+
+        return redirect()->route('dispatcher.incidents', ['incident_id' => $incident->id]);
+    }
+
     public function update(Request $request, Incident $incident)
     {
         $validated = $request->validate([
@@ -680,7 +689,7 @@ class IncidentController extends Controller
 
         $request->validate([
             'rejection_reason' => 'required|string|max:500',
-            'rejection_category' => 'nullable|string|in:prank,false_alarm,duplicate,out_of_jurisdiction,test_drill,other',
+            'rejection_category' => 'nullable|string|in:prank,false_alarm,duplicate,out_of_jurisdiction,test_drill,no_patient_found,other',
         ]);
 
         $category = $request->input('rejection_category', 'other');

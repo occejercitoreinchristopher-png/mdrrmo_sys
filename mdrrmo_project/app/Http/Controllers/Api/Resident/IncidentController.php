@@ -212,7 +212,7 @@ class IncidentController extends Controller
         ]);
 
         if ($request->hasFile('photo')) {
-            $path = $request->file('photo')->store('incidents', 'public');
+            $path = \App\Services\ImageOptimizerService::storeAndOptimize($request->file('photo'), 'incidents', 'public');
 
             $photoLat = $request->filled('photo_latitude') ? (float) $request->photo_latitude : (float) $validated['latitude'];
             $photoLng = $request->filled('photo_longitude') ? (float) $request->photo_longitude : (float) $validated['longitude'];

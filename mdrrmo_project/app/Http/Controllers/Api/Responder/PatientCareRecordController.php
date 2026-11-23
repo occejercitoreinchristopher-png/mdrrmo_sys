@@ -361,7 +361,7 @@ class PatientCareRecordController extends Controller
 
         // Optional photo(s) attached during submission
         if ($request->hasFile('photo')) {
-            $path = $request->file('photo')->store('pcr_photos', 'public');
+            $path = \App\Services\ImageOptimizerService::storeAndOptimize($request->file('photo'), 'pcr_photos', 'public');
             \App\Models\IncidentImage::create([
                 'incident_id' => $dispatch->incident_id,
                 'dispatch_id' => $dispatch->id,
@@ -379,7 +379,7 @@ class PatientCareRecordController extends Controller
 
         if ($request->hasFile('photos')) {
             foreach ($request->file('photos') as $photoFile) {
-                $path = $photoFile->store('pcr_photos', 'public');
+                $path = \App\Services\ImageOptimizerService::storeAndOptimize($photoFile, 'pcr_photos', 'public');
                 \App\Models\IncidentImage::create([
                     'incident_id' => $dispatch->incident_id,
                     'dispatch_id' => $dispatch->id,
@@ -533,7 +533,7 @@ class PatientCareRecordController extends Controller
         $createdImages = [];
 
         if ($request->hasFile('photo')) {
-            $path = $request->file('photo')->store('pcr_photos', 'public');
+            $path = \App\Services\ImageOptimizerService::storeAndOptimize($request->file('photo'), 'pcr_photos', 'public');
             $createdImages[] = \App\Models\IncidentImage::create([
                 'incident_id' => $dispatch->incident_id,
                 'dispatch_id' => $dispatch->id,
@@ -551,7 +551,7 @@ class PatientCareRecordController extends Controller
 
         if ($request->hasFile('photos')) {
             foreach ($request->file('photos') as $photoFile) {
-                $path = $photoFile->store('pcr_photos', 'public');
+                $path = \App\Services\ImageOptimizerService::storeAndOptimize($photoFile, 'pcr_photos', 'public');
                 $createdImages[] = \App\Models\IncidentImage::create([
                     'incident_id' => $dispatch->incident_id,
                     'dispatch_id' => $dispatch->id,

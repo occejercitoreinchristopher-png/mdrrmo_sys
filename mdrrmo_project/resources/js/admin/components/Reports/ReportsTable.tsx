@@ -273,7 +273,7 @@ export default function ReportsTable({ incidents = [] }: { incidents?: IncidentR
                                         </td>
                                         <td className="py-3 px-4 text-right">
                                             <a
-                                                href={`/dispatcher/incidents/${inc.id}`}
+                                                href={`/admin/dispatch-logs/${inc.id}`}
                                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors"
                                             >
                                                 <span>Inspect</span>

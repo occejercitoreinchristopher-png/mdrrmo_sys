@@ -22,3 +22,28 @@ Schedule::call(function () {
             $user->forceDelete();
         });
 })->daily()->name('purge-archived-users')->withoutOverlapping();
+
+// Auto-clean log files older than 14 days
+Schedule::call(function () {
+    $logPath = storage_path('logs');
+    if (\Illuminate\Support\Facades\File::isDirectory($logPath)) {
+        $threshold = now()->subDays(14)->timestamp;
+        foreach (\Illuminate\Support\Facades\File::files($logPath) as $file) {
+            if ($file->getExtension() === 'log' && $file->getMTime() < $threshold) {
+                \Illuminate\Support\Facades\File::delete($file->getRealPath());
+            }
+        }
+    }
+})->daily()->name('purge-old-logs')->withoutOverlapping();
+
+// Weekly automated database backup (keeping latest 12 archives)
+Schedule::command('app:backup-db --keep=12')
+    ->weeklyOn(0, '03:00')
+    ->name('weekly-db-backup')
+    ->withoutOverlapping();
+
+// 3-Year Automated Historical Data Cold Archiving & Retention Policy
+Schedule::command('app:archive-aged-records --years=3')
+    ->monthlyOn(1, '02:00')
+    ->name('monthly-3year-retention-archive')
+    ->withoutOverlapping();

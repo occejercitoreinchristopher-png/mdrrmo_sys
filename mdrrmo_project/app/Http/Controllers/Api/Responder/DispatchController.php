@@ -656,7 +656,7 @@ class DispatchController extends Controller
     {
         $validated = $request->validate([
             'reason' => 'required|string|max:500',
-            'category' => 'required|in:false_alarm,prank',
+            'category' => 'required|in:false_alarm,prank,no_patient_found,duplicate',
         ]);
 
         $user = Auth::user();

@@ -96,7 +96,7 @@ export default function IncidentTable({
     ambulances = [],
     responders = [],
 }: {
-    incidents?: any[];
+    incidents?: any;
     allHistoryIncidents?: any[];
     pagination?: any;
     statusFilter?: string;
@@ -163,7 +163,19 @@ export default function IncidentTable({
             setPhoneCallModalOpen(true);
             window.history.replaceState({}, '', window.location.pathname);
         }
-    }, []);
+
+        const targetId = params.get('incident_id');
+        if (targetId) {
+            const rawIncidents = incidents as any;
+            const list = Array.isArray(rawIncidents?.data)
+                ? rawIncidents.data
+                : (Array.isArray(incidents) ? incidents : (allHistoryIncidents || []));
+            const found = list.find((i: any) => String(i.id) === String(targetId));
+            if (found) {
+                setViewing(found);
+            }
+        }
+    }, [incidents, allHistoryIncidents]);
 
     // 14 Opol Barangays list
     const availableBarangays = useMemo(() => {

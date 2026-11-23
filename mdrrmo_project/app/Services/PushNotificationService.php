@@ -120,7 +120,7 @@ class PushNotificationService
     }
 
     /**
-     * Notify resident when incident is rejected by Dispatcher.
+     * Notify resident when incident is rejected by Dispatcher or Responders.
      */
     public static function notifyIncidentRejected(Incident $incident): void
     {
@@ -130,6 +130,7 @@ class PushNotificationService
 
         $title = match ($category) {
             'duplicate' => '📋 Duplicate Incident Report',
+            'no_patient_found' => 'ℹ️ Incident Checked: No Patient on Scene',
             'out_of_jurisdiction' => '🗺️ Incident Outside Opol Coverage',
             'false_alarm' => '⚠️ Report Closed as False Alarm',
             'prank' => '🚨 Report Flagged as Prank Call',
@@ -138,14 +139,37 @@ class PushNotificationService
         };
 
         $body = match ($category) {
-            'duplicate' => "Your emergency report was marked as a duplicate of an existing incident. Emergency teams are already handling this area.{$reason}",
+            'duplicate' => "Your emergency report was merged as a duplicate of an existing active incident. Responders are already actively handling this location. No violation was recorded on your account.{$reason}",
+            'no_patient_found' => "Responders arrived on scene and surveyed the area. No patients were found, or the incident was minor and parties already left. No penalty was recorded on your account.{$reason}",
             'out_of_jurisdiction' => "The reported location is outside the coverage area of MDRRMO Opol. Please contact your local municipal hotline.{$reason}",
-            'false_alarm' => "Your emergency report was verified and recorded as a false alarm or accidental call.{$reason}",
-            'prank' => "Your emergency report was verified as unfounded or a prank call.{$reason}",
+            'false_alarm' => "Your emergency report was verified and recorded as a false alarm or accidental call. No violation was recorded on your account.{$reason}",
+            'prank' => "Your emergency report was investigated and flagged as an unfounded or intentional prank call. Intentional prank calls disrupt emergency response and may lead to temporary suspension.{$reason}",
             'test_drill' => "Your emergency report was logged as part of a scheduled drill or system test.{$reason}",
             default => "Your emergency report was reviewed by the Dispatcher and was not approved for dispatch.{$reason}",
         };
 
+        // 1. Persist notification in system_notifications database table for resident
+        if ($resident) {
+            try {
+                \App\Models\SystemNotification::create([
+                    'user_id' => $resident->id,
+                    'incident_id' => $incident->id,
+                    'title' => $title,
+                    'message' => $body,
+                    'type' => 'incident_rejected',
+                    'status' => 'unread',
+                    'data' => [
+                        'category' => $category,
+                        'reason' => $incident->rejection_reason,
+                        'incident_id' => $incident->id,
+                    ],
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to persist SystemNotification for rejected incident: ' . $e->getMessage());
+            }
+        }
+
+        // 2. Send Expo push notification
         self::sendToUser(
             $resident,
             $title,
