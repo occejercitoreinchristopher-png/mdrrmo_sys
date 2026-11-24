@@ -22,13 +22,13 @@ import {
     PhoneForwarded,
     LayoutGrid,
     List,
+    AlertTriangle,
 } from 'lucide-react';
 import AdminLayout from '@/admin/layouts/AdminLayout';
 import PageHeader from '@/shared/components/PageHeader';
 import Card from '@/shared/components/Card';
 import Button from '@/shared/components/Button';
 import SearchInput from '@/shared/components/SearchInput';
-import ConfirmDialog from '@/shared/components/ConfirmDialog';
 import Pagination from '@/shared/components/Pagination';
 
 export interface EmergencyHotline {
@@ -111,6 +111,7 @@ export default function HotlinesIndex({
     const [editingHotline, setEditingHotline] = useState<EmergencyHotline | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<EmergencyHotline | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [deleting, setDeleting] = useState(false);
     const [copiedId, setCopiedId] = useState<number | null>(null);
     const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
@@ -218,13 +219,16 @@ export default function HotlinesIndex({
 
     const handleDelete = () => {
         if (!deleteTarget) return;
+        setDeleting(true);
         router.delete(`/admin/hotlines/${deleteTarget.id}`, {
             preserveScroll: true,
             onSuccess: () => {
+                setDeleting(false);
                 setDeleteTarget(null);
-                toast.success('Hotline deleted successfully');
+                toast.success('Emergency hotline deleted successfully');
             },
             onError: () => {
+                setDeleting(false);
                 toast.error('Failed to delete hotline');
             },
         });
@@ -337,16 +341,6 @@ export default function HotlinesIndex({
                                     <span>Data Table</span>
                                 </button>
                             </div>
-
-                            {/* Prominent Quick Add Hotline Button */}
-                            <Button
-                                variant="primary"
-                                onClick={openCreateModal}
-                                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold flex items-center gap-2 shadow-md shadow-blue-500/20 px-3.5 py-1.5 rounded-xl text-xs"
-                            >
-                                <Plus className="w-4 h-4" />
-                                <span>+ Add Hotline</span>
-                            </Button>
                         </div>
                     </div>
                 </Card>
@@ -522,23 +516,6 @@ export default function HotlinesIndex({
                                         </div>
                                     );
                                 })}
-
-                                {/* Quick Add Hotline Tactical Slot Card */}
-                                <button
-                                    type="button"
-                                    onClick={openCreateModal}
-                                    className="group relative rounded-2xl border-2 border-dashed border-slate-800 hover:border-blue-500/60 bg-slate-900/40 hover:bg-blue-500/5 transition-all duration-200 p-6 flex flex-col items-center justify-center text-center cursor-pointer min-h-[220px] shadow-sm hover:shadow-xl"
-                                >
-                                    <div className="w-14 h-14 rounded-2xl bg-blue-600/10 border border-blue-500/30 text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-all flex items-center justify-center mb-3 group-hover:scale-110 shadow-md">
-                                        <Plus className="w-7 h-7" />
-                                    </div>
-                                    <p className="font-extrabold text-white text-base group-hover:text-blue-400 transition-colors">
-                                        + Add Emergency Hotline
-                                    </p>
-                                    <p className="text-xs text-slate-400 mt-1 max-w-[240px] leading-relaxed">
-                                        Click to register a new emergency agency line for immediate resident mobile access
-                                    </p>
-                                </button>
                             </div>
                         )}
 
@@ -934,15 +911,65 @@ export default function HotlinesIndex({
                 </div>
             )}
 
-            {/* Confirm Delete Dialog */}
-            <ConfirmDialog
-                open={Boolean(deleteTarget)}
-                title="Delete Emergency Hotline?"
-                description={`Are you sure you want to permanently delete "${deleteTarget?.name}" (${deleteTarget?.phone_number})? It will immediately be removed from the resident mobile app.`}
-                confirmLabel="Yes, Delete Hotline"
-                onConfirm={handleDelete}
-                onClose={() => setDeleteTarget(null)}
-            />
+            {/* Confirm Delete Modal */}
+            {deleteTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-6 space-y-5 animate-in zoom-in-95 duration-150">
+                        <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0 shadow-lg shadow-rose-500/10">
+                                <Trash2 className="w-6 h-6" />
+                            </div>
+                            <div className="min-w-0">
+                                <h3 className="text-lg font-bold text-white">Delete Emergency Hotline?</h3>
+                                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                                    Are you sure you want to permanently delete <span className="font-bold text-rose-400">"{deleteTarget.name}"</span> ({deleteTarget.phone_number})?
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 text-xs text-slate-400 space-y-1.5">
+                            <div className="flex items-center gap-2 text-rose-400 font-semibold">
+                                <AlertTriangle className="w-4 h-4 shrink-0" />
+                                <span>Immediate Action:</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 leading-normal">
+                                This hotline will be deleted permanently and will automatically disappear from all resident mobile applications in real-time.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-3 pt-2">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setDeleteTarget(null)}
+                                disabled={deleting}
+                                className="text-slate-400 hover:text-white"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="danger"
+                                onClick={handleDelete}
+                                disabled={deleting}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold flex items-center gap-2 shadow-lg shadow-rose-600/30"
+                            >
+                                {deleting ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        <span>Deleting...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Trash2 className="w-4 h-4" />
+                                        <span>Yes, Delete Hotline</span>
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AdminLayout>
     );
 }
