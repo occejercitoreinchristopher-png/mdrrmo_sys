@@ -20,6 +20,8 @@ import {
     Radio,
     Sparkles,
     PhoneForwarded,
+    LayoutGrid,
+    List,
 } from 'lucide-react';
 import AdminLayout from '@/admin/layouts/AdminLayout';
 import PageHeader from '@/shared/components/PageHeader';
@@ -110,6 +112,7 @@ export default function HotlinesIndex({
     const [deleteTarget, setDeleteTarget] = useState<EmergencyHotline | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [copiedId, setCopiedId] = useState<number | null>(null);
+    const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
     // Form state
     const [formData, setFormData] = useState({
@@ -295,9 +298,9 @@ export default function HotlinesIndex({
                     </Card>
                 </div>
 
-                {/* Filter and Search Bar */}
+                {/* Filter and View Switcher Bar */}
                 <Card className="p-4 bg-slate-900/60 dark:bg-slate-900/80 border-slate-800">
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
                         <div className="flex-1 max-w-md">
                             <SearchInput
                                 value={search}
@@ -305,76 +308,96 @@ export default function HotlinesIndex({
                                 placeholder="Search agency name, tag, phone number..."
                             />
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                            <Sparkles className="w-4 h-4 text-cyan-400" />
-                            <span>Changes reflect live instantly on the resident app</span>
+
+                        <div className="flex items-center justify-between md:justify-end gap-3 flex-wrap">
+                            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                                <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
+                                <span className="hidden sm:inline">Syncs live on resident mobile app</span>
+                            </div>
+
+                            {/* Tactical Layout Switcher */}
+                            <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 shadow-inner">
+                                <button
+                                    type="button"
+                                    onClick={() => setViewMode('cards')}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                                        viewMode === 'cards'
+                                            ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                                            : 'text-slate-400 hover:text-white'
+                                    }`}
+                                >
+                                    <LayoutGrid className="w-3.5 h-3.5" />
+                                    <span>Tactical Cards</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setViewMode('table')}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                                        viewMode === 'table'
+                                            ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                                            : 'text-slate-400 hover:text-white'
+                                    }`}
+                                >
+                                    <List className="w-3.5 h-3.5" />
+                                    <span>Data Table</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </Card>
 
-                {/* Hotline Directory Table */}
-                <Card className="border-slate-800 overflow-hidden bg-slate-900/40">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm text-slate-300">
-                            <thead className="text-xs uppercase bg-slate-800/80 text-slate-400 border-b border-slate-800 font-semibold tracking-wider">
-                                <tr>
-                                    <th className="px-6 py-4">#</th>
-                                    <th className="px-6 py-4">Agency / Service</th>
-                                    <th className="px-6 py-4">Phone Number</th>
-                                    <th className="px-6 py-4">Emergency Scope</th>
-                                    <th className="px-6 py-4">Display Accent</th>
-                                    <th className="px-6 py-4">Mobile Status</th>
-                                    <th className="px-6 py-4 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800/70">
-                                {hotlines.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
-                                            <Phone className="w-10 h-10 mx-auto text-slate-600 mb-2 opacity-50" />
-                                            <p className="font-semibold text-slate-400">No emergency hotlines found</p>
-                                            <p className="text-xs text-slate-600 mt-1">Click "Add Emergency Hotline" to create a new directory entry.</p>
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    hotlines.map((hotline, idx) => {
-                                        const IconComp = getHotlineIcon(hotline.icon_type);
-                                        const isCopied = copiedId === hotline.id;
+                {/* Hotlines Content: Tactical Cards vs Data Table */}
+                {viewMode === 'cards' ? (
+                    /* TACTICAL CARD GRID LAYOUT */
+                    <div>
+                        {hotlines.length === 0 ? (
+                            <Card className="p-12 text-center text-slate-500 border-slate-800 bg-slate-900/40">
+                                <Phone className="w-12 h-12 mx-auto text-slate-600 mb-3 opacity-50" />
+                                <p className="font-bold text-white text-base">No emergency hotlines found</p>
+                                <p className="text-xs text-slate-500 mt-1">Click "Add Emergency Hotline" above to configure an emergency agency.</p>
+                            </Card>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+                                {hotlines.map((hotline, idx) => {
+                                    const IconComp = getHotlineIcon(hotline.icon_type);
+                                    const isCopied = copiedId === hotline.id;
 
-                                        return (
-                                            <tr
-                                                key={hotline.id}
-                                                className="hover:bg-slate-800/30 transition-colors duration-150"
-                                            >
-                                                {/* Sort order / Index */}
-                                                <td className="px-6 py-4 font-mono text-xs text-slate-500 font-bold">
-                                                    #{hotline.sort_order || idx + 1}
-                                                </td>
+                                    return (
+                                        <div
+                                            key={hotline.id}
+                                            className="group relative rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950 border border-slate-800/90 hover:border-slate-700/80 transition-all duration-200 overflow-hidden shadow-lg hover:shadow-2xl flex flex-col justify-between"
+                                        >
+                                            {/* Top dynamic colored accent strip */}
+                                            <div
+                                                className="h-1.5 w-full transition-all"
+                                                style={{ backgroundColor: hotline.accent_color }}
+                                            />
 
-                                                {/* Agency / Name */}
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
+                                            <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                                                {/* Card Header: Tactical Avatar, Name, Short Tag, and Action Buttons */}
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex items-center gap-3 min-w-0">
                                                         <div
-                                                            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border"
+                                                            className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border shadow-md transition-transform group-hover:scale-105"
                                                             style={{
                                                                 backgroundColor: `${hotline.accent_color}1A`,
                                                                 borderColor: `${hotline.accent_color}4D`,
                                                                 color: hotline.accent_color,
                                                             }}
                                                         >
-                                                            <IconComp className="w-5 h-5" />
+                                                            <IconComp className="w-6 h-6" />
                                                         </div>
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-bold text-white text-sm">
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <h4 className="font-extrabold text-base text-white tracking-tight leading-tight truncate">
                                                                     {hotline.name}
-                                                                </span>
+                                                                </h4>
                                                                 {hotline.short_label && (
                                                                     <span
-                                                                        className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border"
+                                                                        className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md border tracking-wider shrink-0"
                                                                         style={{
-                                                                            backgroundColor: `${hotline.accent_color}15`,
-                                                                            borderColor: `${hotline.accent_color}33`,
+                                                                            backgroundColor: `${hotline.accent_color}20`,
+                                                                            borderColor: `${hotline.accent_color}50`,
                                                                             color: hotline.accent_color,
                                                                         }}
                                                                     >
@@ -382,104 +405,283 @@ export default function HotlinesIndex({
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <p className="text-xs text-slate-500 mt-0.5">
-                                                                ID: {hotline.id} • Order: {hotline.sort_order}
+                                                            <div className="flex items-center gap-2 mt-1 text-xs text-slate-400 font-mono">
+                                                                <span className="text-slate-400 font-bold">ORD #{String(hotline.sort_order || idx + 1).padStart(2, '0')}</span>
+                                                                <span>•</span>
+                                                                <span className="text-slate-500 font-semibold">SYS #{hotline.id}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Edit & Delete Action Buttons */}
+                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openEditModal(hotline)}
+                                                            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition border border-slate-700/60 shadow-sm"
+                                                            title="Edit Hotline"
+                                                        >
+                                                            <Pencil className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setDeleteTarget(hotline)}
+                                                            className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition border border-rose-500/20 shadow-sm"
+                                                            title="Delete Hotline"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Description / Scope of Emergency */}
+                                                <p className="text-xs text-slate-300/80 leading-relaxed min-h-[34px] line-clamp-2">
+                                                    {hotline.description || '24/7 designated emergency response line for residents and field dispatch.'}
+                                                </p>
+
+                                                {/* Tactical Dispatch Number & Console */}
+                                                <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/90 flex items-center justify-between gap-3">
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        <div
+                                                            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border"
+                                                            style={{
+                                                                backgroundColor: `${hotline.accent_color}1F`,
+                                                                borderColor: `${hotline.accent_color}40`,
+                                                                color: hotline.accent_color,
+                                                            }}
+                                                        >
+                                                            <PhoneCall className="w-4 h-4" />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Tactical Dispatch Number</p>
+                                                            <p className="font-mono font-black text-sm text-white tracking-wide truncate">
+                                                                {hotline.phone_number}
                                                             </p>
                                                         </div>
                                                     </div>
-                                                </td>
 
-                                                {/* Contact Number */}
-                                                <td className="px-6 py-4 font-mono font-bold text-white">
-                                                    <div className="flex items-center gap-2">
-                                                        <span>{hotline.phone_number}</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleCopyNumber(hotline.id, hotline.phone_number)}
-                                                            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
-                                                            title="Copy number"
-                                                        >
-                                                            {isCopied ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCopyNumber(hotline.id, hotline.phone_number)}
+                                                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition text-xs font-semibold flex items-center gap-1.5 border border-slate-700/60 shrink-0"
+                                                        title="Copy phone number"
+                                                    >
+                                                        {isCopied ? (
+                                                            <>
                                                                 <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                                            ) : (
+                                                                <span className="text-emerald-400 font-bold">Copied</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
                                                                 <Copy className="w-3.5 h-3.5" />
-                                                            )}
-                                                        </button>
-                                                    </div>
-                                                </td>
+                                                                <span>Copy</span>
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
 
-                                                {/* Description */}
-                                                <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">
-                                                    {hotline.description || '—'}
-                                                </td>
-
-                                                {/* Visual Accent */}
-                                                <td className="px-6 py-4">
+                                                {/* Footer: Color Accent indicator & Interactive Mobile Status Pill */}
+                                                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
                                                     <div className="flex items-center gap-2">
                                                         <span
-                                                            className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0 shadow-sm"
+                                                            className="w-2.5 h-2.5 rounded-full border border-white/20"
                                                             style={{ backgroundColor: hotline.accent_color }}
                                                         />
-                                                        <span className="font-mono text-xs text-slate-400">
-                                                            {hotline.accent_color}
-                                                        </span>
+                                                        <span className="text-[11px] font-mono text-slate-400 font-semibold">{hotline.accent_color}</span>
                                                     </div>
-                                                </td>
 
-                                                {/* Mobile Status / Toggle */}
-                                                <td className="px-6 py-4">
                                                     <button
                                                         type="button"
                                                         onClick={() => handleToggleActive(hotline)}
-                                                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition ${
+                                                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold border transition shadow-sm ${
                                                             hotline.is_active
                                                                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-                                                                : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700/50'
+                                                                : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:bg-slate-700/50'
                                                         }`}
                                                         title="Click to toggle mobile app visibility"
                                                     >
                                                         {hotline.is_active ? (
                                                             <>
                                                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                                                <span>Active (Live)</span>
+                                                                <span>Live on Mobile</span>
                                                             </>
                                                         ) : (
                                                             <>
                                                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                                                                <span>Inactive</span>
+                                                                <span>Standby / Inactive</span>
                                                             </>
                                                         )}
                                                     </button>
-                                                </td>
-
-                                                {/* Actions */}
-                                                <td className="px-6 py-4 text-right">
-                                                    <div className="flex items-center justify-end gap-1.5">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => openEditModal(hotline)}
-                                                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition border border-slate-700/60"
-                                                            title="Edit Hotline"
-                                                        >
-                                                            <Pencil className="w-4 h-4" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setDeleteTarget(hotline)}
-                                                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition border border-rose-500/20"
-                                                            title="Delete Hotline"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
+                ) : (
+                    /* COMPACT DATA TABLE LAYOUT */
+                    <Card className="border-slate-800 overflow-hidden bg-slate-900/40">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-slate-300">
+                                <thead className="text-xs uppercase bg-slate-800/80 text-slate-400 border-b border-slate-800 font-semibold tracking-wider">
+                                    <tr>
+                                        <th className="px-6 py-4">#</th>
+                                        <th className="px-6 py-4">Agency / Service</th>
+                                        <th className="px-6 py-4">Phone Number</th>
+                                        <th className="px-6 py-4">Emergency Scope</th>
+                                        <th className="px-6 py-4">Display Accent</th>
+                                        <th className="px-6 py-4">Mobile Status</th>
+                                        <th className="px-6 py-4 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/70">
+                                    {hotlines.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                                                <Phone className="w-10 h-10 mx-auto text-slate-600 mb-2 opacity-50" />
+                                                <p className="font-semibold text-slate-400">No emergency hotlines found</p>
+                                                <p className="text-xs text-slate-600 mt-1">Click "Add Emergency Hotline" to create a new directory entry.</p>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        hotlines.map((hotline, idx) => {
+                                            const IconComp = getHotlineIcon(hotline.icon_type);
+                                            const isCopied = copiedId === hotline.id;
+
+                                            return (
+                                                <tr
+                                                    key={hotline.id}
+                                                    className="hover:bg-slate-800/30 transition-colors duration-150"
+                                                >
+                                                    <td className="px-6 py-4 font-mono text-xs text-slate-500 font-bold">
+                                                        #{hotline.sort_order || idx + 1}
+                                                    </td>
+
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div
+                                                                className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border"
+                                                                style={{
+                                                                    backgroundColor: `${hotline.accent_color}1A`,
+                                                                    borderColor: `${hotline.accent_color}4D`,
+                                                                    color: hotline.accent_color,
+                                                                }}
+                                                            >
+                                                                <IconComp className="w-5 h-5" />
+                                                            </div>
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-bold text-white text-sm">
+                                                                        {hotline.name}
+                                                                    </span>
+                                                                    {hotline.short_label && (
+                                                                        <span
+                                                                            className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border"
+                                                                            style={{
+                                                                                backgroundColor: `${hotline.accent_color}15`,
+                                                                                borderColor: `${hotline.accent_color}33`,
+                                                                                color: hotline.accent_color,
+                                                                            }}
+                                                                        >
+                                                                            {hotline.short_label}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-xs text-slate-500 mt-0.5">
+                                                                    ID: {hotline.id} • Order: {hotline.sort_order}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+
+                                                    <td className="px-6 py-4 font-mono font-bold text-white">
+                                                        <div className="flex items-center gap-2">
+                                                            <span>{hotline.phone_number}</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleCopyNumber(hotline.id, hotline.phone_number)}
+                                                                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                                                                title="Copy number"
+                                                            >
+                                                                {isCopied ? (
+                                                                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                                                ) : (
+                                                                    <Copy className="w-3.5 h-3.5" />
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    </td>
+
+                                                    <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">
+                                                        {hotline.description || '—'}
+                                                    </td>
+
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <span
+                                                                className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0 shadow-sm"
+                                                                style={{ backgroundColor: hotline.accent_color }}
+                                                            />
+                                                            <span className="font-mono text-xs text-slate-400">
+                                                                {hotline.accent_color}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+
+                                                    <td className="px-6 py-4">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleActive(hotline)}
+                                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition ${
+                                                                hotline.is_active
+                                                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                                                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700/50'
+                                                            }`}
+                                                            title="Click to toggle mobile app visibility"
+                                                        >
+                                                            {hotline.is_active ? (
+                                                                <>
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                                                    <span>Active (Live)</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                                                                    <span>Inactive</span>
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    </td>
+
+                                                    <td className="px-6 py-4 text-right">
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openEditModal(hotline)}
+                                                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition border border-slate-700/60"
+                                                                title="Edit Hotline"
+                                                            >
+                                                                <Pencil className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setDeleteTarget(hotline)}
+                                                                className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition border border-rose-500/20"
+                                                                title="Delete Hotline"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
 
                     {/* Pagination */}
                     {pagination && pagination.lastPage > 1 && (
@@ -498,6 +700,7 @@ export default function HotlinesIndex({
                         </div>
                     )}
                 </Card>
+            )}
             </div>
 
             {/* Modal: Add or Edit Hotline */}
