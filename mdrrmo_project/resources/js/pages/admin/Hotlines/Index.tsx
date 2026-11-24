@@ -238,17 +238,12 @@ export default function HotlinesIndex({
                 {/* Header */}
                 <PageHeader
                     title="Emergency Hotlines Directory"
-                    description="Centralized hotline configuration synchronized in real-time across Resident Mobile App and Web Command Center."
-                    breadcrumbs={[
-                        { label: 'Admin', href: '/admin/dashboard' },
-                        { label: 'Operations Fleet', href: '/admin/hotlines' },
-                        { label: 'Emergency Hotlines' },
-                    ]}
-                    action={
+                    subtitle="Centralized hotline configuration synchronized in real-time across Resident Mobile App and Web Command Center."
+                    actions={
                         <Button
                             variant="primary"
                             onClick={openCreateModal}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-2 shadow-lg shadow-blue-500/20"
+                            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold flex items-center gap-2 shadow-lg shadow-blue-500/25 px-4 py-2.5 rounded-xl"
                         >
                             <Plus className="w-4 h-4" />
                             <span>Add Emergency Hotline</span>
@@ -342,6 +337,16 @@ export default function HotlinesIndex({
                                     <span>Data Table</span>
                                 </button>
                             </div>
+
+                            {/* Prominent Quick Add Hotline Button */}
+                            <Button
+                                variant="primary"
+                                onClick={openCreateModal}
+                                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold flex items-center gap-2 shadow-md shadow-blue-500/20 px-3.5 py-1.5 rounded-xl text-xs"
+                            >
+                                <Plus className="w-4 h-4" />
+                                <span>+ Add Hotline</span>
+                            </Button>
                         </div>
                     </div>
                 </Card>
@@ -517,6 +522,23 @@ export default function HotlinesIndex({
                                         </div>
                                     );
                                 })}
+
+                                {/* Quick Add Hotline Tactical Slot Card */}
+                                <button
+                                    type="button"
+                                    onClick={openCreateModal}
+                                    className="group relative rounded-2xl border-2 border-dashed border-slate-800 hover:border-blue-500/60 bg-slate-900/40 hover:bg-blue-500/5 transition-all duration-200 p-6 flex flex-col items-center justify-center text-center cursor-pointer min-h-[220px] shadow-sm hover:shadow-xl"
+                                >
+                                    <div className="w-14 h-14 rounded-2xl bg-blue-600/10 border border-blue-500/30 text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-all flex items-center justify-center mb-3 group-hover:scale-110 shadow-md">
+                                        <Plus className="w-7 h-7" />
+                                    </div>
+                                    <p className="font-extrabold text-white text-base group-hover:text-blue-400 transition-colors">
+                                        + Add Emergency Hotline
+                                    </p>
+                                    <p className="text-xs text-slate-400 mt-1 max-w-[240px] leading-relaxed">
+                                        Click to register a new emergency agency line for immediate resident mobile access
+                                    </p>
+                                </button>
                             </div>
                         )}
                     </div>
