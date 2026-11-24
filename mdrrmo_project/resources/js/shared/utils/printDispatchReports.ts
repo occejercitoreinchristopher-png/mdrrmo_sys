@@ -1055,9 +1055,9 @@ export function printDispatchLogsSummaryReport(
     }
 
     const currentDate = new Date().toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
-    const preparedByName = filters.preparedBy ? filters.preparedBy.trim() : '';
-    const preparedByTitle = filters.preparedByTitle || 'Prepared by / Operations Officer';
-    const approvedByName = filters.approvedBy ? filters.approvedBy.trim() : '';
+    const preparedByName = filters.preparedBy ? filters.preparedBy.trim() : 'REIN CHRISTOPHER EJERCITO';
+    const preparedByTitle = filters.preparedByTitle || 'MDRRMO Operations Officer';
+    const approvedByName = filters.approvedBy ? filters.approvedBy.trim() : 'ENGR. ROMMEL C. LANOY';
     const approvedByTitle = filters.approvedByTitle || 'Approved by / MDRRMO Officer-in-Charge';
 
     // Build descriptive filter summary label for report header
@@ -1354,9 +1354,11 @@ export function printDispatchLogsSummaryReport(
                     const logs = inc.dispatch_logs || [];
                     const latestLog = logs[0] || null;
                     const verifiedBy = inc.verified_by_user || inc.verified_by || inc.verifiedBy;
-                    const dispatcher = latestLog?.user 
-                        ? `${latestLog.user.first_name} ${latestLog.user.last_name}` 
-                        : (verifiedBy ? `${verifiedBy.first_name} ${verifiedBy.last_name}` : '—');
+                    const firstDispatch = inc.dispatches?.[0] || null;
+                    const dispatchUser = latestLog?.user || verifiedBy || firstDispatch?.dispatcher || inc.dispatcher || inc.user;
+                    const dispatcher = dispatchUser 
+                        ? `${dispatchUser.first_name} ${dispatchUser.last_name}` 
+                        : (inc.dispatcher_name || (inc.dispatches?.length > 0 ? 'MDRRMO Dispatcher' : 'Operations Desk'));
                     
                     const dispatches = inc.dispatches || [];
                     const ambList = dispatches.map((d: any) => d.ambulance?.plate_number).filter(Boolean).join(', ');
@@ -1407,14 +1409,14 @@ export function printDispatchLogsSummaryReport(
         <div class="signatures">
             <div class="sig-block">
                 <div class="sig-header">Prepared &amp; Certified By:</div>
+                <div class="sig-name">${preparedByName || 'REIN CHRISTOPHER EJERCITO'}</div>
                 <div class="sig-line"></div>
-                <div class="sig-name">${preparedByName || '&nbsp;'}</div>
                 <div class="sig-title">${preparedByTitle}</div>
             </div>
             <div class="sig-block">
                 <div class="sig-header">Approved &amp; Noted By:</div>
+                <div class="sig-name">${approvedByName || 'ENGR. ROMMEL C. LANOY'}</div>
                 <div class="sig-line"></div>
-                <div class="sig-name">${approvedByName || '&nbsp;'}</div>
                 <div class="sig-title">${approvedByTitle}</div>
             </div>
         </div>

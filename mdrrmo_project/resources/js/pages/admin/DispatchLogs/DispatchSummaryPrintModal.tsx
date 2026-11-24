@@ -48,12 +48,31 @@ export default function DispatchSummaryPrintModal({
     filters = {},
     currentUser,
 }: DispatchSummaryPrintModalProps) {
-    // Blank names by default as requested for manual signature
-    const [preparedByName, setPreparedByName] = useState('');
-    const [preparedByTitle, setPreparedByTitle] = useState('Prepared by / Operations Officer');
-    const [approvedByName, setApprovedByName] = useState('');
-    const [approvedByTitle, setApprovedByTitle] = useState('Approved by / MDRRMO Officer-in-Charge');
+    const userFullName = currentUser
+        ? `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim()
+        : '';
+
+    const defaultPreparedByName = userFullName || 'Rein Christopher Ejercito';
+    const defaultPreparedByTitle = currentUser?.role === 'dispatcher'
+        ? 'Operations Dispatcher / On-Duty'
+        : 'MDRRMO Operations Administrator';
+    const defaultApprovedByName = 'Engr. Rommel C. Lanoy';
+    const defaultApprovedByTitle = 'Approved by / MDRRMO Officer-in-Charge';
+
+    const [preparedByName, setPreparedByName] = useState(defaultPreparedByName);
+    const [preparedByTitle, setPreparedByTitle] = useState(defaultPreparedByTitle);
+    const [approvedByName, setApprovedByName] = useState(defaultApprovedByName);
+    const [approvedByTitle, setApprovedByTitle] = useState(defaultApprovedByTitle);
     const [previewScale, setPreviewScale] = useState<'100' | '90' | '80'>('100');
+
+    useEffect(() => {
+        if (currentUser) {
+            const name = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim();
+            if (name && (!preparedByName || preparedByName === 'Rein Christopher Ejercito')) {
+                setPreparedByName(name);
+            }
+        }
+    }, [currentUser]);
 
     // Build filter text
     const filterParts: string[] = [];
@@ -182,22 +201,22 @@ export default function DispatchSummaryPrintModal({
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <span className="text-slate-400 font-medium text-[11px]">Signatories:</span>
+                        <span className="text-slate-400 font-semibold text-[11px]">Signatories:</span>
                         <input
                             type="text"
                             value={preparedByName}
                             onChange={(e) => setPreparedByName(e.target.value)}
-                            placeholder="(Blank) Prepared by name"
-                            className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 border border-slate-700 text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-red-500 w-44"
-                            title="Prepared by name (Leave blank for manual signature)"
+                            placeholder="Prepared by name"
+                            className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 border border-slate-700 text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-red-500 w-44 font-semibold"
+                            title="Prepared by name"
                         />
                         <input
                             type="text"
                             value={approvedByName}
                             onChange={(e) => setApprovedByName(e.target.value)}
-                            placeholder="(Blank) Approved by name"
-                            className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 border border-slate-700 text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-red-500 w-44"
-                            title="Approved by name (Leave blank for manual signature)"
+                            placeholder="Approved by name"
+                            className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 border border-slate-700 text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-red-500 w-44 font-semibold"
+                            title="Approved by name"
                         />
                     </div>
                 </div>
@@ -357,13 +376,15 @@ export default function DispatchSummaryPrintModal({
                                             const caller = incident.caller_name || (incident.resident ? `${incident.resident.first_name} ${incident.resident.last_name}` : 'Public Caller');
                                             const phone = incident.caller_phone_number || incident.resident?.phone_number || '—';
                                             const dispatches = incident.dispatches || [];
+                                            const firstDispatch = dispatches[0] || null;
                                             const ambulances = dispatches.map((d: any) => d.ambulance?.plate_number).filter(Boolean).join(', ');
                                             const logs = incident.dispatch_logs || [];
                                             const latestLog = logs[0] || null;
                                             const verifiedBy = incident.verified_by_user || incident.verified_by || incident.verifiedBy;
-                                            const dispatcher = latestLog?.user 
-                                                ? `${latestLog.user.first_name} ${latestLog.user.last_name}` 
-                                                : (verifiedBy ? `${verifiedBy.first_name} ${verifiedBy.last_name}` : '—');
+                                            const dispatchUser = latestLog?.user || verifiedBy || firstDispatch?.dispatcher || incident.dispatcher || incident.user;
+                                            const dispatcher = dispatchUser 
+                                                ? `${dispatchUser.first_name} ${dispatchUser.last_name}` 
+                                                : (incident.dispatcher_name || (incident.dispatches?.length > 0 ? 'MDRRMO Dispatcher' : 'Operations Desk'));
 
                                             return (
                                                 <tr key={incident.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
@@ -425,28 +446,28 @@ export default function DispatchSummaryPrintModal({
 
                         {/* 6. Official Signatures Block */}
                         <div className="pt-6 border-t border-slate-200 grid grid-cols-2 gap-8 text-center text-xs">
-                            <div>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-9">
+                            <div className="w-64 mx-auto">
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-8">
                                     Prepared &amp; Certified By:
                                 </p>
-                                <div className="border-b border-slate-900 w-52 mx-auto mb-1.5"></div>
-                                <p className="font-bold text-slate-900 uppercase text-xs min-h-[16px]">
-                                    {preparedByName ? preparedByName : '\u00A0'}
+                                <p className="font-black text-slate-900 uppercase text-xs tracking-wider mb-1">
+                                    {preparedByName || 'REIN CHRISTOPHER EJERCITO'}
                                 </p>
-                                <p className="text-[10px] text-slate-600 font-medium">
+                                <div className="border-b-2 border-slate-900 w-full mb-1"></div>
+                                <p className="text-[10px] text-slate-600 font-semibold">
                                     {preparedByTitle}
                                 </p>
                             </div>
 
-                            <div>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-9">
+                            <div className="w-64 mx-auto">
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-8">
                                     Approved &amp; Noted By:
                                 </p>
-                                <div className="border-b border-slate-900 w-52 mx-auto mb-1.5"></div>
-                                <p className="font-bold text-slate-900 uppercase text-xs min-h-[16px]">
-                                    {approvedByName ? approvedByName : '\u00A0'}
+                                <p className="font-black text-slate-900 uppercase text-xs tracking-wider mb-1">
+                                    {approvedByName || 'ENGR. ROMMEL C. LANOY'}
                                 </p>
-                                <p className="text-[10px] text-slate-600 font-medium">
+                                <div className="border-b-2 border-slate-900 w-full mb-1"></div>
+                                <p className="text-[10px] text-slate-600 font-semibold">
                                     {approvedByTitle}
                                 </p>
                             </div>
