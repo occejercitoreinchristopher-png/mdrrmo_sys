@@ -295,25 +295,32 @@ export default function ManualPinModal({
         });
         const centroid: [number, number] = [sumLng / coords.length, sumLat / coords.length];
 
+        const matchFeatureName = (feat: any): string | null => {
+            const rawName = String(feat.properties?.name || feat.properties?.barangay_name || feat.properties?.BARANGAY || '').trim();
+            if (!rawName) return null;
+            const clean = rawName.toLowerCase().replace(/[\s-]/g, '');
+            if (clean.includes('luyongbon')) return 'Luyongbonbon';
+            for (const b of opolBarangays) {
+                if (b.toLowerCase().replace(/[\s-]/g, '') === clean) return b;
+            }
+            return rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
+        };
+
         for (const feat of barangayGeojson.features) {
             const geom = feat.geometry;
             if (geom.type === 'Polygon') {
                 for (const ring of geom.coordinates) {
                     if (isPointInRing(centroid, ring)) {
-                        const rawName = String(feat.properties?.name || feat.properties?.BARANGAY || '');
-                        if (rawName) {
-                            return rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
-                        }
+                        const matched = matchFeatureName(feat);
+                        if (matched) return matched;
                     }
                 }
             } else if (geom.type === 'MultiPolygon') {
                 for (const poly of geom.coordinates) {
                     for (const ring of poly) {
                         if (isPointInRing(centroid, ring)) {
-                            const rawName = String(feat.properties?.name || feat.properties?.BARANGAY || '');
-                            if (rawName) {
-                                return rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
-                            }
+                            const matched = matchFeatureName(feat);
+                            if (matched) return matched;
                         }
                     }
                 }
@@ -329,8 +336,14 @@ export default function ManualPinModal({
         if (lastGeocodedRef.current === coordKey) return;
         lastGeocodedRef.current = coordKey;
 
+        // Immediate spatial detection from official Opol GeoJSON boundary
+        const coordBrgy = detectBarangayFromCoordinates([[lng, lat]]);
+        if (coordBrgy) {
+            setDetectedBarangay(coordBrgy);
+        }
+
         if (!token) {
-            setAddress(`Opol, Misamis Oriental (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+            setAddress(coordBrgy ? `Brgy. ${coordBrgy}, Opol, Misamis Oriental` : `Opol, Misamis Oriental (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
             return;
         }
 
@@ -347,13 +360,14 @@ export default function ManualPinModal({
             if (placeName) {
                 const trimmed = placeName.slice(0, 255);
                 setAddress(trimmed);
-                const brgy = extractBarangay(trimmed) || detectBarangayFromCoordinates([[lng, lat]]);
+                const brgy = extractBarangay(trimmed) || coordBrgy;
                 if (brgy) setDetectedBarangay(brgy);
             } else {
-                setAddress(`Opol, Misamis Oriental (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+                setAddress(coordBrgy ? `Brgy. ${coordBrgy}, Opol, Misamis Oriental` : `Opol, Misamis Oriental (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
             }
         } catch {
-            setAddress(`Opol, Misamis Oriental (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+            if (coordBrgy) setDetectedBarangay(coordBrgy);
+            setAddress(coordBrgy ? `Brgy. ${coordBrgy}, Opol, Misamis Oriental` : `Opol, Misamis Oriental (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
         } finally {
             setIsGeocoding(false);
         }
@@ -576,7 +590,10 @@ export default function ManualPinModal({
                 formData.append('pin_description', description.trim().slice(0, 255));
             }
 
-            const resolvedBrgy = detectedBarangay || extractBarangay(address);
+            const coordsForFallback: Array<[number, number]> =
+                inputMode === 'POINT' ? [[parsedLng, parsedLat]] : polygonVertices;
+            const coordFallback = detectBarangayFromCoordinates(coordsForFallback);
+            const resolvedBrgy = detectedBarangay || extractBarangay(address) || coordFallback;
             if (resolvedBrgy) {
                 formData.append('barangay_name', resolvedBrgy);
             }

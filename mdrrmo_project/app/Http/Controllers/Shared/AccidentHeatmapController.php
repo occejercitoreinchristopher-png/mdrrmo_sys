@@ -395,31 +395,91 @@ class AccidentHeatmapController extends Controller
 
         $rawManualPins = $manualPinsQuery->orderBy('created_at', 'desc')->get();
 
-        $manualPinsData = $rawManualPins
-            ->filter(function ($pin) use ($matchesBarangays, $selectedBarangays) {
-                $brgyName = $pin->barangay?->barangay_name;
-                if (! $brgyName && ! empty($pin->pin_address)) {
-                    foreach (Incident::OPOL_BARANGAYS as $b) {
-                        if (stripos($pin->pin_address, $b) !== false) {
-                            $brgyName = $b;
-                            break;
+        // Comprehensive barangay resolver for manual pins (supports FK, textual address/area, point coords & polygon vertices)
+        $resolveManualPinBarangays = function ($pin) {
+            $matchedBarangays = [];
+
+            // 1. Direct relationship from 3NF table
+            if ($pin->barangay?->barangay_name) {
+                $matchedBarangays[] = $pin->barangay->barangay_name;
+            }
+
+            // 2. Textual search in pin_address and area_name
+            $text = ($pin->pin_address ?? '') . ' ' . ($pin->area_name ?? '');
+            if (stripos($text, 'luyong') !== false) {
+                $matchedBarangays[] = 'Luyongbonbon';
+            }
+            foreach (Incident::OPOL_BARANGAYS as $b) {
+                if ($b !== 'Luyongbonbon' && stripos($text, $b) !== false) {
+                    $matchedBarangays[] = $b;
+                }
+            }
+
+            // 3. Point spatial resolution from coordinates
+            if ($pin->pin_latitude && $pin->pin_longitude) {
+                $spBrgy = Incident::resolveBarangayFromCoordinates($pin->pin_latitude, $pin->pin_longitude);
+                if ($spBrgy) {
+                    $matchedBarangays[] = $spBrgy;
+                }
+            }
+
+            // 4. Polygon spatial resolution (centroid + vertices against official Opol boundaries)
+            if (! empty($pin->polygon_coordinates) && is_array($pin->polygon_coordinates)) {
+                $sLng = 0; $sLat = 0; $cnt = 0;
+                foreach ($pin->polygon_coordinates as $pt) {
+                    if (is_array($pt) && count($pt) >= 2) {
+                        $sLng += (float) $pt[0];
+                        $sLat += (float) $pt[1];
+                        $cnt++;
+                        $vBrgy = Incident::resolveBarangayFromCoordinates($pt[1], $pt[0]);
+                        if ($vBrgy) {
+                            $matchedBarangays[] = $vBrgy;
                         }
                     }
                 }
-                return $matchesBarangays($brgyName, $selectedBarangays);
+                if ($cnt > 0) {
+                    $cBrgy = Incident::resolveBarangayFromCoordinates($sLat / $cnt, $sLng / $cnt);
+                    if ($cBrgy) {
+                        $matchedBarangays[] = $cBrgy;
+                    }
+                }
+            }
+
+            return array_values(array_unique($matchedBarangays));
+        };
+
+        $manualPinsData = $rawManualPins
+            ->filter(function ($pin) use ($resolveManualPinBarangays, $matchesBarangays, $selectedBarangays) {
+                if (empty($selectedBarangays)) {
+                    return true;
+                }
+                $pinBrgys = $resolveManualPinBarangays($pin);
+                if (empty($pinBrgys)) {
+                    return false;
+                }
+                foreach ($pinBrgys as $b) {
+                    if ($matchesBarangays($b, $selectedBarangays)) {
+                        return true;
+                    }
+                }
+                return false;
             })
-            ->map(function ($pin) {
+            ->map(function ($pin) use ($resolveManualPinBarangays) {
                 $resolvedTypeName = $pin->incidentType?->incident_type_name
                     ?: ($pin->custom_pin_type ?: 'Custom Hazard Pin');
-                $resolvedBarangay = $pin->barangay?->barangay_name;
-                if (! $resolvedBarangay && ! empty($pin->pin_address)) {
-                    foreach (Incident::OPOL_BARANGAYS as $b) {
-                        if (stripos($pin->pin_address, $b) !== false) {
-                            $resolvedBarangay = $b;
-                            break;
-                        }
+
+                $pinBrgys = $resolveManualPinBarangays($pin);
+                $resolvedBarangay = ! empty($pinBrgys) ? $pinBrgys[0] : 'Opol';
+
+                // Self-heal: If pin currently has NULL barangay_id in DB, assign the matched Barangay FK
+                if (! $pin->barangay_id && $resolvedBarangay !== 'Opol') {
+                    $norm = strtolower(preg_replace('/[^a-z0-9]/', '', $resolvedBarangay));
+                    $matched = Barangay::all()->first(fn($b) => strtolower(preg_replace('/[^a-z0-9]/', '', $b->barangay_name)) === $norm);
+                    if ($matched) {
+                        $pin->updateQuietly(['barangay_id' => $matched->id]);
                     }
                 }
+
                 $resolvedBarangay = $resolvedBarangay ?: 'Opol';
 
                 $typeFilterKey = $pin->incident_type_id
@@ -665,27 +725,48 @@ class AccidentHeatmapController extends Controller
         }
 
         $address = trim((string) ($validated['pin_address'] ?? ''));
-        if ($address === '') {
-            $areaName = trim((string) ($validated['area_name'] ?? ''));
-            $address = $areaName !== '' ? $areaName : ($geomType === 'POLYGON' ? 'Incident-Prone Polygon Area' : 'Opol, Misamis Oriental');
-        }
 
         // Strict 3NF: resolve barangay_id FK from barangays table
         $barangayName = trim((string) ($validated['barangay_name'] ?? ''));
+        // 1. Spatial resolution from Point / Centroid coordinates
+        if ($barangayName === '' && $lat && $lng) {
+            $barangayName = Incident::resolveBarangayFromCoordinates($lat, $lng) ?? '';
+        }
+        // 2. Textual search in address or area_name
         if ($barangayName === '') {
-            foreach (Incident::OPOL_BARANGAYS as $b) {
-                if (stripos($address, $b) !== false) {
-                    $barangayName = $b;
-                    break;
+            $checkText = $address . ' ' . trim((string) ($validated['area_name'] ?? ''));
+            if (stripos($checkText, 'luyong') !== false) {
+                $barangayName = 'Luyongbonbon';
+            } else {
+                foreach (Incident::OPOL_BARANGAYS as $b) {
+                    if ($b !== 'Luyongbonbon' && stripos($checkText, $b) !== false) {
+                        $barangayName = $b;
+                        break;
+                    }
                 }
             }
         }
 
         $barangayId = null;
+        $matchedBarangay = null;
         if ($barangayName !== '') {
-            $cleanBrgy = preg_replace('/^brgy\.?\s*|^barangay\s*/i', '', $barangayName);
-            $matchedBarangay = Barangay::whereRaw('LOWER(barangay_name) = ?', [strtolower(trim($cleanBrgy))])->first();
+            $cleanBrgy = trim(preg_replace('/^(brgy\.?|barangay)\s*/i', '', $barangayName));
+            $norm = strtolower(preg_replace('/[^a-z0-9]/', '', $cleanBrgy));
+            $matchedBarangay = Barangay::all()->first(function ($b) use ($norm) {
+                return strtolower(preg_replace('/[^a-z0-9]/', '', $b->barangay_name)) === $norm;
+            });
             $barangayId = $matchedBarangay?->id;
+        }
+
+        if ($address === '' || $address === 'Opol, Misamis Oriental' || $address === 'Incident-Prone Polygon Area') {
+            $areaName = trim((string) ($validated['area_name'] ?? ''));
+            if ($areaName !== '') {
+                $address = $areaName;
+            } elseif ($matchedBarangay) {
+                $address = "Brgy. {$matchedBarangay->barangay_name}, Opol, Misamis Oriental";
+            } else {
+                $address = $geomType === 'POLYGON' ? 'Incident-Prone Polygon Area' : 'Opol, Misamis Oriental';
+            }
         }
 
         $pin = HeatmapManualPin::create([

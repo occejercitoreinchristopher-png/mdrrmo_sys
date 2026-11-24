@@ -291,7 +291,26 @@ function formatManualPinRecord(pin: any): IncidentRecord {
         pin?.incident_type?.name ||
         pin?.custom_pin_type ||
         'Custom Hazard';
-    const brgyName = pin?.barangay?.barangay_name || pin?.barangay_name || 'Opol';
+    let brgyName = pin?.barangay?.barangay_name || pin?.barangay_name || '';
+    if (!brgyName && pin?.pin_address) {
+        const addrLower = String(pin.pin_address).toLowerCase();
+        const opolList = [
+            'awang', 'bagocboc', 'barra', 'bonbon', 'cauyonan',
+            'igpit', 'limonda', 'luyongbonbon', 'malanang',
+            'nangcaon', 'patag', 'poblacion', 'taboc', 'tingalan'
+        ];
+        if (addrLower.includes('luyong')) {
+            brgyName = 'Luyongbonbon';
+        } else {
+            for (const b of opolList) {
+                if (addrLower.includes(b)) {
+                    brgyName = b.charAt(0).toUpperCase() + b.slice(1);
+                    break;
+                }
+            }
+        }
+    }
+    brgyName = brgyName || 'Opol';
     const rawCoords = pin?.polygon_coordinates;
     let parsedCoords: Array<[number, number]> | null = null;
     if (Array.isArray(rawCoords)) {
@@ -857,12 +876,70 @@ export default function AccidentHeatmapView({
                 if (!matched) return false;
             }
 
-            // Multi-Select Barangay Filter (Strict Exact Match to avoid Bonbon / Luyongbonbon substring collisions)
+            // Multi-Select Barangay Filter (Strict Exact Match with spatial boundary & address resolution for manual pins)
             if (selectedBarangays.length > 0) {
                 const cleanBrgy = (str: string) =>
                     (str || '').toLowerCase().replace(/^(brgy\.?|barangay)\s*/i, '').replace(/[^a-z0-9]/g, '');
                 const incBrgy = cleanBrgy(inc.barangay);
-                const matchedBrgy = selectedBarangays.some((b) => cleanBrgy(b) === incBrgy);
+                let matchedBrgy = selectedBarangays.some((b) => cleanBrgy(b) === incBrgy);
+
+                // For manual pins, also support spatial coordinates or address check against filtered barangays
+                if (!matchedBrgy && inc.is_manual_pin) {
+                    const text = `${inc.address || ''} ${inc.area_name || ''} ${inc.purok_or_location || ''}`.toLowerCase();
+                    matchedBrgy = selectedBarangays.some((b) => {
+                        const targetNorm = cleanBrgy(b);
+                        if (targetNorm === 'luyongbonbon' && text.includes('luyong')) return true;
+                        if (targetNorm !== 'bonbon' && text.includes(targetNorm)) return true;
+
+                        // Spatial point check against barangayGeojson
+                        if (barangayGeojson?.features && typeof inc.latitude === 'number' && typeof inc.longitude === 'number') {
+                            for (const feat of barangayGeojson.features) {
+                                const fName = cleanBrgy(feat.properties?.name || feat.properties?.barangay_name || '');
+                                if (fName === targetNorm) {
+                                    const geom = feat.geometry;
+                                    const pt: [number, number] = [inc.longitude, inc.latitude];
+                                    if (geom.type === 'Polygon') {
+                                        for (const ring of geom.coordinates) {
+                                            if (isPointInPolygon(pt, ring)) return true;
+                                        }
+                                    } else if (geom.type === 'MultiPolygon') {
+                                        for (const poly of geom.coordinates) {
+                                            for (const ring of poly) {
+                                                if (isPointInPolygon(pt, ring)) return true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Spatial polygon vertex check against barangayGeojson
+                        if (Array.isArray(inc.polygon_coordinates) && barangayGeojson?.features) {
+                            for (const feat of barangayGeojson.features) {
+                                const fName = cleanBrgy(feat.properties?.name || feat.properties?.barangay_name || '');
+                                if (fName === targetNorm) {
+                                    const geom = feat.geometry;
+                                    for (const [vLng, vLat] of inc.polygon_coordinates) {
+                                        const pt: [number, number] = [vLng, vLat];
+                                        if (geom.type === 'Polygon') {
+                                            for (const ring of geom.coordinates) {
+                                                if (isPointInPolygon(pt, ring)) return true;
+                                            }
+                                        } else if (geom.type === 'MultiPolygon') {
+                                            for (const poly of geom.coordinates) {
+                                                for (const ring of poly) {
+                                                    if (isPointInPolygon(pt, ring)) return true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return false;
+                    });
+                }
+
                 if (!matchedBrgy) return false;
             }
 
@@ -888,7 +965,7 @@ export default function AccidentHeatmapView({
 
             return true;
         });
-    }, [localIncidents, selectedEmergencyTypes, selectedBarangays, selectedYears, selectedMonths, selectedStatus]);
+    }, [localIncidents, selectedEmergencyTypes, selectedBarangays, selectedYears, selectedMonths, selectedStatus, barangayGeojson]);
 
     // Haversine distance in meters (matches backend AccidentHeatmapController)
     const haversineMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
