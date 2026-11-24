@@ -936,9 +936,9 @@ export default function HotlinesIndex({
 
             {/* Confirm Delete Dialog */}
             <ConfirmDialog
-                isOpen={Boolean(deleteTarget)}
+                open={Boolean(deleteTarget)}
                 title="Delete Emergency Hotline?"
-                message={`Are you sure you want to permanently delete "${deleteTarget?.name}" (${deleteTarget?.phone_number})? It will immediately be removed from the resident mobile app.`}
+                description={`Are you sure you want to permanently delete "${deleteTarget?.name}" (${deleteTarget?.phone_number})? It will immediately be removed from the resident mobile app.`}
                 confirmLabel="Yes, Delete Hotline"
                 onConfirm={handleDelete}
                 onClose={() => setDeleteTarget(null)}
