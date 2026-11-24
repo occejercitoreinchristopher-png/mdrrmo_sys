@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AmbulanceController;
 use App\Http\Controllers\Admin\BarangayController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\HotlineController as AdminHotlineController;
 use App\Http\Controllers\Admin\IncidentTypeController;
 use App\Http\Controllers\Admin\LocationCodeController;
 use App\Http\Controllers\Admin\ReportController;
@@ -104,6 +105,11 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::get('/ambulances', [AmbulanceController::class, 'index'])->name('ambulances');
     Route::post('/ambulances', [AmbulanceController::class, 'store'])->name('ambulances.store');
     Route::patch('/ambulances/{ambulance}', [AmbulanceController::class, 'update'])->name('ambulances.update');
+    Route::get('/hotlines', [AdminHotlineController::class, 'index'])->name('hotlines');
+    Route::post('/hotlines', [AdminHotlineController::class, 'store'])->name('hotlines.store');
+    Route::put('/hotlines/{hotline}', [AdminHotlineController::class, 'update'])->name('hotlines.update');
+    Route::patch('/hotlines/{hotline}/toggle-active', [AdminHotlineController::class, 'toggleActive'])->name('hotlines.toggle-active');
+    Route::delete('/hotlines/{hotline}', [AdminHotlineController::class, 'destroy'])->name('hotlines.destroy');
     Route::get('/incident-types', [IncidentTypeController::class, 'index'])->name('incident-types');
     Route::post('/incident-types', [IncidentTypeController::class, 'store'])->name('incident-types.store');
     Route::patch('/incident-types/{incidentType}', [IncidentTypeController::class, 'update'])->name('incident-types.update');

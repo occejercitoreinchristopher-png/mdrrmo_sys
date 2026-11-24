@@ -24,6 +24,7 @@ Route::get('/ping', fn () => response()->json(['status' => 'ok', 'timestamp' => 
 Route::get('/barangays', fn () => response()->json(Barangay::orderBy('barangay_name')->get(['id', 'barangay_name'])));
 Route::get('/incident-types', fn () => response()->json(IncidentType::orderBy('id')->get(['id', 'incident_type_name', 'type_description'])));
 Route::get('/chief-complaints', [\App\Http\Controllers\Shared\ChiefComplaintController::class, 'index']);
+Route::get('/hotlines', [\App\Http\Controllers\Api\Resident\HotlineController::class, 'index']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Broadcast::routes(['middleware' => ['auth:sanctum']]);
@@ -46,6 +47,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/incidents/{incident}/location', [ResidentIncidentController::class, 'updateLocation']);
         Route::post('/incidents/{incident}/cancel', [ResidentIncidentController::class, 'cancel']);
         Route::post('/incidents/{incident}/call-responder', [ResidentIncidentController::class, 'callResponder']);
+        Route::get('/hotlines', [\App\Http\Controllers\Api\Resident\HotlineController::class, 'index']);
         Route::post('/hotline/call', [ResidentIncidentController::class, 'callHotline']);
     });
 

@@ -12,6 +12,7 @@ import {
     PanelLeft,
     PanelLeftClose,
     PhoneCall,
+    Phone,
     AlertTriangle,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -36,6 +37,7 @@ const navigation = [
             { label: 'Dispatch Logs', icon: PhoneCall, href: '/admin/dispatch-logs' },
             { label: 'Ambulance Fleet', icon: Ambulance, href: '/admin/ambulances' },
             { label: 'Barangays & Locations', icon: MapPin, href: '/admin/barangays' },
+            { label: 'Emergency Hotlines', icon: Phone, href: '/admin/hotlines' },
         ],
     },
     {
