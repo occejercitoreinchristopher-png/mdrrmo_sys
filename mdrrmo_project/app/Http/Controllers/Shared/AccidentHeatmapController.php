@@ -540,7 +540,7 @@ class AccidentHeatmapController extends Controller
                     'incident_type_id' => $pin->incident_type_id,
                     'type_filter_key' => $typeFilterKey,
                     'status' => 'manual_pin',
-                    'priority' => 'Manual Pin',
+                    'priority' => $riskLevel,
                     'address' => $pin->pin_address ?: $areaName,
                     'purok_or_location' => $pin->pin_address ?: $areaName,
                     'barangay' => $resolvedBarangay,
@@ -1020,24 +1020,62 @@ class AccidentHeatmapController extends Controller
             $highMin = $isSpecificType ? 4 : 9;
             $modMin = $isSpecificType ? 3 : 5;
 
+            // Frequency-based count rank: 4 = High, 3 = Mod-High, 2 = Moderate, 1 = Low
             if ($count >= $highMin) {
-                $color = '#EF4444'; // Red
+                $countRank = 4;
+            } elseif ($count >= $modMin) {
+                $countRank = 3;
+            } elseif ($count >= ($isSpecificType ? 2 : 3)) {
+                $countRank = 2;
+            } else {
+                $countRank = 1;
+            }
+
+            // Check if any manual pin in this cluster has an explicit risk level
+            $manualRiskRank = 0;
+            foreach ($c['incidents'] as $item) {
+                $lvl = strtolower((string) ($item['risk_level'] ?? ($item['priority'] ?? '')));
+                $r = 0;
+                if (str_contains($lvl, 'high') && ! str_contains($lvl, 'mod')) {
+                    $r = 4;
+                } elseif (str_contains($lvl, 'mod-high') || str_contains($lvl, 'moderate-high')) {
+                    $r = 3;
+                } elseif (str_contains($lvl, 'mod')) {
+                    $r = 2;
+                } elseif (str_contains($lvl, 'low')) {
+                    $r = 1;
+                }
+                if ($r > $manualRiskRank) {
+                    $manualRiskRank = $r;
+                }
+            }
+
+            $effectiveRank = max($countRank, $manualRiskRank);
+
+            if ($effectiveRank >= 4) {
+                $color = '#E53935'; // Red
                 $classification = 'High Incident Concentration';
                 $intensity = 'Critical';
                 $intensityClass = 'critical';
-                $badgeText = $isSpecificType ? 'High (4+)' : 'High (9+)';
-            } elseif ($count >= $modMin) {
-                $color = '#F97316'; // Orange
+                $badgeText = $count >= $highMin ? ($isSpecificType ? 'High (4+)' : 'High (9+)') : 'High Risk';
+            } elseif ($effectiveRank === 3) {
+                $color = '#FB8C00'; // Orange
                 $classification = 'Moderate Incident Concentration';
                 $intensity = 'High';
                 $intensityClass = 'high';
-                $badgeText = $isSpecificType ? 'Moderate (3)' : 'Moderate (5-8)';
+                $badgeText = $count >= $modMin ? ($isSpecificType ? 'Moderate (3)' : 'Moderate (5-8)') : 'Mod-High Risk';
+            } elseif ($effectiveRank === 2) {
+                $color = '#FDD835'; // Yellow
+                $classification = 'Moderate Incident Concentration';
+                $intensity = 'Moderate';
+                $intensityClass = 'moderate';
+                $badgeText = 'Moderate Risk';
             } else {
-                $color = '#EAB308'; // Yellow
+                $color = '#43A047'; // Green
                 $classification = 'Low Incident Concentration';
                 $intensity = 'Moderate';
                 $intensityClass = 'moderate';
-                $badgeText = $isSpecificType ? 'Low (1-2)' : 'Low (1-4)';
+                $badgeText = $isSpecificType ? 'Low (1)' : 'Low (1-2)';
             }
 
             // Compute dominant emergency type & unique type list for mixed clusters

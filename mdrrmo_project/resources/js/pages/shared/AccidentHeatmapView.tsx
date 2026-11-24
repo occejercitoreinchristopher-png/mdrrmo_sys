@@ -171,6 +171,8 @@ interface HotspotRecord {
     }>;
     meets_threshold: boolean;
     rank?: number;
+    highest_manual_risk?: string | null;
+    risk_record?: any;
     superseded_manual_areas?: IncidentRecord[];
     union_geometry?: any;
 }
@@ -1033,15 +1035,32 @@ export default function AccidentHeatmapView({
     // Classify 20-Meter Localized Incident Risk:
     // - Specific Emergency Type: 1 Low (Green), 2 Moderate (Yellow), 3 Mod-High (Orange), 4+ High (Red)
     // - All Emergency Types:     1-2 Low (Green), 3-4 Moderate (Yellow), 5-8 Mod-High (Orange), 9+ High (Red)
-    const classifyClusterRisk = (count: number, isSpecificType: boolean) => {
+    // - Explicit manual pin risk (High, Moderate-High, Moderate, Low) elevates the cluster risk
+    const classifyClusterRisk = (count: number, isSpecificType: boolean, explicitRiskLevel?: string | null) => {
         const highMin = isSpecificType ? 4 : 9;
         const modHighMin = isSpecificType ? 3 : 5;
         const modMin = isSpecificType ? 2 : 3;
 
-        const isRed = count >= highMin;
-        const isOrange = !isRed && count >= modHighMin;
-        const isYellow = !isRed && !isOrange && count >= modMin;
-        const isGreen = !isRed && !isOrange && !isYellow && count > 0;
+        const countIsRed = count >= highMin;
+        const countIsOrange = !countIsRed && count >= modHighMin;
+        const countIsYellow = !countIsRed && !countIsOrange && count >= modMin;
+        const countRank = countIsRed ? 4 : countIsOrange ? 3 : countIsYellow ? 2 : count > 0 ? 1 : 0;
+
+        let explicitRank = 0;
+        if (explicitRiskLevel) {
+            const l = explicitRiskLevel.toLowerCase().trim();
+            if (l.includes('high') && !l.includes('mod')) explicitRank = 4;
+            else if (l.includes('mod-high') || l.includes('moderate-high')) explicitRank = 3;
+            else if (l.includes('mod')) explicitRank = 2;
+            else if (l.includes('low')) explicitRank = 1;
+        }
+
+        const effectiveRank = Math.max(countRank, explicitRank);
+
+        const isRed = effectiveRank >= 4;
+        const isOrange = effectiveRank === 3;
+        const isYellow = effectiveRank === 2;
+        const isGreen = effectiveRank === 1 || (effectiveRank === 0 && count > 0);
 
         const color = isRed
             ? '#E53935'
@@ -1067,6 +1086,20 @@ export default function AccidentHeatmapView({
                     ? 'Moderate Risk Area'
                     : 'Low Risk Area';
 
+        const intensity = (isRed ? 'Critical' : isOrange ? 'High' : 'Moderate') as HotspotRecord['intensity'];
+        const intensityClass = (isRed ? 'critical' : isOrange ? 'high' : 'moderate') as HotspotRecord['intensity_class'];
+
+        let badgeText = '';
+        if (isRed) {
+            badgeText = count >= highMin ? (isSpecificType ? 'High (4+)' : 'High (9+)') : 'High Risk';
+        } else if (isOrange) {
+            badgeText = count >= modHighMin ? (isSpecificType ? 'Mod-High (3)' : 'Mod-High (5-8)') : 'Mod-High Risk';
+        } else if (isYellow) {
+            badgeText = count >= modMin ? (isSpecificType ? 'Moderate (2)' : 'Moderate (3-4)') : 'Moderate Risk';
+        } else {
+            badgeText = isSpecificType ? 'Low (1)' : 'Low (1-2)';
+        }
+
         return {
             isRed,
             isOrange,
@@ -1075,23 +1108,9 @@ export default function AccidentHeatmapView({
             color,
             level,
             classification,
-            intensity: (isRed ? 'Critical' : isOrange ? 'High' : 'Moderate') as HotspotRecord['intensity'],
-            intensityClass: (isRed ? 'critical' : isOrange ? 'high' : 'moderate') as HotspotRecord['intensity_class'],
-            badgeText: isRed
-                ? isSpecificType
-                    ? 'High (4+)'
-                    : 'High (9+)'
-                : isOrange
-                    ? isSpecificType
-                        ? 'Mod-High (3)'
-                        : 'Mod-High (5-8)'
-                    : isYellow
-                        ? isSpecificType
-                            ? 'Moderate (2)'
-                            : 'Moderate (3-4)'
-                        : isSpecificType
-                            ? 'Low (1)'
-                            : 'Low (1-2)',
+            intensity,
+            intensityClass,
+            badgeText,
         };
     };
 
@@ -1183,8 +1202,28 @@ export default function AccidentHeatmapView({
             .map((incidentsInCluster) => {
                 const sorted = [...incidentsInCluster].sort((a, b) => b.id - a.id);
                 const count = sorted.length;
-                const risk = classifyClusterRisk(count, isSpecificEmergencyType);
-                const { color, classification, intensity, intensityClass, badgeText } = risk;
+
+                // Find highest explicit risk level among incidents in this cluster (e.g. from manual pins)
+                let highestManualRisk: string | null = null;
+                let highestManualRank = 0;
+                sorted.forEach((inc) => {
+                    const rLevel = inc.risk_level || (inc.is_manual_pin ? inc.priority : null);
+                    if (rLevel) {
+                        const l = rLevel.toLowerCase().trim();
+                        let r = 0;
+                        if (l.includes('high') && !l.includes('mod')) r = 4;
+                        else if (l.includes('mod-high') || l.includes('moderate-high')) r = 3;
+                        else if (l.includes('mod')) r = 2;
+                        else if (l.includes('low')) r = 1;
+                        if (r > highestManualRank) {
+                            highestManualRank = r;
+                            highestManualRisk = rLevel;
+                        }
+                    }
+                });
+
+                const risk = classifyClusterRisk(count, isSpecificEmergencyType, highestManualRisk);
+                const { color, classification, intensity, intensityClass, badgeText, level } = risk;
 
                 // Centroid coordinates for marker pin placement
                 const totalLat = sorted.reduce((sum, inc) => sum + Number(inc.latitude), 0);
@@ -1265,6 +1304,9 @@ export default function AccidentHeatmapView({
                         status: i.status || '',
                     })),
                     color,
+                    level,
+                    highest_manual_risk: highestManualRisk,
+                    risk_record: risk,
                     classification,
                     intensity,
                     intensity_class: intensityClass,
@@ -1546,7 +1588,7 @@ export default function AccidentHeatmapView({
                     }
                 }
 
-                const risk = classifyClusterRisk(spot.incident_count, isSpecificEmergencyType);
+                const risk = (spot as any).risk_record || classifyClusterRisk(spot.incident_count, isSpecificEmergencyType, (spot as any).highest_manual_risk);
 
                 return {
                     type: 'Feature' as const,
@@ -2517,7 +2559,7 @@ export default function AccidentHeatmapView({
 
                                         {/* 3. Pulsing Red Radar Beat Ring at Center of High (4+) Clusters */}
                                         {activeHotspots.map((spot, idx) => {
-                                            const risk = classifyClusterRisk(spot.incident_count, isSpecificEmergencyType);
+                                            const risk = (spot as any).risk_record || classifyClusterRisk(spot.incident_count, isSpecificEmergencyType, (spot as any).highest_manual_risk);
                                             if (!risk.isRed || absorbedHotspotClusterKeys.has(spot.cluster_key)) return null;
 
                                             return (
@@ -3763,7 +3805,8 @@ export default function AccidentHeatmapView({
                                                                 {spot.badge_text ||
                                                                     classifyClusterRisk(
                                                                         spot.incident_count,
-                                                                        isSpecificEmergencyType
+                                                                        isSpecificEmergencyType,
+                                                                        (spot as any).highest_manual_risk
                                                                     ).badgeText}
                                                             </span>
                                                         </div>
