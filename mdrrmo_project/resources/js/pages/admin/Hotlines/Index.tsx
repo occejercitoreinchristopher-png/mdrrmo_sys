@@ -541,6 +541,24 @@ export default function HotlinesIndex({
                                 </button>
                             </div>
                         )}
+
+                        {pagination && pagination.lastPage > 1 && (
+                            <div className="pt-4">
+                                <Pagination
+                                    currentPage={pagination.currentPage}
+                                    lastPage={pagination.lastPage}
+                                    total={pagination.total}
+                                    perPage={pagination.perPage}
+                                    onPageChange={(page) => {
+                                        router.get(
+                                            '/admin/hotlines',
+                                            { page, search: search || undefined },
+                                            { preserveState: true }
+                                        );
+                                    }}
+                                />
+                            </div>
+                        )}
                     </div>
                 ) : (
                     /* COMPACT DATA TABLE LAYOUT */
@@ -711,6 +729,8 @@ export default function HotlinesIndex({
                             <Pagination
                                 currentPage={pagination.currentPage}
                                 lastPage={pagination.lastPage}
+                                total={pagination.total}
+                                perPage={pagination.perPage}
                                 onPageChange={(page) => {
                                     router.get(
                                         '/admin/hotlines',
