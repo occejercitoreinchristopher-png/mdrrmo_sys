@@ -14,12 +14,12 @@ return new class extends Migration
     {
         Schema::create('emergency_hotlines', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->string('short_label')->nullable();
-            $table->string('phone_number');
-            $table->string('description')->nullable();
-            $table->string('icon_type')->default('siren');
-            $table->string('accent_color')->default('#208AEF');
+            $table->string('name', 150);
+            $table->string('short_label', 150)->nullable();
+            $table->string('phone_number', 150);
+            $table->string('description', 150)->nullable();
+            $table->string('icon_type', 150)->default('siren');
+            $table->string('accent_color', 150)->default('#208AEF');
             $table->boolean('is_active')->default(true);
             $table->integer('sort_order')->default(0);
             $table->timestamps();

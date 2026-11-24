@@ -49,12 +49,12 @@ class HotlineController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:100',
-            'short_label' => 'nullable|string|max:50',
-            'phone_number' => 'required|string|max:30',
-            'description' => 'nullable|string|max:255',
+            'name' => 'required|string|max:150',
+            'short_label' => 'nullable|string|max:150',
+            'phone_number' => 'required|string|max:150',
+            'description' => 'nullable|string|max:150',
             'icon_type' => 'required|string|in:police,fire,medical,siren,phone,shield',
-            'accent_color' => 'required|string|max:20',
+            'accent_color' => 'required|string|max:150',
             'is_active' => 'boolean',
             'sort_order' => 'integer|min:0',
         ]);
@@ -73,12 +73,12 @@ class HotlineController extends Controller
     public function update(Request $request, EmergencyHotline $hotline)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:100',
-            'short_label' => 'nullable|string|max:50',
-            'phone_number' => 'required|string|max:30',
-            'description' => 'nullable|string|max:255',
+            'name' => 'required|string|max:150',
+            'short_label' => 'nullable|string|max:150',
+            'phone_number' => 'required|string|max:150',
+            'description' => 'nullable|string|max:150',
             'icon_type' => 'required|string|in:police,fire,medical,siren,phone,shield',
-            'accent_color' => 'required|string|max:20',
+            'accent_color' => 'required|string|max:150',
             'is_active' => 'boolean',
             'sort_order' => 'integer|min:0',
         ]);
