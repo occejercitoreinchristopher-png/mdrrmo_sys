@@ -25,7 +25,6 @@ import ResponseOperations from './ResponseOperations';
 import PatientCareAnalytics from './PatientCareAnalytics';
 import ReportsGeographic from './ReportsGeographic';
 import ReportsTable from './ReportsTable';
-import MonthlyReportPrintModal from './MonthlyReportPrintModal';
 
 export default function ReportsDashboard({
     stats = {},
@@ -40,31 +39,6 @@ export default function ReportsDashboard({
     const [activeTab, setActiveTab] = useState<
         'intelligence' | 'fleet' | 'pcr' | 'geographic' | 'records' | 'all'
     >('all');
-
-    const [isMonthlyReportModalOpen, setIsMonthlyReportModalOpen] = useState(() => {
-        if (typeof window !== 'undefined') {
-            const params = new URLSearchParams(window.location.search);
-            return (
-                params.get('print') === 'monthly' ||
-                params.get('tab') === 'monthly' ||
-                params.get('modal') === 'print'
-            );
-        }
-        return false;
-    });
-
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const params = new URLSearchParams(window.location.search);
-            if (
-                params.get('print') === 'monthly' ||
-                params.get('tab') === 'monthly' ||
-                params.get('modal') === 'print'
-            ) {
-                setIsMonthlyReportModalOpen(true);
-            }
-        }
-    }, []);
 
     const handleExportCSV = () => {
         const headers = [
@@ -159,17 +133,6 @@ export default function ReportsDashboard({
 
                     {/* Header Action Buttons */}
                     <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                        {/* Official Print Modal Trigger */}
-                        <button
-                            type="button"
-                            onClick={() => setIsMonthlyReportModalOpen(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-red-600/30 transition-all cursor-pointer active:scale-95 border border-red-400/30"
-                            title="Open official MDRRMO Monthly Responses & Patient Complaints printable form"
-                        >
-                            <Printer className="w-4 h-4" />
-                            <span>Official Monthly Report</span>
-                        </button>
-
                         {/* Export CSV */}
                         <button
                             type="button"
@@ -309,14 +272,6 @@ export default function ReportsDashboard({
                     </section>
                 )}
             </div>
-
-            {/* Dedicated Official MDRRMO Opol Monthly Report Print Preview Modal */}
-            <MonthlyReportPrintModal
-                isOpen={isMonthlyReportModalOpen}
-                onClose={() => setIsMonthlyReportModalOpen(false)}
-                initialData={initialMonthlyReport}
-                currentUser={auth?.user}
-            />
         </div>
     );
 }
