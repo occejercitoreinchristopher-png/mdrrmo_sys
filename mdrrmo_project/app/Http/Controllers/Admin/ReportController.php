@@ -170,6 +170,7 @@ class ReportController extends Controller
             'verified_count' => $verifiedCount,
             'resolved_count' => $resolvedCount,
             'rejected_count' => $rejectedCount,
+            'total_dispatches' => $incidents->sum(fn($i) => $i->dispatches->count()),
             'avg_dispatch_time' => count($dispatchTimes) > 0 ? array_sum($dispatchTimes) / count($dispatchTimes) : 0,
             'avg_response_time' => count($responseTimes) > 0 ? array_sum($responseTimes) / count($responseTimes) : 0,
             'avg_mission_duration' => count($missionDurations) > 0 ? array_sum($missionDurations) / count($missionDurations) : 0,
