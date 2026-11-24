@@ -6,7 +6,7 @@ export interface ReportStatCardProps {
     value: number | string;
     valuePrefix?: string;
     valueSuffix?: string;
-    icon: React.ComponentType<{ className?: string }>;
+    icon?: React.ComponentType<{ className?: string }>;
     color?: 'blue' | 'amber' | 'emerald' | 'crimson' | 'cyan' | 'violet';
     badgeText?: string;
     badgeType?: 'success' | 'warning' | 'info' | 'danger' | 'neutral';
@@ -126,57 +126,26 @@ export default function ReportStatCard({
     return (
         <div
             className={clsx(
-                'group relative rounded-2xl p-5 transition-all duration-300',
-                'bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md',
-                'border border-slate-200/80 dark:border-white/10',
+                'group relative rounded-2xl p-4 sm:p-5 transition-all duration-200 overflow-hidden',
+                'bg-white/95 dark:bg-[#0c1220]/90 backdrop-blur-md',
+                'border border-slate-200/90 dark:border-white/10',
                 'shadow-sm hover:shadow-md hover:-translate-y-0.5',
-                colorConfig.borderHover,
-                colorConfig.glow
+                'print:bg-white print:border-slate-300 print:shadow-none print:p-3.5 print:rounded-xl print:break-inside-avoid',
+                colorConfig.borderHover
             )}
         >
-            {/* Top row: Label and Icon */}
-            <div className="flex items-start justify-between gap-3 mb-3">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            {/* Top colored accent indicator line */}
+            <div className={clsx('h-1 w-full rounded-full mb-3 transition-all', colorConfig.accentBar)} />
+
+            {/* Label and Badge row */}
+            <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 print:text-slate-600 truncate">
                     {title}
                 </span>
-                <div
-                    className={clsx(
-                        'w-10 h-10 rounded-xl flex items-center justify-center border transition-all duration-300 shrink-0',
-                        colorConfig.iconBg
-                    )}
-                >
-                    <Icon className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
-                </div>
-            </div>
-
-            {/* Main Value */}
-            <div className="flex items-baseline gap-1.5 mb-2">
-                {valuePrefix && (
-                    <span className="text-xl font-bold text-slate-400 dark:text-slate-500">
-                        {valuePrefix}
-                    </span>
-                )}
-                <span className="text-3xl font-black tracking-tight text-slate-900 dark:text-white font-mono">
-                    {displayValue}
-                </span>
-                {valueSuffix && (
-                    <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                        {valueSuffix}
-                    </span>
-                )}
-            </div>
-
-            {/* Footer row: Badge & Subtitle */}
-            <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-white/5">
-                {subtitle && (
-                    <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                        {subtitle}
-                    </span>
-                )}
                 {badgeText && (
                     <span
                         className={clsx(
-                            'text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ml-auto',
+                            'text-[9.5px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap print:bg-slate-50 print:border-slate-300 print:text-slate-800',
                             badgeStyles
                         )}
                     >
@@ -185,9 +154,35 @@ export default function ReportStatCard({
                 )}
             </div>
 
-            {/* Optional mini progress bar */}
+            {/* Main Value */}
+            <div className="flex items-baseline gap-1.5 mb-2.5">
+                {valuePrefix && (
+                    <span className="text-xl font-bold text-slate-400 dark:text-slate-500 print:text-slate-600">
+                        {valuePrefix}
+                    </span>
+                )}
+                <span className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white print:text-slate-950 font-mono">
+                    {displayValue}
+                </span>
+                {valueSuffix && (
+                    <span className="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400 print:text-slate-600">
+                        {valueSuffix}
+                    </span>
+                )}
+            </div>
+
+            {/* Subtitle */}
+            {subtitle && (
+                <div className="pt-2 border-t border-slate-100 dark:border-white/5 print:border-slate-200">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 print:text-slate-600 truncate">
+                        {subtitle}
+                    </p>
+                </div>
+            )}
+
+            {/* Optional mini progress bar (hidden in print for pristine ink economy) */}
             {typeof progress === 'number' && (
-                <div className="mt-2.5 w-full bg-slate-100 dark:bg-white/5 h-1 rounded-full overflow-hidden">
+                <div className="mt-2 w-full bg-slate-100 dark:bg-white/5 h-1 rounded-full overflow-hidden print:hidden">
                     <div
                         className={clsx('h-full rounded-full transition-all duration-700 ease-out', colorConfig.accentBar)}
                         style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}

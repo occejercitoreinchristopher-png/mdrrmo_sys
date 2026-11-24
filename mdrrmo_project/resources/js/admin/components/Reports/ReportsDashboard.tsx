@@ -158,35 +158,100 @@ export default function ReportsDashboard({
                 </div>
             </div>
 
-            {/* Print-Only Header */}
-            <div className="hidden print:block mb-8 border-b-2 border-slate-900 pb-4">
-                <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">MDRRMO OPOL</h1>
-                <h2 className="text-xl font-bold text-slate-700">
-                    Emergency Medical Services & Disaster Operations Center
-                </h2>
-                <h3 className="text-lg font-semibold text-slate-600 mt-2">Executive Analytics Report</h3>
-                <div className="mt-4 text-sm text-slate-600 flex flex-col gap-1">
-                    <p>
-                        <strong>Generated:</strong>{' '}
-                        {new Date().toLocaleDateString('en-PH', {
-                            month: 'long',
-                            day: 'numeric',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                        })}
-                    </p>
-                    <p>
-                        <strong>Total Records In Scope:</strong> {incidents.length} incidents
-                    </p>
-                    <div className="mt-2 text-xs">
-                        <strong>Filters Applied: </strong>
-                        {Object.entries(initialFilters).filter(([_, v]) => v).length > 0
-                            ? Object.entries(initialFilters)
-                                  .filter(([_, v]) => v)
-                                  .map(([k, v]) => `${k.replace('_', ' ').toUpperCase()}: ${v}`)
-                                  .join(' | ')
-                            : 'None (All Records)'}
+            {/* Print Styles for Crisp Official A4 Output */}
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page {
+                        size: A4 portrait;
+                        margin: 12mm 10mm 15mm 10mm;
+                    }
+                    body {
+                        background-color: #ffffff !important;
+                        color: #0f172a !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                    .print\\:break-inside-avoid {
+                        break-inside: avoid !important;
+                        page-break-inside: avoid !important;
+                    }
+                }
+            `}} />
+
+            {/* Official Dual-Logo Header (Print Only - Exact Match to PCR Official Government Standard) */}
+            <div className="hidden print:block mb-6 pb-4 border-b-2 border-slate-900 print:break-inside-avoid">
+                <div className="flex items-center justify-between gap-4">
+                    {/* Municipal Official Seal (Left) */}
+                    <div className="w-20 h-20 flex items-center justify-center shrink-0">
+                        <img
+                            src="/images/opol_logo.png"
+                            alt="Municipality of Opol Official Seal"
+                            className="w-full h-full object-contain"
+                            onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = '/images/opol-seal.png';
+                            }}
+                        />
+                    </div>
+
+                    {/* Official Republic & Municipal Title (Center) */}
+                    <div className="text-center flex-1">
+                        <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-widest leading-none">
+                            Republic of the Philippines • Province of Misamis Oriental
+                        </p>
+                        <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider mt-1 leading-tight">
+                            MUNICIPALITY OF OPOL
+                        </h2>
+                        <h1 className="text-sm sm:text-base font-black text-slate-950 uppercase tracking-tight mt-0.5 leading-tight">
+                            MUNICIPAL DISASTER RISK REDUCTION AND MANAGEMENT OFFICE
+                        </h1>
+                        <p className="text-[10px] font-bold text-red-600 uppercase tracking-wider mt-0.5 leading-none">
+                            Emergency Operations &amp; Dispatch Monitoring Center • Opol Rescue
+                        </p>
+                        <div className="mt-2 inline-block px-3 py-0.5 bg-slate-900 text-white text-[9.5px] font-bold uppercase tracking-wider rounded">
+                            Official Executive Analytics &amp; Incident Operational Report
+                        </div>
+                    </div>
+
+                    {/* Opol Rescue / DRRM Shield (Right) */}
+                    <div className="w-20 h-20 flex items-center justify-center shrink-0">
+                        <img
+                            src="/images/drrm_logo.png"
+                            alt="MDRRMO Rescue Logo"
+                            className="w-full h-full object-contain"
+                        />
+                    </div>
+                </div>
+
+                {/* Report Metadata Strip */}
+                <div className="mt-4 pt-3 border-t border-slate-300 grid grid-cols-3 gap-3 text-[10px] text-slate-700">
+                    <div>
+                        <span className="font-bold text-slate-900 uppercase tracking-wider">Report Generated:</span>
+                        <p className="font-mono mt-0.5 text-slate-800 font-semibold">
+                            {new Date().toLocaleDateString('en-PH', {
+                                month: 'long',
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                            })}
+                        </p>
+                    </div>
+                    <div>
+                        <span className="font-bold text-slate-900 uppercase tracking-wider">Total Records:</span>
+                        <p className="font-bold text-slate-900 mt-0.5">
+                            {incidents.length} Incident Records Documented
+                        </p>
+                    </div>
+                    <div>
+                        <span className="font-bold text-slate-900 uppercase tracking-wider">Filter Scope:</span>
+                        <p className="truncate mt-0.5 font-medium text-slate-800">
+                            {Object.entries(initialFilters).filter(([_, v]) => v).length > 0
+                                ? Object.entries(initialFilters)
+                                      .filter(([_, v]) => v)
+                                      .map(([k, v]) => `${k.replace('_', ' ').toUpperCase()}: ${v}`)
+                                      .join(' | ')
+                                : 'All Municipal Records (Unfiltered)'}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -271,6 +336,35 @@ export default function ReportsDashboard({
                         <ReportsTable incidents={incidents} />
                     </section>
                 )}
+            </div>
+
+            {/* Official Certification Signatures Block (Print Only) */}
+            <div className="hidden print:grid grid-cols-2 gap-8 text-center text-xs mt-10 pt-6 border-t-2 border-slate-900 print:break-inside-avoid">
+                <div className="w-64 mx-auto">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-8">
+                        Prepared &amp; Certified By:
+                    </p>
+                    <p className="font-black text-slate-900 uppercase text-xs tracking-wider mb-1">
+                        {auth?.user ? `${auth.user.first_name} ${auth.user.last_name}` : 'Rein Christopher Ejercito'}
+                    </p>
+                    <div className="border-b-2 border-slate-900 w-full mb-1"></div>
+                    <p className="text-[10px] text-slate-600 font-semibold">
+                        {auth?.user?.role === 'dispatcher' ? 'Operations Dispatcher / On-Duty' : 'MDRRMO Operations Administrator'}
+                    </p>
+                </div>
+
+                <div className="w-64 mx-auto">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-8">
+                        Approved &amp; Noted By:
+                    </p>
+                    <p className="font-black text-slate-900 uppercase text-xs tracking-wider mb-1">
+                        Engr. Rommel C. Lanoy
+                    </p>
+                    <div className="border-b-2 border-slate-900 w-full mb-1"></div>
+                    <p className="text-[10px] text-slate-600 font-semibold">
+                        Approved by / MDRRMO Officer-in-Charge
+                    </p>
+                </div>
             </div>
         </div>
     );

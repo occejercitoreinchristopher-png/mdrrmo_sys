@@ -1,4 +1,3 @@
-import { FileText, AlertTriangle, CheckCircle2, XCircle, Clock, HeartPulse } from 'lucide-react';
 import ReportStatCard from './ReportStatCard';
 
 export default function ReportOverview({ stats = {} }: { stats?: any }) {
@@ -25,31 +24,30 @@ export default function ReportOverview({ stats = {} }: { stats?: any }) {
     const avgDispatchTimeStr = formatSeconds(stats.avg_dispatch_time ?? 0);
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
+        <div className="space-y-4 print:space-y-3 print:break-inside-avoid">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-200/80 dark:border-white/10 print:border-slate-800">
                 <div className="flex items-center gap-2.5">
-                    <div className="w-1.5 h-6 bg-red-600 rounded-full shadow-[0_0_12px_rgba(239,68,68,0.5)]" />
+                    <div className="w-1.5 h-5 bg-red-600 rounded-full print:hidden" />
                     <div>
-                        <h2 className="text-sm font-black tracking-wider text-slate-900 dark:text-white uppercase">
-                            Operational Overview & Core Metrics
+                        <h2 className="text-xs sm:text-sm font-black tracking-wider text-slate-900 dark:text-white print:text-slate-950 uppercase">
+                            Operational Overview &amp; Core Performance Metrics
                         </h2>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                            High-level performance summary of emergency calls and municipal operations
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 print:text-slate-600">
+                            High-level municipal emergency response and dispatch performance summary
                         </p>
                     </div>
                 </div>
 
-                <div className="hidden sm:flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-white/10">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>Real-time DB Sync</span>
+                <div className="hidden sm:flex items-center gap-2 text-xs font-semibold px-3 py-1 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-white/10 print:border-slate-300 print:bg-slate-50 print:text-slate-700">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse print:hidden" />
+                    <span>Real-time Live Sync</span>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 print:grid-cols-3 print:gap-3">
                 <ReportStatCard
                     title="Total Incidents"
                     value={total}
-                    icon={FileText}
                     color="blue"
                     badgeText={`${resolutionRate}% Resolved`}
                     badgeType="info"
@@ -61,11 +59,10 @@ export default function ReportOverview({ stats = {} }: { stats?: any }) {
                 <ReportStatCard
                     title="Verified Cases"
                     value={verified}
-                    icon={AlertTriangle}
                     color="amber"
                     badgeText={`${verificationRate}% of total`}
                     badgeType="warning"
-                    subtitle="Confirmed legit"
+                    subtitle="Confirmed legitimate"
                     progress={verificationRate}
                     delayMs={60}
                 />
@@ -73,7 +70,6 @@ export default function ReportOverview({ stats = {} }: { stats?: any }) {
                 <ReportStatCard
                     title="Resolved Cases"
                     value={resolved}
-                    icon={CheckCircle2}
                     color="emerald"
                     badgeText="Cleared"
                     badgeType="success"
@@ -85,7 +81,6 @@ export default function ReportOverview({ stats = {} }: { stats?: any }) {
                 <ReportStatCard
                     title="Rejected / Prank"
                     value={rejected}
-                    icon={XCircle}
                     color="crimson"
                     badgeText={`${rejectionRate}% filtered`}
                     badgeType={rejected > 0 ? 'danger' : 'neutral'}
@@ -98,7 +93,6 @@ export default function ReportOverview({ stats = {} }: { stats?: any }) {
                     title="Avg Response Speed"
                     value={avgResponseTimeStr}
                     valueSuffix="min"
-                    icon={Clock}
                     color="cyan"
                     badgeText="Target < 8m"
                     badgeType="info"
@@ -109,7 +103,6 @@ export default function ReportOverview({ stats = {} }: { stats?: any }) {
                 <ReportStatCard
                     title="Patients Attended"
                     value={attended}
-                    icon={HeartPulse}
                     color="violet"
                     badgeText={`${transportRate}% Transported`}
                     badgeType="success"
