@@ -176,6 +176,13 @@ export default function HotlinesIndex({
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        const cleanNumber = formData.phone_number.replace(/\D/g, '');
+        if (!cleanNumber || cleanNumber.length < 3 || cleanNumber.length > 11) {
+            toast.error('Please enter a valid phone or mobile number (up to 11 digits, numbers only).');
+            return;
+        }
+
         setSubmitting(true);
 
         if (editingHotline) {
@@ -780,17 +787,31 @@ export default function HotlinesIndex({
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                                        Phone / Mobile Number <span className="text-rose-500">*</span>
-                                    </label>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                                            Phone / Mobile Number <span className="text-rose-500">*</span>
+                                        </label>
+                                        <span className={`text-[10px] font-mono ${formData.phone_number.length === 11 ? 'text-emerald-400 font-bold' : 'text-slate-400'}`}>
+                                            {formData.phone_number.length}/11 digits
+                                        </span>
+                                    </div>
                                     <input
-                                        type="text"
+                                        type="tel"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        maxLength={11}
                                         required
                                         value={formData.phone_number}
-                                        onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                                        onChange={(e) => {
+                                            const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 11);
+                                            setFormData({ ...formData, phone_number: digitsOnly });
+                                        }}
                                         placeholder="e.g. 09358056370"
                                         className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                     />
+                                    <p className="text-[11px] text-slate-400 mt-1">
+                                        Numbers only, maximum 11 digits (e.g. 911, landline, or 09XXXXXXXXX)
+                                    </p>
                                 </div>
                             </div>
 

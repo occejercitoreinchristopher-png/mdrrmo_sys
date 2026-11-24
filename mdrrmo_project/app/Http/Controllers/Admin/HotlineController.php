@@ -51,12 +51,14 @@ class HotlineController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:150',
             'short_label' => 'nullable|string|max:150',
-            'phone_number' => 'required|string|max:150',
+            'phone_number' => ['required', 'string', 'regex:/^[0-9]{3,11}$/'],
             'description' => 'nullable|string|max:150',
             'icon_type' => 'required|string|in:police,fire,medical,siren,phone,shield',
             'accent_color' => 'required|string|max:150',
             'is_active' => 'boolean',
             'sort_order' => 'integer|min:0',
+        ], [
+            'phone_number.regex' => 'The phone/mobile number must only contain numbers and be 11 digits or fewer (e.g. 911 or 09XXXXXXXXX).',
         ]);
 
         if (!isset($validated['sort_order'])) {
@@ -75,12 +77,14 @@ class HotlineController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:150',
             'short_label' => 'nullable|string|max:150',
-            'phone_number' => 'required|string|max:150',
+            'phone_number' => ['required', 'string', 'regex:/^[0-9]{3,11}$/'],
             'description' => 'nullable|string|max:150',
             'icon_type' => 'required|string|in:police,fire,medical,siren,phone,shield',
             'accent_color' => 'required|string|max:150',
             'is_active' => 'boolean',
             'sort_order' => 'integer|min:0',
+        ], [
+            'phone_number.regex' => 'The phone/mobile number must only contain numbers and be 11 digits or fewer (e.g. 911 or 09XXXXXXXXX).',
         ]);
 
         $hotline->update($validated);
