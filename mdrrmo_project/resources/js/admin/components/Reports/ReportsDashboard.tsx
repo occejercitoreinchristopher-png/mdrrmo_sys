@@ -618,7 +618,6 @@ export default function ReportsDashboard({
                                 <th className="py-1 px-2 border-r border-slate-300 w-8 text-center">#</th>
                                 <th className="py-1 px-2 border-r border-slate-300">Barangay Name</th>
                                 <th className="py-1 px-2 border-r border-slate-300 text-center">Incidents</th>
-                                <th className="py-1 px-2 border-r border-slate-300 text-center">% Share</th>
                                 <th className="py-1 px-2 border-r border-slate-300 text-center">Dispatches</th>
                                 <th className="py-1 px-2 border-r border-slate-300 text-center">Resolved</th>
                                 <th className="py-1 px-2 text-center">Clearance Rate</th>
@@ -640,9 +639,6 @@ export default function ReportsDashboard({
                                     </td>
                                     <td className="py-1 px-2 border-r border-slate-200 text-center font-mono font-bold text-slate-900">
                                         {b.total}
-                                    </td>
-                                    <td className="py-1 px-2 border-r border-slate-200 text-center font-mono text-slate-700">
-                                        {b.pct}%
                                     </td>
                                     <td className="py-1 px-2 border-r border-slate-200 text-center font-mono text-slate-800">
                                         {b.dispatches}

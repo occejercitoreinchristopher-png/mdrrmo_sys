@@ -89,7 +89,6 @@ export function printExecutiveReport(data: ExecutiveReportData): void {
                 }
             </td>
             <td style="padding: 5px 8px; text-align: center; font-weight: 700; font-family: monospace; border-right: 1px solid #cbd5e1; color: #0f172a;">${b.total}</td>
-            <td style="padding: 5px 8px; text-align: center; font-family: monospace; border-right: 1px solid #cbd5e1; color: #334155;">${b.pct}%</td>
             <td style="padding: 5px 8px; text-align: center; font-family: monospace; border-right: 1px solid #cbd5e1; color: #334155;">${b.dispatches}</td>
             <td style="padding: 5px 8px; text-align: center; font-family: monospace; font-weight: 600; border-right: 1px solid #cbd5e1; color: #0f172a;">${b.resolved}</td>
             <td style="padding: 5px 8px; text-align: center; font-family: monospace; font-weight: 700; color: #0f172a;">${b.clearanceRate}%</td>
@@ -555,7 +554,6 @@ export function printExecutiveReport(data: ExecutiveReportData): void {
                         <th style="width: 28px; text-align: center; border-right: 1px solid #cbd5e1;">#</th>
                         <th style="text-align: left; border-right: 1px solid #cbd5e1;">Barangay Name</th>
                         <th style="text-align: center; border-right: 1px solid #cbd5e1;">Incidents</th>
-                        <th style="text-align: center; border-right: 1px solid #cbd5e1;">% Share</th>
                         <th style="text-align: center; border-right: 1px solid #cbd5e1;">Dispatches</th>
                         <th style="text-align: center; border-right: 1px solid #cbd5e1;">Resolved</th>
                         <th style="text-align: center;">Clearance Rate</th>
