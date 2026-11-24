@@ -22,6 +22,7 @@ import ResponseOperations from './ResponseOperations';
 import PatientCareAnalytics from './PatientCareAnalytics';
 import ReportsGeographic from './ReportsGeographic';
 import ReportsTable from './ReportsTable';
+import { printExecutiveReport } from '@/shared/utils/printExecutiveReport';
 
 export default function ReportsDashboard({
     stats = {},
@@ -160,7 +161,19 @@ export default function ReportsDashboard({
     };
 
     const handlePrint = () => {
-        window.print();
+        printExecutiveReport({
+            totalIncidents,
+            topBarangay,
+            totalDispatches,
+            resolvedCount,
+            resolutionRate,
+            reportedCount,
+            verificationRate,
+            avgResponseTimeStr,
+            barangaySummary,
+            initialFilters,
+            auth,
+        });
     };
 
     const tabs = [
@@ -181,6 +194,12 @@ export default function ReportsDashboard({
                         size: A4 portrait;
                         margin: 8mm 10mm 8mm 10mm;
                     }
+                    :root, html, html.dark, body {
+                        color-scheme: light !important;
+                        background: #ffffff !important;
+                        background-color: #ffffff !important;
+                        color: #000000 !important;
+                    }
                     html, body, #app, #app > div, main, main > div {
                         background: #ffffff !important;
                         background-color: #ffffff !important;
@@ -197,22 +216,38 @@ export default function ReportsDashboard({
                         print-color-adjust: exact !important;
                     }
                     /* Purge dark theme backgrounds everywhere in print */
-                    html.dark, html.dark body, html.dark #app, html.dark #app * {
-                        background-color: transparent !important;
-                    }
-                    html.dark .print-single-page, html.dark .print-single-page * {
+                    html.dark, html.dark body, html.dark #app, html.dark #app > div, html.dark main, html.dark main > div {
+                        background: #ffffff !important;
                         background-color: #ffffff !important;
                         color: #000000 !important;
                     }
-                    html.dark .print-single-page .bg-slate-100 {
+                    .print-single-page {
+                        background: #ffffff !important;
+                        background-color: #ffffff !important;
+                        color: #000000 !important;
+                    }
+                    .print-single-page * {
+                        color: #0f172a !important;
+                    }
+                    .print-single-page .border-slate-900,
+                    .print-single-page .border {
+                        border-color: #0f172a !important;
+                    }
+                    .print-single-page .bg-slate-100 {
                         background-color: #f1f5f9 !important;
                     }
-                    html.dark .print-single-page .bg-slate-50 {
+                    .print-single-page .bg-slate-50 {
                         background-color: #f8fafc !important;
                     }
-                    html.dark .print-single-page .bg-slate-900 {
+                    .print-single-page .bg-slate-900 {
                         background-color: #0f172a !important;
                         color: #ffffff !important;
+                    }
+                    .print-single-page .text-white {
+                        color: #ffffff !important;
+                    }
+                    .print-single-page .text-red-600 {
+                        color: #dc2626 !important;
                     }
                     /* Hide decorative blobs, gradients, and layout chrome */
                     [class*="pointer-events-none"],
