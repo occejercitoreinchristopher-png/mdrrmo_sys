@@ -24,9 +24,13 @@ class ReportController extends Controller
             'dispatches.patientCareRecords',
         ]);
 
-        // Period Preset Filter ('today', 'this_week', 'this_month', 'this_year', 'all')
+        // Period & Year Filters
         $period = $request->input('period', 'all');
-        if ($period === 'today') {
+        $selectedYear = $request->input('year');
+
+        if ($selectedYear && is_numeric($selectedYear)) {
+            $query->whereYear('reported_at', (int) $selectedYear);
+        } elseif ($period === 'today') {
             $query->whereDate('reported_at', now()->toDateString());
         } elseif ($period === 'this_week') {
             $query->whereBetween('reported_at', [
@@ -39,10 +43,7 @@ class ReportController extends Controller
                 now()->endOfMonth()->endOfDay()->toDateTimeString(),
             ]);
         } elseif ($period === 'this_year') {
-            $query->whereBetween('reported_at', [
-                now()->startOfYear()->startOfDay()->toDateTimeString(),
-                now()->endOfYear()->endOfDay()->toDateTimeString(),
-            ]);
+            $query->whereYear('reported_at', (int) now()->format('Y'));
         } else {
             // Custom Date Range Filter
             if ($request->filled('date_from')) {
@@ -181,11 +182,24 @@ class ReportController extends Controller
         ];
 
         // Lookup Tables for Filters
+        $currentYearNum = (int) now()->format('Y');
+        $yearsInDb = Incident::whereNotNull('reported_at')->selectRaw('YEAR(reported_at) as year')->distinct()->pluck('year')->filter()->map(fn($y) => (int) $y)->toArray();
+        if (!in_array($currentYearNum, $yearsInDb)) {
+            $yearsInDb[] = $currentYearNum;
+        }
+        for ($y = $currentYearNum; $y >= $currentYearNum - 4; $y--) {
+            if (!in_array($y, $yearsInDb)) {
+                $yearsInDb[] = $y;
+            }
+        }
+        rsort($yearsInDb);
+
         $lookups = [
             'barangays' => collect(Incident::OPOL_BARANGAYS)->map(fn($b) => ['id' => $b, 'name' => $b]),
             'incident_types' => \App\Models\IncidentType::all(['id', 'incident_type_name']),
             'ambulances' => Ambulance::all(['id', 'plate_number', 'vehicle_type']),
             'responders' => User::where('role', 'responder')->get(['id', 'first_name', 'last_name']),
+            'available_years' => array_values($yearsInDb),
         ];
 
         $geojsonPath = resource_path('data/opol_barangays.json');
@@ -200,7 +214,7 @@ class ReportController extends Controller
             'incidents' => $incidents->values(),
             'lookups' => $lookups,
             'barangayGeojson' => $barangayGeojson,
-            'filters' => $request->only(['period', 'date_from', 'date_to', 'barangay', 'incident_type_id', 'status', 'responder_id', 'ambulance_id', 'priority', 'search']),
+            'filters' => $request->only(['period', 'year', 'date_from', 'date_to', 'barangay', 'incident_type_id', 'status', 'responder_id', 'ambulance_id', 'priority', 'search']),
             'monthlyReportData' => $monthlyReportData,
         ]);
     }

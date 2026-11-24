@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { router } from '@inertiajs/react';
 import {
     Filter,
@@ -36,6 +36,7 @@ const PRIORITY_OPTIONS = [
 
 export interface ReportFiltersState {
     period?: string;
+    year?: string;
     date_from?: string;
     date_to?: string;
     barangay?: string;
@@ -59,6 +60,7 @@ export default function ReportFilters({
 
     const [filters, setFilters] = useState<ReportFiltersState>({
         period: initialFilters.period || 'all',
+        year: initialFilters.year || '',
         date_from: initialFilters.date_from || '',
         date_to: initialFilters.date_to || '',
         barangay: initialFilters.barangay || '',
@@ -83,6 +85,14 @@ export default function ReportFilters({
         );
     });
 
+    const pastYears = useMemo(() => {
+        const allYears: number[] = Array.isArray(lookups?.available_years) && lookups.available_years.length > 0
+            ? lookups.available_years
+            : [currentYear, currentYear - 1, currentYear - 2, currentYear - 3];
+
+        return allYears.filter((y) => y < currentYear);
+    }, [lookups, currentYear]);
+
     const handleChange = (key: string) => (val: string) => {
         setFilters((prev) => ({ ...prev, [key]: val }));
     };
@@ -91,12 +101,29 @@ export default function ReportFilters({
         const nextFilters = {
             ...filters,
             period: periodKey,
+            year: periodKey === 'this_year' ? String(currentYear) : '',
             // Clear custom dates when selecting preset
             ...(periodKey !== 'custom' ? { date_from: '', date_to: '' } : {}),
         };
         setFilters(nextFilters);
 
         // Apply immediately for period presets
+        const query = Object.fromEntries(
+            Object.entries(nextFilters).filter(([k, v]) => v !== '' && (k !== 'period' || v !== 'all'))
+        );
+        router.get('/admin/reports', query, { preserveState: true, replace: true });
+    };
+
+    const handleYearSelect = (selectedYear: string) => {
+        const nextFilters = {
+            ...filters,
+            year: selectedYear,
+            period: selectedYear === String(currentYear) ? 'this_year' : '',
+            date_from: '',
+            date_to: '',
+        };
+        setFilters(nextFilters);
+
         const query = Object.fromEntries(
             Object.entries(nextFilters).filter(([k, v]) => v !== '' && (k !== 'period' || v !== 'all'))
         );
@@ -113,6 +140,7 @@ export default function ReportFilters({
     const resetFilters = () => {
         setFilters({
             period: 'all',
+            year: '',
             date_from: '',
             date_to: '',
             barangay: '',
@@ -189,7 +217,11 @@ export default function ReportFilters({
                         Period:
                     </span>
                     {periodPresets.map((p) => {
-                        const active = filters.period === p.key;
+                        const isCurrentYearPill = p.key === 'this_year';
+                        const active = isCurrentYearPill
+                            ? (filters.period === 'this_year' || filters.year === String(currentYear)) && !pastYears.some((y) => String(y) === filters.year)
+                            : filters.period === p.key && !filters.year;
+
                         return (
                             <button
                                 key={p.key}
@@ -206,6 +238,43 @@ export default function ReportFilters({
                             </button>
                         );
                     })}
+
+                    {/* One-Click Past Years Dropdown */}
+                    {pastYears.length > 0 && (
+                        <div className="relative inline-flex items-center">
+                            <select
+                                value={pastYears.some((y) => String(y) === filters.year) ? filters.year : ''}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val) {
+                                        handleYearSelect(val);
+                                    } else {
+                                        handlePeriodChange('all');
+                                    }
+                                }}
+                                className={clsx(
+                                    'px-2.5 py-1.5 pr-6 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer border appearance-none text-left',
+                                    pastYears.some((y) => String(y) === filters.year)
+                                        ? 'bg-red-600 text-white border-red-600 shadow-sm shadow-red-600/30'
+                                        : 'bg-slate-100 hover:bg-slate-200/80 text-slate-600 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                                )}
+                                title="View incidents from previous calendar years"
+                            >
+                                <option value="" className="dark:bg-slate-900 text-slate-800 dark:text-white">
+                                    {pastYears.some((y) => String(y) === filters.year) ? `Past Year: ${filters.year}` : 'Past Years...'}
+                                </option>
+                                {pastYears.map((yr) => (
+                                    <option key={yr} value={String(yr)} className="dark:bg-slate-900 text-slate-800 dark:text-white">
+                                        Year {yr}
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown className={clsx(
+                                'w-3 h-3 absolute right-2 pointer-events-none',
+                                pastYears.some((y) => String(y) === filters.year) ? 'text-white' : 'text-slate-400'
+                            )} />
+                        </div>
+                    )}
                 </div>
 
                 {/* Right: Quick Search + Filter Toggle Button */}
@@ -278,6 +347,33 @@ export default function ReportFilters({
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+                        {/* Specific Calendar Year */}
+                        <div>
+                            <label className="block text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                                Calendar Year
+                            </label>
+                            <select
+                                value={filters.year || (filters.period === 'this_year' ? String(currentYear) : '')}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setFilters((prev) => ({
+                                        ...prev,
+                                        year: val,
+                                        period: val === String(currentYear) ? 'this_year' : (val ? '' : prev.period),
+                                    }));
+                                }}
+                                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                            >
+                                <option value="" className="dark:bg-slate-900">All Years (Unfiltered)</option>
+                                <option value={String(currentYear)} className="dark:bg-slate-900">Year {currentYear} (Current)</option>
+                                {pastYears.map((yr) => (
+                                    <option key={yr} value={String(yr)} className="dark:bg-slate-900">
+                                        Year {yr}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
                         {/* Date From */}
                         <div>
                             <label className="block text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
