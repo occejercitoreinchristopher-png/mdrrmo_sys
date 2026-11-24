@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\EmergencyHotline;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 
 class HotlineController extends Controller
@@ -64,6 +65,7 @@ class HotlineController extends Controller
         }
 
         EmergencyHotline::create($validated);
+        Cache::forget('active_emergency_hotlines');
 
         return back()->with('success', 'Emergency hotline created successfully.');
     }
@@ -82,6 +84,7 @@ class HotlineController extends Controller
         ]);
 
         $hotline->update($validated);
+        Cache::forget('active_emergency_hotlines');
 
         return back()->with('success', 'Emergency hotline updated successfully.');
     }
@@ -91,6 +94,7 @@ class HotlineController extends Controller
         $hotline->update([
             'is_active' => !$hotline->is_active,
         ]);
+        Cache::forget('active_emergency_hotlines');
 
         $status = $hotline->is_active ? 'activated' : 'deactivated';
         return back()->with('success', "Hotline \"{$hotline->name}\" {$status}.");
@@ -100,6 +104,7 @@ class HotlineController extends Controller
     {
         $name = $hotline->name;
         $hotline->delete();
+        Cache::forget('active_emergency_hotlines');
 
         return back()->with('success', "Hotline \"{$name}\" deleted successfully.");
     }
