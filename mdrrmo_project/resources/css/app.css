@@ -181,14 +181,37 @@
 }
 
 @media print {
-    /* Hide application UI, sidebar, navigation, search, filters, and pagination during print */
+    /* Reset all root containers to pure white without height or margins */
+    html,
+    body,
+    #app,
+    #app > div,
+    main {
+        background: #ffffff !important;
+        background-color: #ffffff !important;
+        background-image: none !important;
+        color: #000000 !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+    }
+
+    /* Hide application UI, sidebar, navigation, search, filters, and decorative elements */
     header,
     nav,
     aside,
     footer,
     [role="navigation"],
-    .no-print {
+    .no-print,
+    [class*="pointer-events-none"],
+    [style*="radial-gradient"],
+    [class*="blur-3xl"] {
         display: none !important;
+        visibility: hidden !important;
     }
 
     /* Completely hide background app when printing official modal reports */

@@ -173,26 +173,61 @@ export default function ReportsDashboard({
     ];
 
     return (
-        <div className="space-y-6">
-            {/* Print Styles: Ultra-clean, strictly professional, ink-friendly, zero scrollbars */}
+        <div className="space-y-6 print:space-y-0 print:m-0 print:p-0">
+            {/* Print Styles: Strictly Single-Page A4, Zero Dark Leaks, Zero Blank Pages */}
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
                     @page {
                         size: A4 portrait;
-                        margin: 10mm 10mm 12mm 10mm;
+                        margin: 8mm 10mm 8mm 10mm;
                     }
-                    html, body {
+                    html, body, #app, #app > div, main, main > div {
                         background: #ffffff !important;
                         background-color: #ffffff !important;
-                        color: #0f172a !important;
+                        background-image: none !important;
+                        color: #000000 !important;
+                        height: auto !important;
+                        min-height: 0 !important;
+                        max-height: none !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
                         overflow: visible !important;
-                        scrollbar-width: none !important;
-                        -ms-overflow-style: none !important;
+                        box-shadow: none !important;
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
                     }
+                    /* Purge dark theme backgrounds everywhere in print */
+                    html.dark, html.dark body, html.dark #app, html.dark #app * {
+                        background-color: transparent !important;
+                    }
+                    html.dark .print-single-page, html.dark .print-single-page * {
+                        background-color: #ffffff !important;
+                        color: #000000 !important;
+                    }
+                    html.dark .print-single-page .bg-slate-100 {
+                        background-color: #f1f5f9 !important;
+                    }
+                    html.dark .print-single-page .bg-slate-50 {
+                        background-color: #f8fafc !important;
+                    }
+                    html.dark .print-single-page .bg-slate-900 {
+                        background-color: #0f172a !important;
+                        color: #ffffff !important;
+                    }
+                    /* Hide decorative blobs, gradients, and layout chrome */
+                    [class*="pointer-events-none"],
+                    [style*="radial-gradient"],
+                    [class*="blur-3xl"],
+                    aside,
+                    header,
+                    nav {
+                        display: none !important;
+                        visibility: hidden !important;
+                        height: 0 !important;
+                        width: 0 !important;
+                        overflow: hidden !important;
+                    }
                     * {
-                        overflow: visible !important;
                         scrollbar-width: none !important;
                         box-shadow: none !important;
                         text-shadow: none !important;
@@ -202,9 +237,17 @@ export default function ReportsDashboard({
                         width: 0 !important;
                         height: 0 !important;
                     }
-                    .print\\:break-inside-avoid {
-                        break-inside: avoid !important;
+                    /* Force Single-Page Guarantee: Prevents extra blank page */
+                    .print-single-page {
                         page-break-inside: avoid !important;
+                        break-inside: avoid !important;
+                        page-break-after: avoid !important;
+                        break-after: avoid !important;
+                        page-break-before: avoid !important;
+                        break-before: avoid !important;
+                        height: auto !important;
+                        max-height: 278mm !important;
+                        box-sizing: border-box !important;
                     }
                 }
             `}} />
@@ -350,16 +393,14 @@ export default function ReportsDashboard({
 
             {/* =========================================================================
                 OFFICIAL EXECUTIVE PRINT SHEET (PRINT ONLY: hidden print:block)
-                Strictly professional, ink-friendly (black on white), zero scrollbars,
-                contains ONLY the 6 user-requested core metrics, official barangay ledger,
-                and PCR-matching dual-logo header & executive signatories.
+                Guaranteed Single-Page A4 Portrait, Zero Dark Bleed, Zero Blank Page.
                ========================================================================= */}
-            <div className="hidden print:block space-y-5 bg-white text-black">
+            <div className="hidden print:block print-single-page bg-white text-black space-y-3">
                 {/* 1. Official Dual-Logo Header (Exact Match to PCR Government Standard) */}
-                <div className="pb-4 border-b-2 border-slate-900 print:break-inside-avoid">
-                    <div className="flex items-center justify-between gap-4">
+                <div className="pb-2.5 border-b-2 border-slate-900 print:break-inside-avoid">
+                    <div className="flex items-center justify-between gap-3">
                         {/* Municipal Official Seal (Left) */}
-                        <div className="w-20 h-20 flex items-center justify-center shrink-0">
+                        <div className="w-16 h-16 flex items-center justify-center shrink-0">
                             <img
                                 src="/images/opol_logo.png"
                                 alt="Municipality of Opol Official Seal"
@@ -372,25 +413,25 @@ export default function ReportsDashboard({
 
                         {/* Republic & Municipal Title (Center) */}
                         <div className="text-center flex-1">
-                            <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-widest leading-none">
+                            <p className="text-[9px] font-semibold text-slate-600 uppercase tracking-widest leading-none">
                                 Republic of the Philippines • Province of Misamis Oriental
                             </p>
-                            <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider mt-1 leading-tight">
+                            <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider mt-0.5 leading-tight">
                                 MUNICIPALITY OF OPOL
                             </h2>
-                            <h1 className="text-sm sm:text-base font-black text-slate-950 uppercase tracking-tight mt-0.5 leading-tight">
+                            <h1 className="text-sm font-black text-slate-950 uppercase tracking-tight mt-0.5 leading-tight">
                                 MUNICIPAL DISASTER RISK REDUCTION AND MANAGEMENT OFFICE
                             </h1>
-                            <p className="text-[10px] font-bold text-red-600 uppercase tracking-wider mt-0.5 leading-none">
+                            <p className="text-[9.5px] font-bold text-red-600 uppercase tracking-wider mt-0.5 leading-none">
                                 Emergency Operations &amp; Dispatch Monitoring Center • Opol Rescue
                             </p>
-                            <div className="mt-2 inline-block px-3 py-0.5 bg-slate-900 text-white text-[9.5px] font-bold uppercase tracking-wider rounded">
+                            <div className="mt-1.5 inline-block px-2.5 py-0.5 bg-slate-900 text-white text-[9px] font-bold uppercase tracking-wider rounded">
                                 Official Executive Incident &amp; Operations Summary Report
                             </div>
                         </div>
 
                         {/* Opol Rescue / DRRM Shield (Right) */}
-                        <div className="w-20 h-20 flex items-center justify-center shrink-0">
+                        <div className="w-16 h-16 flex items-center justify-center shrink-0">
                             <img
                                 src="/images/drrm_logo.png"
                                 alt="MDRRMO Rescue Logo"
@@ -400,7 +441,7 @@ export default function ReportsDashboard({
                     </div>
 
                     {/* Metadata Strip */}
-                    <div className="mt-4 pt-3 border-t border-slate-300 grid grid-cols-3 gap-3 text-[10px] text-slate-700">
+                    <div className="mt-2.5 pt-2 border-t border-slate-300 grid grid-cols-3 gap-2 text-[9.5px] text-slate-700">
                         <div>
                             <span className="font-bold text-slate-900 uppercase tracking-wider">Report Generated:</span>
                             <p className="font-mono mt-0.5 text-slate-800 font-semibold">
@@ -434,91 +475,91 @@ export default function ReportsDashboard({
                 </div>
 
                 {/* 2. Core 6 Performance & Operational Metrics (Strictly Requested by User) */}
-                <div className="space-y-2 print:break-inside-avoid">
-                    <div className="flex items-center justify-between pb-1 border-b border-slate-900">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-900">
+                <div className="space-y-1.5 print:break-inside-avoid">
+                    <div className="flex items-center justify-between pb-0.5 border-b border-slate-900">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-900">
                             Executive Incident Summary &amp; Key Performance Indicators
                         </span>
-                        <span className="text-[9.5px] font-bold text-slate-600 uppercase">
+                        <span className="text-[9px] font-bold text-slate-600 uppercase">
                             Official Municipal Metrics
                         </span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-2">
                         {/* 1. Ilang accident ang nangyari */}
-                        <div className="border-2 border-slate-900 p-3 bg-white">
-                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-700">
+                        <div className="border border-slate-900 p-2 bg-white">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-700">
                                 1. Total Incidents / Accidents
                             </p>
-                            <p className="text-2xl font-black text-slate-950 font-mono mt-1">
+                            <p className="text-xl font-black text-slate-950 font-mono mt-0.5">
                                 {totalIncidents}
                             </p>
-                            <p className="text-[10px] text-slate-600 mt-0.5 font-medium">
+                            <p className="text-[9px] text-slate-600 mt-0.5 font-medium truncate">
                                 Documented emergency incident cases
                             </p>
                         </div>
 
                         {/* 2. Anong barangay yung may pinaka mataas na accident */}
-                        <div className="border-2 border-slate-900 p-3 bg-white">
-                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-700">
+                        <div className="border border-slate-900 p-2 bg-white">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-700">
                                 2. Highest Incident Barangay
                             </p>
-                            <p className="text-xl font-black text-slate-950 font-mono mt-1 truncate">
+                            <p className="text-lg font-black text-slate-950 font-mono mt-0.5 truncate">
                                 {topBarangay.name}
                             </p>
-                            <p className="text-[10px] text-slate-600 mt-0.5 font-medium">
+                            <p className="text-[9px] text-slate-600 mt-0.5 font-medium truncate">
                                 {topBarangay.total} incidents ({topBarangay.pct}% of municipal total)
                             </p>
                         </div>
 
                         {/* 3. Yung dispatch */}
-                        <div className="border-2 border-slate-900 p-3 bg-white">
-                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-700">
+                        <div className="border border-slate-900 p-2 bg-white">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-700">
                                 3. Total Emergency Dispatches
                             </p>
-                            <p className="text-2xl font-black text-slate-950 font-mono mt-1">
+                            <p className="text-xl font-black text-slate-950 font-mono mt-0.5">
                                 {totalDispatches}
                             </p>
-                            <p className="text-[10px] text-slate-600 mt-0.5 font-medium">
+                            <p className="text-[9px] text-slate-600 mt-0.5 font-medium truncate">
                                 Ambulance &amp; quick-response deployments
                             </p>
                         </div>
 
                         {/* 4. Ilang yung na resolved */}
-                        <div className="border-2 border-slate-900 p-3 bg-white">
-                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-700">
+                        <div className="border border-slate-900 p-2 bg-white">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-700">
                                 4. Resolved Incidents
                             </p>
-                            <p className="text-2xl font-black text-slate-950 font-mono mt-1">
+                            <p className="text-xl font-black text-slate-950 font-mono mt-0.5">
                                 {resolvedCount}
                             </p>
-                            <p className="text-[10px] text-slate-600 mt-0.5 font-medium">
+                            <p className="text-[9px] text-slate-600 mt-0.5 font-medium truncate">
                                 {resolutionRate}% operational clearance rate
                             </p>
                         </div>
 
                         {/* 5. Yung nag report na incident */}
-                        <div className="border-2 border-slate-900 p-3 bg-white">
-                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-700">
+                        <div className="border border-slate-900 p-2 bg-white">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-700">
                                 5. Reported Citizen Incidents
                             </p>
-                            <p className="text-2xl font-black text-slate-950 font-mono mt-1">
+                            <p className="text-xl font-black text-slate-950 font-mono mt-0.5">
                                 {reportedCount}
                             </p>
-                            <p className="text-[10px] text-slate-600 mt-0.5 font-medium">
+                            <p className="text-[9px] text-slate-600 mt-0.5 font-medium truncate">
                                 {verificationRate}% verified legitimate distress calls
                             </p>
                         </div>
 
                         {/* 6. Avg na response time */}
-                        <div className="border-2 border-slate-900 p-3 bg-white">
-                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-700">
+                        <div className="border border-slate-900 p-2 bg-white">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-700">
                                 6. Average Response Time
                             </p>
-                            <p className="text-2xl font-black text-slate-950 font-mono mt-1">
+                            <p className="text-xl font-black text-slate-950 font-mono mt-0.5">
                                 {avgResponseTimeStr}
                             </p>
-                            <p className="text-[10px] text-slate-600 mt-0.5 font-medium">
+                            <p className="text-[9px] text-slate-600 mt-0.5 font-medium truncate">
                                 Dispatch acknowledgment to on-scene arrival
                             </p>
                         </div>
@@ -526,55 +567,55 @@ export default function ReportsDashboard({
                 </div>
 
                 {/* 3. Official Territorial Barangay Incident Breakdown Ledger */}
-                <div className="border-2 border-slate-900 print:break-inside-avoid">
-                    <div className="bg-slate-100 px-3 py-1.5 border-b-2 border-slate-900 flex items-center justify-between">
-                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                <div className="border border-slate-900 print:break-inside-avoid">
+                    <div className="bg-slate-100 px-2.5 py-1 border-b border-slate-900 flex items-center justify-between">
+                        <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-900">
                             Territorial Barangay Incident &amp; Operations Distribution
                         </h3>
-                        <span className="text-[9.5px] font-bold text-slate-600 uppercase">
+                        <span className="text-[9px] font-bold text-slate-600 uppercase">
                             Official Municipal Record • Ranked by Incident Volume
                         </span>
                     </div>
 
-                    <table className="w-full text-left text-[11px] border-collapse">
+                    <table className="w-full text-left text-[10px] border-collapse">
                         <thead>
-                            <tr className="border-b border-slate-400 bg-slate-50 font-bold text-slate-800 uppercase text-[9.5px]">
-                                <th className="p-2 border-r border-slate-300 w-10 text-center">#</th>
-                                <th className="p-2 border-r border-slate-300">Barangay Name</th>
-                                <th className="p-2 border-r border-slate-300 text-center">Incidents</th>
-                                <th className="p-2 border-r border-slate-300 text-center">% Share</th>
-                                <th className="p-2 border-r border-slate-300 text-center">Dispatches</th>
-                                <th className="p-2 border-r border-slate-300 text-center">Resolved</th>
-                                <th className="p-2 text-center">Clearance Rate</th>
+                            <tr className="border-b border-slate-400 bg-slate-50 font-bold text-slate-800 uppercase text-[9px]">
+                                <th className="py-1 px-2 border-r border-slate-300 w-8 text-center">#</th>
+                                <th className="py-1 px-2 border-r border-slate-300">Barangay Name</th>
+                                <th className="py-1 px-2 border-r border-slate-300 text-center">Incidents</th>
+                                <th className="py-1 px-2 border-r border-slate-300 text-center">% Share</th>
+                                <th className="py-1 px-2 border-r border-slate-300 text-center">Dispatches</th>
+                                <th className="py-1 px-2 border-r border-slate-300 text-center">Resolved</th>
+                                <th className="py-1 px-2 text-center">Clearance Rate</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {barangaySummary.map((b, idx) => (
+                            {barangaySummary.slice(0, 8).map((b, idx) => (
                                 <tr key={b.name} className="border-b border-slate-200">
-                                    <td className="p-2 border-r border-slate-200 text-center font-mono text-[10px] text-slate-600">
+                                    <td className="py-1 px-2 border-r border-slate-200 text-center font-mono text-[9px] text-slate-600">
                                         {idx + 1}
                                     </td>
-                                    <td className="p-2 border-r border-slate-200 font-bold text-slate-900">
+                                    <td className="py-1 px-2 border-r border-slate-200 font-bold text-slate-900">
                                         {b.name}
                                         {idx === 0 && (
-                                            <span className="ml-2 text-[8.5px] font-black uppercase px-1.5 py-0.2 border border-slate-900 rounded bg-slate-100">
+                                            <span className="ml-1.5 text-[8px] font-black uppercase px-1 py-0.2 border border-slate-900 rounded bg-slate-100">
                                                 Top Hotspot
                                             </span>
                                         )}
                                     </td>
-                                    <td className="p-2 border-r border-slate-200 text-center font-mono font-bold text-slate-900">
+                                    <td className="py-1 px-2 border-r border-slate-200 text-center font-mono font-bold text-slate-900">
                                         {b.total}
                                     </td>
-                                    <td className="p-2 border-r border-slate-200 text-center font-mono text-slate-700">
+                                    <td className="py-1 px-2 border-r border-slate-200 text-center font-mono text-slate-700">
                                         {b.pct}%
                                     </td>
-                                    <td className="p-2 border-r border-slate-200 text-center font-mono text-slate-800">
+                                    <td className="py-1 px-2 border-r border-slate-200 text-center font-mono text-slate-800">
                                         {b.dispatches}
                                     </td>
-                                    <td className="p-2 border-r border-slate-200 text-center font-mono font-semibold text-slate-900">
+                                    <td className="py-1 px-2 border-r border-slate-200 text-center font-mono font-semibold text-slate-900">
                                         {b.resolved}
                                     </td>
-                                    <td className="p-2 text-center font-mono font-bold text-slate-900">
+                                    <td className="py-1 px-2 text-center font-mono font-bold text-slate-900">
                                         {b.clearanceRate}%
                                     </td>
                                 </tr>
@@ -584,29 +625,29 @@ export default function ReportsDashboard({
                 </div>
 
                 {/* 4. Official Certification Signatures Block (Matching PCR Standard) */}
-                <div className="grid grid-cols-2 gap-8 text-center text-xs pt-4 print:break-inside-avoid">
-                    <div className="w-64 mx-auto">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-8">
+                <div className="grid grid-cols-2 gap-8 text-center text-xs pt-2 print:break-inside-avoid">
+                    <div className="w-60 mx-auto">
+                        <p className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-5">
                             Prepared &amp; Certified By:
                         </p>
-                        <p className="font-black text-slate-900 uppercase text-xs tracking-wider mb-1">
+                        <p className="font-black text-slate-900 uppercase text-xs tracking-wider mb-0.5">
                             {auth?.user ? `${auth.user.first_name} ${auth.user.last_name}` : 'Rein Christopher Ejercito'}
                         </p>
-                        <div className="border-b-2 border-slate-900 w-full mb-1"></div>
-                        <p className="text-[10px] text-slate-600 font-semibold">
+                        <div className="border-b-2 border-slate-900 w-full mb-0.5"></div>
+                        <p className="text-[9px] text-slate-600 font-semibold">
                             {auth?.user?.role === 'dispatcher' ? 'Operations Dispatcher / On-Duty' : 'MDRRMO Operations Administrator'}
                         </p>
                     </div>
 
-                    <div className="w-64 mx-auto">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-8">
+                    <div className="w-60 mx-auto">
+                        <p className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-5">
                             Approved &amp; Noted By:
                         </p>
-                        <p className="font-black text-slate-900 uppercase text-xs tracking-wider mb-1">
+                        <p className="font-black text-slate-900 uppercase text-xs tracking-wider mb-0.5">
                             Engr. Rommel C. Lanoy
                         </p>
-                        <div className="border-b-2 border-slate-900 w-full mb-1"></div>
-                        <p className="text-[10px] text-slate-600 font-semibold">
+                        <div className="border-b-2 border-slate-900 w-full mb-0.5"></div>
+                        <p className="text-[9px] text-slate-600 font-semibold">
                             Approved by / MDRRMO Officer-in-Charge
                         </p>
                     </div>
