@@ -68,6 +68,8 @@ export default function ReportStatCard({
     const numericTarget = typeof value === 'number' ? value : null;
     const animatedNum = useCountUp(numericTarget, 850, delayMs);
     const displayValue = numericTarget !== null ? animatedNum : value;
+    const isStringValue = typeof displayValue === 'string' && isNaN(Number(displayValue));
+    const stringLen = typeof displayValue === 'string' ? displayValue.length : 0;
 
     return (
         <div
@@ -97,13 +99,25 @@ export default function ReportStatCard({
                 </div>
 
                 {/* Main Value */}
-                <div className="flex items-baseline gap-1.5 mb-2.5">
+                <div className="flex items-baseline gap-1.5 mb-2.5 min-w-0">
                     {valuePrefix && (
                         <span className="text-xl font-bold text-slate-400 dark:text-slate-500 print:text-slate-600">
                             {valuePrefix}
                         </span>
                     )}
-                    <span className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white print:text-slate-950 font-mono">
+                    <span
+                        className={clsx(
+                            'font-black tracking-tight text-slate-900 dark:text-white print:text-slate-950 leading-tight break-words min-w-0',
+                            isStringValue
+                                ? stringLen > 10
+                                    ? 'text-lg sm:text-xl font-sans'
+                                    : stringLen > 7
+                                    ? 'text-xl sm:text-2xl font-sans'
+                                    : 'text-2xl sm:text-3xl font-sans'
+                                : 'text-2xl sm:text-3xl font-mono'
+                        )}
+                        title={typeof displayValue === 'string' ? displayValue : undefined}
+                    >
                         {displayValue}
                     </span>
                     {valueSuffix && (
