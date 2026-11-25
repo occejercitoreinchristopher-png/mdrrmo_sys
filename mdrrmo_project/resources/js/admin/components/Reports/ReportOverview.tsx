@@ -102,9 +102,7 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 <ReportStatCard
                     title="Total Incidents"
                     value={totalIncidents}
-                    badgeText="All Cases"
                     subtitle="Recorded municipal emergency cases"
-                    progress={100}
                     delayMs={0}
                 />
 
@@ -112,9 +110,7 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 <ReportStatCard
                     title="Top Hotspot Barangay"
                     value={topBarangayName}
-                    badgeText={`${topBarangayCount} cases`}
                     subtitle={`${topBarangayPct}% of total incidents`}
-                    progress={topBarangayPct}
                     delayMs={60}
                 />
 
@@ -122,9 +118,7 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 <ReportStatCard
                     title="Total Dispatches"
                     value={totalDispatches}
-                    badgeText="Deployments"
                     subtitle="Ambulance & rescue units"
-                    progress={totalIncidents > 0 ? Math.min(100, Math.round((totalDispatches / totalIncidents) * 100)) : 0}
                     delayMs={120}
                 />
 
@@ -132,9 +126,7 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 <ReportStatCard
                     title="Resolved Cases"
                     value={resolvedCount}
-                    badgeText={`${resolutionRate}% Cleared`}
                     subtitle="Successfully closed operations"
-                    progress={resolutionRate}
                     delayMs={180}
                 />
 
@@ -142,9 +134,7 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 <ReportStatCard
                     title="Reported Incidents"
                     value={reportedCount}
-                    badgeText={`${verificationRate}% Valid`}
                     subtitle="Verified citizen distress calls"
-                    progress={verificationRate}
                     delayMs={240}
                 />
 
