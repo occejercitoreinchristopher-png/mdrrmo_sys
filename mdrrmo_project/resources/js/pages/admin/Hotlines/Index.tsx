@@ -262,48 +262,6 @@ export default function HotlinesIndex({
                     }
                 />
 
-                {/* Top Telemetry Metric Ribbon */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <Card className="p-4 bg-slate-900/60 dark:bg-slate-900/80 border-slate-800 backdrop-blur-md">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Hotlines</p>
-                                <p className="text-2xl font-black text-white mt-1">{stats?.total ?? hotlines.length}</p>
-                                <p className="text-[11px] text-slate-500 mt-0.5">Configured emergency agencies</p>
-                            </div>
-                            <div className="w-11 h-11 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-                                <Phone className="w-5 h-5" />
-                            </div>
-                        </div>
-                    </Card>
-
-                    <Card className="p-4 bg-slate-900/60 dark:bg-slate-900/80 border-slate-800 backdrop-blur-md">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Live on Mobile App</p>
-                                <p className="text-2xl font-black text-emerald-400 mt-1">{stats?.active ?? hotlines.filter(h => h.is_active).length}</p>
-                                <p className="text-[11px] text-slate-500 mt-0.5">Available for residents to dial</p>
-                            </div>
-                            <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                                <Radio className="w-5 h-5 animate-pulse" />
-                            </div>
-                        </div>
-                    </Card>
-
-                    <Card className="p-4 bg-slate-900/60 dark:bg-slate-900/80 border-slate-800 backdrop-blur-md">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Inactive / Standby</p>
-                                <p className="text-2xl font-black text-amber-400 mt-1">{stats?.inactive ?? hotlines.filter(h => !h.is_active).length}</p>
-                                <p className="text-[11px] text-slate-500 mt-0.5">Hidden from mobile directory</p>
-                            </div>
-                            <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                                <XCircle className="w-5 h-5" />
-                            </div>
-                        </div>
-                    </Card>
-                </div>
-
                 {/* Filter and View Switcher Bar */}
                 <Card className="p-4 bg-slate-900/60 dark:bg-slate-900/80 border-slate-800">
                     <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">

@@ -5,9 +5,6 @@ import {
     Pencil,
     Trash2,
     Ambulance as AmbulanceIcon,
-    CheckCircle2,
-    Truck,
-    Wrench,
     Building2,
     Eye,
     LayoutGrid,
@@ -73,11 +70,6 @@ export default function AmbulanceTable({
             maintenance: ambulances.filter((a) => a.status === 'maintenance' || a.status === 'inactive').length,
         };
     }, [ambulances]);
-
-    const readinessPercentage = useMemo(() => {
-        if (!counts.total) return 0;
-        return Math.round((counts.available / counts.total) * 100);
-    }, [counts]);
 
     // Filter by search and status tab
     const filtered = useMemo(() => {
@@ -161,9 +153,6 @@ export default function AmbulanceTable({
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
                             MDRRMO FLEET COMMAND
                         </span>
-                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                            {readinessPercentage}% Readiness Rate
-                        </span>
                     </div>
                     <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
                         Ambulance Fleet
@@ -215,143 +204,6 @@ export default function AmbulanceTable({
                         <Plus className="w-4 h-4" />
                         <span>Add Ambulance</span>
                     </button>
-                </div>
-            </div>
-
-            {/* INTERACTIVE FLEET KPI STRIP */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                {/* 1. TOTAL FLEET */}
-                <div
-                    onClick={() => setStatusFilter('all')}
-                    className={clsx(
-                        'p-4 rounded-2xl bg-white dark:bg-slate-900/90 border transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between gap-3',
-                        statusFilter === 'all'
-                            ? 'border-indigo-500/80 ring-2 ring-indigo-500/20'
-                            : 'border-slate-200/80 dark:border-white/10 hover:border-slate-300'
-                    )}
-                >
-                    <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-400">
-                            Total Fleet
-                        </span>
-                        <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-800 dark:text-white flex items-center justify-center shrink-0">
-                            <AmbulanceIcon className="w-4 h-4" />
-                        </div>
-                    </div>
-                    <div>
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
-                                {counts.total}
-                            </span>
-                            <span className="text-xs text-slate-500 font-medium">units registered</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                            {counts.available} available for immediate dispatch
-                        </p>
-                    </div>
-                </div>
-
-                {/* 2. AVAILABLE */}
-                <div
-                    onClick={() => setStatusFilter(statusFilter === 'available' ? 'all' : 'available')}
-                    className={clsx(
-                        'p-4 rounded-2xl bg-white dark:bg-slate-900/90 border transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between gap-3',
-                        statusFilter === 'available'
-                            ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-950/20 ring-2 ring-emerald-500/20'
-                            : 'border-slate-200/80 dark:border-white/10 hover:border-emerald-500/50'
-                    )}
-                >
-                    <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                            </span>
-                            Available
-                        </span>
-                        <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                            <CheckCircle2 className="w-4 h-4" />
-                        </div>
-                    </div>
-                    <div>
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums tracking-tight">
-                                {counts.available}
-                            </span>
-                            <span className="text-xs text-emerald-600/80 dark:text-emerald-400/80 font-bold">
-                                In Service
-                            </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                            Ready for instant deployment
-                        </p>
-                    </div>
-                </div>
-
-                {/* 3. DISPATCHED */}
-                <div
-                    onClick={() => setStatusFilter(statusFilter === 'dispatched' ? 'all' : 'dispatched')}
-                    className={clsx(
-                        'p-4 rounded-2xl bg-white dark:bg-slate-900/90 border transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between gap-3',
-                        statusFilter === 'dispatched'
-                            ? 'border-blue-500 bg-blue-500/5 dark:bg-blue-950/20 ring-2 ring-blue-500/20'
-                            : 'border-slate-200/80 dark:border-white/10 hover:border-blue-500/50'
-                    )}
-                >
-                    <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400">
-                            Dispatched
-                        </span>
-                        <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                            <Truck className="w-4 h-4" />
-                        </div>
-                    </div>
-                    <div>
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-2xl sm:text-3xl font-black text-blue-600 dark:text-blue-400 tabular-nums tracking-tight">
-                                {counts.dispatched}
-                            </span>
-                            <span className="text-xs text-blue-600/80 dark:text-blue-400/80 font-bold">
-                                En Route
-                            </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                            Active emergency field runs
-                        </p>
-                    </div>
-                </div>
-
-                {/* 4. MAINTENANCE */}
-                <div
-                    onClick={() => setStatusFilter(statusFilter === 'maintenance' ? 'all' : 'maintenance')}
-                    className={clsx(
-                        'p-4 rounded-2xl bg-white dark:bg-slate-900/90 border transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between gap-3',
-                        statusFilter === 'maintenance'
-                            ? 'border-amber-500 bg-amber-500/5 dark:bg-amber-950/20 ring-2 ring-amber-500/20'
-                            : 'border-slate-200/80 dark:border-white/10 hover:border-amber-500/50'
-                    )}
-                >
-                    <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-                            Maintenance
-                        </span>
-                        <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                            <Wrench className="w-4 h-4" />
-                        </div>
-                    </div>
-                    <div>
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400 tabular-nums tracking-tight">
-                                {counts.maintenance}
-                            </span>
-                            <span className="text-xs text-amber-600/80 dark:text-amber-400/80 font-bold">
-                                Service Bay
-                            </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                            Under repair or inspection
-                        </p>
-                    </div>
                 </div>
             </div>
 

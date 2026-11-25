@@ -7,7 +7,7 @@ export interface ReportStatCardProps {
     valuePrefix?: string;
     valueSuffix?: string;
     icon?: React.ComponentType<{ className?: string }>;
-    color?: 'blue' | 'amber' | 'emerald' | 'crimson' | 'cyan' | 'violet';
+    color?: string;
     badgeText?: string;
     badgeType?: 'success' | 'warning' | 'info' | 'danger' | 'neutral';
     subtitle?: string;
@@ -60,9 +60,7 @@ export default function ReportStatCard({
     valuePrefix = '',
     valueSuffix = '',
     icon: Icon,
-    color = 'blue',
     badgeText,
-    badgeType = 'neutral',
     subtitle,
     progress,
     delayMs = 0,
@@ -71,124 +69,71 @@ export default function ReportStatCard({
     const animatedNum = useCountUp(numericTarget, 850, delayMs);
     const displayValue = numericTarget !== null ? animatedNum : value;
 
-    const colorConfig = {
-        blue: {
-            iconBg: 'bg-blue-500/10 text-blue-500 border-blue-500/20 group-hover:border-blue-500/40 group-hover:bg-blue-500/20',
-            glow: 'group-hover:shadow-[0_0_25px_rgba(59,130,246,0.18)]',
-            accentBar: 'bg-blue-500',
-            borderHover: 'hover:border-blue-500/40',
-        },
-        amber: {
-            iconBg: 'bg-amber-500/10 text-amber-500 border-amber-500/20 group-hover:border-amber-500/40 group-hover:bg-amber-500/20',
-            glow: 'group-hover:shadow-[0_0_25px_rgba(245,158,11,0.18)]',
-            accentBar: 'bg-amber-500',
-            borderHover: 'hover:border-amber-500/40',
-        },
-        emerald: {
-            iconBg: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 group-hover:border-emerald-500/40 group-hover:bg-emerald-500/20',
-            glow: 'group-hover:shadow-[0_0_25px_rgba(16,185,129,0.18)]',
-            accentBar: 'bg-emerald-500',
-            borderHover: 'hover:border-emerald-500/40',
-        },
-        crimson: {
-            iconBg: 'bg-rose-500/10 text-rose-500 border-rose-500/20 group-hover:border-rose-500/40 group-hover:bg-rose-500/20',
-            glow: 'group-hover:shadow-[0_0_25px_rgba(244,63,94,0.18)]',
-            accentBar: 'bg-rose-500',
-            borderHover: 'hover:border-rose-500/40',
-        },
-        cyan: {
-            iconBg: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20 group-hover:border-cyan-500/40 group-hover:bg-cyan-500/20',
-            glow: 'group-hover:shadow-[0_0_25px_rgba(6,182,212,0.18)]',
-            accentBar: 'bg-cyan-500',
-            borderHover: 'hover:border-cyan-500/40',
-        },
-        violet: {
-            iconBg: 'bg-violet-500/10 text-violet-500 border-violet-500/20 group-hover:border-violet-500/40 group-hover:bg-violet-500/20',
-            glow: 'group-hover:shadow-[0_0_25px_rgba(139,92,246,0.18)]',
-            accentBar: 'bg-violet-500',
-            borderHover: 'hover:border-violet-500/40',
-        },
-    }[color] || {
-        iconBg: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
-        glow: '',
-        accentBar: 'bg-slate-400',
-        borderHover: 'hover:border-slate-500/40',
-    };
-
-    const badgeStyles = {
-        success: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25',
-        warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25',
-        danger: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25',
-        info: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/25',
-        neutral: 'bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-300 border-slate-200 dark:border-white/10',
-    }[badgeType];
-
     return (
         <div
             className={clsx(
-                'group relative rounded-2xl p-4 sm:p-5 transition-all duration-200 overflow-hidden',
+                'group relative rounded-2xl p-4 sm:p-5 transition-all duration-200 overflow-hidden flex flex-col justify-between',
                 'bg-white/95 dark:bg-[#0c1220]/90 backdrop-blur-md',
                 'border border-slate-200/90 dark:border-white/10',
                 'shadow-sm hover:shadow-md hover:-translate-y-0.5',
-                'print:bg-white print:border-slate-300 print:shadow-none print:p-3.5 print:rounded-xl print:break-inside-avoid',
-                colorConfig.borderHover
+                'hover:border-red-500/40 dark:hover:border-red-500/40 hover:shadow-[0_4px_20px_rgba(246,21,9,0.08)]',
+                'print:bg-white print:border-slate-300 print:shadow-none print:p-3.5 print:rounded-xl print:break-inside-avoid'
             )}
         >
-            {/* Top colored accent indicator line */}
-            <div className={clsx('h-1 w-full rounded-full mb-3 transition-all', colorConfig.accentBar)} />
+            <div>
+                {/* Unified System Accent Indicator (MDRRMO Brand Crimson Red) */}
+                <div className="h-1 w-full rounded-full mb-3 bg-[#F61509] dark:bg-[#F61509]/90 shadow-xs" />
 
-            {/* Label and Badge row */}
-            <div className="flex items-center justify-between gap-2 mb-2">
-                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 print:text-slate-600 truncate">
-                    {title}
-                </span>
-                {badgeText && (
-                    <span
-                        className={clsx(
-                            'text-[9.5px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap print:bg-slate-50 print:border-slate-300 print:text-slate-800',
-                            badgeStyles
-                        )}
-                    >
-                        {badgeText}
+                {/* Label and Badge row - wrapping permitted so words are never cut off */}
+                <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 print:text-slate-600 leading-snug">
+                        {title}
                     </span>
-                )}
+                    {badgeText && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap shrink-0 bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/25 print:bg-slate-50 print:border-slate-300 print:text-slate-800">
+                            {badgeText}
+                        </span>
+                    )}
+                </div>
+
+                {/* Main Value */}
+                <div className="flex items-baseline gap-1.5 mb-2.5">
+                    {valuePrefix && (
+                        <span className="text-xl font-bold text-slate-400 dark:text-slate-500 print:text-slate-600">
+                            {valuePrefix}
+                        </span>
+                    )}
+                    <span className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white print:text-slate-950 font-mono">
+                        {displayValue}
+                    </span>
+                    {valueSuffix && (
+                        <span className="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400 print:text-slate-600">
+                            {valueSuffix}
+                        </span>
+                    )}
+                </div>
             </div>
 
-            {/* Main Value */}
-            <div className="flex items-baseline gap-1.5 mb-2.5">
-                {valuePrefix && (
-                    <span className="text-xl font-bold text-slate-400 dark:text-slate-500 print:text-slate-600">
-                        {valuePrefix}
-                    </span>
+            <div>
+                {/* Subtitle - no truncate so all words are 100% visible */}
+                {subtitle && (
+                    <div className="pt-2 border-t border-slate-100 dark:border-white/5 print:border-slate-200">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 print:text-slate-600 leading-relaxed">
+                            {subtitle}
+                        </p>
+                    </div>
                 )}
-                <span className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white print:text-slate-950 font-mono">
-                    {displayValue}
-                </span>
-                {valueSuffix && (
-                    <span className="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400 print:text-slate-600">
-                        {valueSuffix}
-                    </span>
+
+                {/* Progress bar in Unified System Brand Color */}
+                {typeof progress === 'number' && (
+                    <div className="mt-2 w-full bg-slate-100 dark:bg-white/5 h-1 rounded-full overflow-hidden print:hidden">
+                        <div
+                            className="h-full rounded-full bg-[#F61509] transition-all duration-700 ease-out"
+                            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+                        />
+                    </div>
                 )}
             </div>
-
-            {/* Subtitle */}
-            {subtitle && (
-                <div className="pt-2 border-t border-slate-100 dark:border-white/5 print:border-slate-200">
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 print:text-slate-600 truncate">
-                        {subtitle}
-                    </p>
-                </div>
-            )}
-
-            {/* Optional mini progress bar (hidden in print for pristine ink economy) */}
-            {typeof progress === 'number' && (
-                <div className="mt-2 w-full bg-slate-100 dark:bg-white/5 h-1 rounded-full overflow-hidden print:hidden">
-                    <div
-                        className={clsx('h-full rounded-full transition-all duration-700 ease-out', colorConfig.accentBar)}
-                        style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-                    />
-                </div>
-            )}
         </div>
     );
 }

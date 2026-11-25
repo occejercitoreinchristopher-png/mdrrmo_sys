@@ -4,9 +4,6 @@ import {
     UserPlus,
     CheckCircle2,
     AlertCircle,
-    Users,
-    Radio,
-    Ambulance,
     Shield,
     Search,
     X,
@@ -19,7 +16,6 @@ import { toast } from 'sonner';
 import UserTable from './UserTable';
 import UserModal from './UserModal';
 import ConfirmDialog from '@/shared/components/ConfirmDialog';
-import DispatcherStatCard from '@/dispatcher/components/Dashboard/DispatcherStatCard';
 import Pagination from '@/shared/components/Pagination';
 import { clsx } from 'clsx';
 
@@ -144,6 +140,10 @@ export default function UserManagement({
     };
 
     const openEdit = (user: User) => {
+        if (user.role === 'resident') {
+            toast.error('Resident accounts cannot be edited by administrators.');
+            return;
+        }
         setEditingUser(user);
         setModalOpen(true);
     };
@@ -175,6 +175,11 @@ export default function UserManagement({
 
     const handleDelete = () => {
         if (!deleteTarget) return;
+        if (deleteTarget.role === 'resident') {
+            toast.error('Resident accounts cannot be deleted by administrators.');
+            setDeleteTarget(null);
+            return;
+        }
         setDeleting(true);
         router.delete(`${submitUrlPrefix}/${deleteTarget.id}`, {
             preserveScroll: true,
@@ -266,18 +271,11 @@ export default function UserManagement({
                                 <Shield className="w-3 h-3 text-blue-400" />
                                 <span>Personnel Governance & Security</span>
                             </span>
-                            <span className="text-slate-400 text-xs hidden sm:inline">•</span>
-                            <span className="text-slate-400 text-xs font-mono hidden sm:inline">
-                                Municipality of Opol
-                            </span>
                         </div>
 
                         <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
                             {title}
                         </h1>
-                        <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
-                            {subtitle}
-                        </p>
                     </div>
 
                     {canCreate && (
@@ -307,47 +305,6 @@ export default function UserManagement({
                 <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 flex items-center gap-3 text-rose-700 dark:text-rose-400 text-sm">
                     <AlertCircle className="w-5 h-5 shrink-0" />
                     <p className="font-medium">{flash.error}</p>
-                </div>
-            )}
-
-            {/* Top KPI Metrics Strip (Animated Count-Up Cards) */}
-            {!roleFilter && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <DispatcherStatCard
-                        title="Total Staff Personnel"
-                        value={counts.all}
-                        subtitle={`${counts.dispatcher + counts.responder} operational • ${counts.admin} admin`}
-                        icon={Users}
-                        color="blue"
-                        delayMs={0}
-                    />
-
-                    <DispatcherStatCard
-                        title="Intake & Dispatchers"
-                        value={counts.dispatcher}
-                        subtitle="Radio communications officers"
-                        icon={Radio}
-                        color="crimson"
-                        delayMs={60}
-                    />
-
-                    <DispatcherStatCard
-                        title="Responders & EMTs"
-                        value={counts.responder}
-                        subtitle="Paramedics, drivers, and crew"
-                        icon={Ambulance}
-                        color="teal"
-                        delayMs={120}
-                    />
-
-                    <DispatcherStatCard
-                        title="Command Administrators"
-                        value={counts.admin}
-                        subtitle="Security & executive governance"
-                        icon={Shield}
-                        color="violet"
-                        delayMs={180}
-                    />
                 </div>
             )}
 

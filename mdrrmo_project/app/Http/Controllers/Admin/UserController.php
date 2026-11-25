@@ -66,6 +66,10 @@ class UserController extends Controller
     {
         $user = User::withTrashed()->findOrFail($id);
 
+        if ($user->role === 'resident') {
+            return back()->with('error', 'Resident accounts cannot be permanently deleted by administrators.');
+        }
+
         $activeDispatches = Dispatch::where(function ($q) use ($user) {
             $q->where('driver_id', $user->id)
                 ->orWhere('emt_id', $user->id)
@@ -252,6 +256,10 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
+        if ($user->role === 'resident') {
+            return back()->with('error', 'Resident accounts cannot be edited by administrators to preserve mobile device authentication integrity.');
+        }
+
         // Admin cannot modify themselves from this interface, or maybe they can?
         // Let's just allow it for now, but prevent changing roles to resident or admin.
         if ($request->has('phone_number')) {
@@ -394,6 +402,10 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
+        if ($user->role === 'resident') {
+            return back()->with('error', 'Resident accounts cannot be deleted by administrators.');
+        }
+
         $activeDispatches = Dispatch::where(function ($q) use ($user) {
             $q->where('driver_id', $user->id)
                 ->orWhere('emt_id', $user->id)

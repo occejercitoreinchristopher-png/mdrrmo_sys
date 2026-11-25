@@ -225,15 +225,6 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
         return counts;
     }, []);
 
-    const totalSurveyedLandmarks = useMemo(() => {
-        return (OPOL_LANDMARKS || []).length;
-    }, []);
-
-    // Total location codes across all 14 barangays
-    const totalLocationCodesCount = useMemo(() => {
-        return barangays.reduce((acc, b) => acc + (b.location_codes_count || 0), 0);
-    }, [barangays]);
-
     // Mapped vs Unmapped counts
     const mappedCount = useMemo(() => {
         return barangays.filter((b) => (b.location_codes_count || 0) > 0).length;
@@ -669,122 +660,6 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
                                     <LayoutGrid className="w-4 h-4" />
                                     Tactical Cards
                                 </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Top Tactical KPI Metric Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* Card 1: 14 Barangays */}
-                    <div 
-                        onClick={() => setActiveFilter('all')}
-                        className={`group relative overflow-hidden p-4 rounded-xl border transition-all cursor-pointer ${
-                            activeFilter === 'all'
-                                ? 'bg-indigo-500/15 border-indigo-500/40 shadow-md ring-1 ring-indigo-500/30'
-                                : 'bg-white dark:bg-slate-900/80 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between">
-                            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 flex items-center justify-center">
-                                <Building2 className="w-5 h-5" />
-                            </div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                                100% Fixed
-                            </span>
-                        </div>
-                        <div className="mt-3">
-                            <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                                {barangays.length || 14}
-                            </div>
-                            <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                                Official Opol Barangays
-                            </div>
-                            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                                Municipality of Opol, Mis. Or.
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Card 2: Registered Markers */}
-                    <div 
-                        onClick={() => setActiveFilter('mapped')}
-                        className={`group relative overflow-hidden p-4 rounded-xl border transition-all cursor-pointer ${
-                            activeFilter === 'mapped'
-                                ? 'bg-emerald-500/10 border-emerald-500/40 shadow-md ring-1 ring-emerald-500/30'
-                                : 'bg-white dark:bg-slate-900/80 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between">
-                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 flex items-center justify-center">
-                                <MapPin className="w-5 h-5" />
-                            </div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                                Verified Codes
-                            </span>
-                        </div>
-                        <div className="mt-3">
-                            <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                                {totalLocationCodesCount}
-                            </div>
-                            <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                                Registered CAD Markers
-                            </div>
-                            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                                Streetlights, bridges & hubs
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Card 3: Surveyed Landmarks */}
-                    <div className="p-4 rounded-xl border bg-white dark:bg-slate-900/80 border-slate-200 dark:border-white/10">
-                        <div className="flex items-center justify-between">
-                            <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-500 dark:text-sky-400 flex items-center justify-center">
-                                <Compass className="w-5 h-5" />
-                            </div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-500 border border-sky-500/20">
-                                GIS Dataset
-                            </span>
-                        </div>
-                        <div className="mt-3">
-                            <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                                {totalSurveyedLandmarks}+
-                            </div>
-                            <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                                Surveyed LGU Landmarks
-                            </div>
-                            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                                OpenStreetMap & MDRRMO survey
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Card 4: Mapping Coverage */}
-                    <div 
-                        onClick={() => setActiveFilter('unmapped')}
-                        className={`group relative overflow-hidden p-4 rounded-xl border transition-all cursor-pointer ${
-                            activeFilter === 'unmapped'
-                                ? 'bg-amber-500/10 border-amber-500/40 shadow-md ring-1 ring-amber-500/30'
-                                : 'bg-white dark:bg-slate-900/80 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between">
-                            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 dark:text-amber-400 flex items-center justify-center">
-                                <Radio className="w-5 h-5" />
-                            </div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                                {Math.round((mappedCount / (barangays.length || 14)) * 100)}% Coverage
-                            </span>
-                        </div>
-                        <div className="mt-3">
-                            <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                                {mappedCount} / {barangays.length || 14}
-                            </div>
-                            <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                                Barangays with Markers
-                            </div>
-                            <div className="text-[11px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">
-                                {unmappedCount} {unmappedCount === 1 ? 'barangay needs survey' : 'barangays need survey'}
                             </div>
                         </div>
                     </div>

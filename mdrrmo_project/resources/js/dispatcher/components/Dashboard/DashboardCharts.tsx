@@ -553,7 +553,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                                 onClick={() => setTrendStyle('area')}
                                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                                     trendStyle === 'area'
-                                        ? 'bg-blue-600 text-white shadow-xs'
+                                        ? 'bg-[#F61509] text-white shadow-xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                             >
@@ -578,7 +578,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                 <div className="lg:col-span-4 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white dark:bg-[#0b1120]/90 shadow-xs overflow-hidden flex flex-col">
                     <div className="p-5 border-b border-slate-200/80 dark:border-white/10 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-500">
+                            <div className="w-9 h-9 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-[#F61509]">
                                 <PieChart className="w-4 h-4" />
                             </div>
                             <div>
@@ -598,7 +598,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                                 onClick={() => setPieStyle('donut')}
                                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                                     pieStyle === 'donut'
-                                        ? 'bg-violet-600 text-white shadow-xs'
+                                        ? 'bg-[#F61509] text-white shadow-xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                             >
@@ -609,7 +609,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                                 onClick={() => setPieStyle('polarArea')}
                                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                                     pieStyle === 'polarArea'
-                                        ? 'bg-violet-600 text-white shadow-xs'
+                                        ? 'bg-[#F61509] text-white shadow-xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                             >
@@ -673,7 +673,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                 <div className="lg:col-span-6 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white dark:bg-[#0b1120]/90 shadow-xs overflow-hidden flex flex-col">
                     <div className="p-5 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500">
+                            <div className="w-9 h-9 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-[#F61509]">
                                 <MapPin className="w-4 h-4" />
                             </div>
                             <div>
@@ -707,7 +707,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                 <div className="lg:col-span-6 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white dark:bg-[#0b1120]/90 shadow-xs overflow-hidden flex flex-col">
                     <div className="p-5 border-b border-slate-200/80 dark:border-white/10 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-500">
+                            <div className="w-9 h-9 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-[#F61509]">
                                 <Radar className="w-4 h-4" />
                             </div>
                             <div>
@@ -728,7 +728,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                                 onClick={() => setOpsTab('dispatch')}
                                 className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                                     opsTab === 'dispatch'
-                                        ? 'bg-teal-600 text-white shadow-xs'
+                                        ? 'bg-[#F61509] text-white shadow-xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                             >
@@ -739,7 +739,7 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                                 onClick={() => setOpsTab('sources')}
                                 className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                                     opsTab === 'sources'
-                                        ? 'bg-teal-600 text-white shadow-xs'
+                                        ? 'bg-[#F61509] text-white shadow-xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                             >

@@ -1,30 +1,5 @@
-import {
-    AlertTriangle,
-    Ambulance,
-    CheckCircle2,
-    HeartPulse,
-    Shield,
-    Trophy,
-    Truck,
-    UserCheck,
-} from 'lucide-react';
-import DispatcherStatCard from '@/dispatcher/components/Dashboard/DispatcherStatCard';
-import { toPascalCase } from '@/shared/utils/utils';
-
-export interface TopResidentSummary {
-    id: number;
-    first_name: string;
-    last_name: string;
-    name: string;
-    initials: string;
-    profile_photo_url?: string | null;
-    barangay?: string;
-    is_verified?: boolean;
-    total_reports: number;
-    resolved_reports: number;
-    active_reports: number;
-    resolution_rate: number;
-}
+import { AlertTriangle, Ambulance, CheckCircle2, Shield, TrendingUp } from 'lucide-react';
+import { clsx } from 'clsx';
 
 export interface DashboardStats {
     total_users?: number;
@@ -40,109 +15,96 @@ export interface DashboardStats {
     total_residents?: number;
     verified_residents?: number;
     pending_residents?: number;
-    active_resident_reporters?: number;
     total_ambulances?: number;
     available_ambulances?: number;
     total_dispatches?: number;
     active_dispatches?: number;
     completed_dispatches?: number;
-    completed_dispatches_today?: number;
     total_responders?: number;
     available_responders?: number;
     total_patients?: number;
     total_pcrs?: number;
-    sim_caller_reports?: number;
-    top_resolved_resident?: TopResidentSummary | null;
     [key: string]: any;
 }
 
-interface DashboardCardsProps {
+interface DashboardStatCardsProps {
     stats?: DashboardStats;
 }
 
-export default function DashboardCards({ stats = {} }: DashboardCardsProps) {
-    const topRes = stats.top_resolved_resident;
+export default function DashboardStatCards({ stats = {} }: DashboardStatCardsProps) {
+    const totalResidents = stats.total_residents ?? 0;
+    const verifiedResidents = stats.verified_residents ?? 0;
 
-    const cards = [
-        {
-            title: 'Registered Users',
-            value: stats.total_users ?? stats.total_residents ?? 0,
-            subtitle: `${stats.verified_residents ?? 0} Verified • ${stats.pending_residents ?? 0} Pending`,
-            icon: UserCheck,
-            color: 'blue',
-            trend: stats.users_trend ?? null,
-            href: '/admin/residents',
-        },
-        {
-            title: 'Active Incidents',
-            value: stats.active_incidents ?? stats.pending_incidents ?? 0,
-            subtitle: `${stats.pending_dispatch ?? 0} awaiting dispatch`,
-            icon: AlertTriangle,
-            color: 'crimson',
-            trend: stats.incidents_trend ?? null,
-            href: '/admin/reports?status=pending',
-        },
-        {
-            title: 'Resolved Incidents',
-            value: stats.resolved_incidents ?? 0,
-            subtitle: `${stats.resolved_today ?? 0} today • ${stats.resolution_rate ?? 0}% rate`,
-            icon: CheckCircle2,
-            color: 'emerald',
-            href: '/admin/reports?status=resolved',
-        },
-        {
-            title: 'Top Resolved Reporter',
-            value: topRes ? topRes.resolved_reports : 0,
-            valueSuffix: topRes ? 'resolved' : undefined,
-            highlightName: topRes ? toPascalCase(topRes.name) : 'No reports yet',
-            subtitle: topRes
-                ? `${topRes.total_reports} total reports • Brgy. ${toPascalCase(topRes.barangay || 'Unassigned')}`
-                : 'Awaiting resident reports',
-            icon: Trophy,
-            color: 'amber',
-            href: topRes ? `/admin/residents/${topRes.id}` : '/admin/residents',
-        },
-        {
-            title: 'Patients & PCRs',
-            value: stats.total_patients ?? 0,
-            subtitle: `${stats.total_pcrs ?? 0} PCR records logged`,
-            icon: HeartPulse,
-            color: 'rose',
-            href: '/admin/reports',
-        },
-        {
-            title: 'Ambulances Ready',
-            value: stats.available_ambulances ?? 0,
-            valueSuffix: stats.total_ambulances ? `/ ${stats.total_ambulances}` : undefined,
-            subtitle: 'Emergency response fleet',
-            icon: Ambulance,
-            color: 'teal',
-            href: '/admin/ambulances',
-        },
-        {
-            title: 'Total Dispatches',
-            value: stats.total_dispatches ?? 0,
-            subtitle: `${stats.active_dispatches ?? 0} active • ${stats.completed_dispatches ?? 0} completed`,
-            icon: Truck,
-            color: 'orange',
-            href: '/admin/dispatch-logs',
-        },
-        {
-            title: 'Responders On Duty',
-            value: stats.available_responders ?? 0,
-            valueSuffix: stats.total_responders ? `/ ${stats.total_responders}` : undefined,
-            subtitle: 'Available field crew',
-            icon: Shield,
-            color: 'violet',
-            href: '/admin/users',
-        },
-    ];
+    const totalAmbulances = stats.total_ambulances ?? 0;
+    const availableAmbulances = stats.available_ambulances ?? 0;
+
+    const totalResponders = stats.total_responders ?? 0;
+    const availableResponders = stats.available_responders ?? 0;
+
+    const totalDispatches = stats.total_dispatches ?? 0;
+    const resolvedIncidents = stats.resolved_incidents ?? 0;
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-            {cards.map((card, idx) => (
-                <DispatcherStatCard key={card.title} {...card} delayMs={idx * 60} />
-            ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            {/* CARD 1: Resident App Users */}
+            <div className="relative overflow-hidden rounded-2xl p-5 sm:p-6 bg-white dark:bg-[#0b1120] text-slate-900 dark:text-white border border-slate-200/90 dark:border-white/10 shadow-xs flex flex-col justify-center group">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Resident App Users
+                </span>
+                <div className="flex items-baseline gap-2 mt-2">
+                    <span className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
+                        {totalResidents.toLocaleString()}
+                    </span>
+                    <span className="text-xs text-slate-400 font-medium">
+                        registered residents
+                    </span>
+                </div>
+            </div>
+
+            {/* CARD 2: Ambulances Ready */}
+            <div className="relative overflow-hidden rounded-2xl p-5 sm:p-6 bg-white dark:bg-[#0b1120] text-slate-900 dark:text-white border border-slate-200/90 dark:border-white/10 shadow-xs flex flex-col justify-center group">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Ambulances Ready
+                </span>
+                <div className="flex items-baseline gap-2 mt-2">
+                    <span className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
+                        {availableAmbulances}
+                    </span>
+                    <span className="text-xs text-slate-400 font-medium">
+                        / {totalAmbulances} fleet units
+                    </span>
+                </div>
+            </div>
+
+            {/* CARD 3: Responders on Duty */}
+            <div className="relative overflow-hidden rounded-2xl p-5 sm:p-6 bg-white dark:bg-[#0b1120] text-slate-900 dark:text-white border border-slate-200/90 dark:border-white/10 shadow-xs flex flex-col justify-center group">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Responders on Duty
+                </span>
+                <div className="flex items-baseline gap-2 mt-2">
+                    <span className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
+                        {availableResponders}
+                    </span>
+                    <span className="text-xs text-slate-400 font-medium">
+                        / {totalResponders} personnel
+                    </span>
+                </div>
+            </div>
+
+            {/* CARD 4: Resolved Incidents */}
+            <div className="relative overflow-hidden rounded-2xl p-5 sm:p-6 bg-white dark:bg-[#0b1120] text-slate-900 dark:text-white border border-slate-200/90 dark:border-white/10 shadow-xs flex flex-col justify-center group">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Resolved Incidents
+                </span>
+                <div className="flex items-baseline gap-2 mt-2">
+                    <span className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
+                        {resolvedIncidents.toLocaleString()}
+                    </span>
+                    <span className="text-xs text-slate-400 font-medium">
+                        / {totalDispatches} dispatches
+                    </span>
+                </div>
+            </div>
         </div>
     );
 }

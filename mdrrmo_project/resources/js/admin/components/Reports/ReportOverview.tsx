@@ -97,15 +97,13 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
                 {/* 1. Ilang accident ang nangyari */}
                 <ReportStatCard
-                    title="Total Accidents / Incidents"
+                    title="Total Incidents"
                     value={totalIncidents}
-                    color="crimson"
                     badgeText="All Cases"
-                    badgeType="neutral"
-                    subtitle="Recorded municipal emergencies"
+                    subtitle="Recorded municipal emergency cases"
                     progress={100}
                     delayMs={0}
                 />
@@ -114,9 +112,7 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 <ReportStatCard
                     title="Top Hotspot Barangay"
                     value={topBarangayName}
-                    color="amber"
                     badgeText={`${topBarangayCount} cases`}
-                    badgeType="warning"
                     subtitle={`${topBarangayPct}% of total incidents`}
                     progress={topBarangayPct}
                     delayMs={60}
@@ -126,10 +122,8 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 <ReportStatCard
                     title="Total Dispatches"
                     value={totalDispatches}
-                    color="blue"
                     badgeText="Deployments"
-                    badgeType="info"
-                    subtitle="Ambulance & quick-response units"
+                    subtitle="Ambulance & rescue units"
                     progress={totalIncidents > 0 ? Math.min(100, Math.round((totalDispatches / totalIncidents) * 100)) : 0}
                     delayMs={120}
                 />
@@ -138,9 +132,7 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 <ReportStatCard
                     title="Resolved Cases"
                     value={resolvedCount}
-                    color="emerald"
                     badgeText={`${resolutionRate}% Cleared`}
-                    badgeType="success"
                     subtitle="Successfully closed operations"
                     progress={resolutionRate}
                     delayMs={180}
@@ -150,9 +142,7 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 <ReportStatCard
                     title="Reported Incidents"
                     value={reportedCount}
-                    color="cyan"
                     badgeText={`${verificationRate}% Valid`}
-                    badgeType="info"
                     subtitle="Verified citizen distress calls"
                     progress={verificationRate}
                     delayMs={240}
@@ -162,9 +152,7 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 <ReportStatCard
                     title="Avg Response Time"
                     value={avgResponseTimeStr}
-                    color="violet"
                     badgeText="Target < 8m"
-                    badgeType="neutral"
                     subtitle={`Dispatch ack: ${avgDispatchTimeStr}`}
                     delayMs={300}
                 />

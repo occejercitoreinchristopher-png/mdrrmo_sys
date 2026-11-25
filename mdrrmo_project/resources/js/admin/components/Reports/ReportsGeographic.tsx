@@ -19,11 +19,11 @@ export default function ReportsGeographic({ incidents = [] }: { incidents?: any[
             {/* Section Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                    <div className="w-1.5 h-6 bg-cyan-500 rounded-full shadow-[0_0_12px_rgba(6,182,212,0.5)]" />
+                    <div className="w-1.5 h-6 bg-[#F61509] rounded-full shadow-[0_0_12px_rgba(246,21,9,0.4)]" />
                     <div>
                         <h2 className="text-sm font-black tracking-wider text-slate-900 dark:text-white uppercase flex items-center gap-2">
                             <span>04 Geographic Intelligence</span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25">
                                 Spatial Heatmap
                             </span>
                         </h2>

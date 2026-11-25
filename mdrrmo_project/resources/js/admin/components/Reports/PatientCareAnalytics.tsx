@@ -21,11 +21,11 @@ export default function PatientCareAnalytics({ stats = {} }: { stats?: any }) {
             {/* Section Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                    <div className="w-1.5 h-6 bg-violet-600 rounded-full shadow-[0_0_12px_rgba(139,92,246,0.5)]" />
+                    <div className="w-1.5 h-6 bg-[#F61509] rounded-full shadow-[0_0_12px_rgba(246,21,9,0.4)]" />
                     <div>
                         <h2 className="text-sm font-black tracking-wider text-slate-900 dark:text-white uppercase flex items-center gap-2">
                             <span>03 Patient Care & Clinical Outcomes</span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25">
                                 PCR Intelligence
                             </span>
                         </h2>
@@ -39,12 +39,12 @@ export default function PatientCareAnalytics({ stats = {} }: { stats?: any }) {
             {/* 3 Metric Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Attended */}
-                <div className="rounded-2xl p-5 bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-sm relative overflow-hidden group hover:border-violet-500/30 transition-all">
+                <div className="rounded-2xl p-5 bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-sm relative overflow-hidden group hover:border-red-500/40 transition-all">
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                             Total Patients Attended
                         </span>
-                        <div className="w-8 h-8 rounded-lg bg-violet-500/10 text-violet-500 flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 flex items-center justify-center">
                             <UserCheck className="w-4 h-4" />
                         </div>
                     </div>
@@ -53,49 +53,49 @@ export default function PatientCareAnalytics({ stats = {} }: { stats?: any }) {
                     </div>
                     <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-white/5">
                         <span>Clinical encounters recorded</span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-500">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
                             100% PCR
                         </span>
                     </div>
                 </div>
 
                 {/* Transported */}
-                <div className="rounded-2xl p-5 bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-sm relative overflow-hidden group hover:border-emerald-500/30 transition-all">
+                <div className="rounded-2xl p-5 bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-sm relative overflow-hidden group hover:border-red-500/40 transition-all">
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                             Transported to Hospital
                         </span>
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 flex items-center justify-center">
                             <HeartPulse className="w-4 h-4" />
                         </div>
                     </div>
-                    <div className="text-3xl font-black font-mono text-emerald-500 dark:text-emerald-400 mb-1">
+                    <div className="text-3xl font-black font-mono text-slate-900 dark:text-white mb-1">
                         {patients_transported}
                     </div>
                     <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-white/5">
                         <span>Admitted / Referred to ER</span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-500 font-mono">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 font-mono">
                             {transportRate}% Rate
                         </span>
                     </div>
                 </div>
 
                 {/* Treated on Scene */}
-                <div className="rounded-2xl p-5 bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-sm relative overflow-hidden group hover:border-amber-500/30 transition-all">
+                <div className="rounded-2xl p-5 bg-white/90 dark:bg-[#0c1220]/80 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-sm relative overflow-hidden group hover:border-red-500/40 transition-all">
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                             Treated on Scene / Refused
                         </span>
-                        <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 flex items-center justify-center">
                             <AlertCircle className="w-4 h-4" />
                         </div>
                     </div>
-                    <div className="text-3xl font-black font-mono text-amber-500 dark:text-amber-400 mb-1">
+                    <div className="text-3xl font-black font-mono text-slate-900 dark:text-white mb-1">
                         {patients_not_transported}
                     </div>
                     <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-white/5">
                         <span>First Aid on site or signed waiver</span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-500 font-mono">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 font-mono">
                             {sceneRate}% Rate
                         </span>
                     </div>

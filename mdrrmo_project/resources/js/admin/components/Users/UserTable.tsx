@@ -139,13 +139,20 @@ export default function UserTable({
             <table className="w-full text-left border-collapse text-xs">
                 <thead>
                     <tr className="border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.02] text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                        <th className="py-3 px-4">Staff Member</th>
-                        <th className="py-3 px-4">Contact Phone</th>
-                        <th className="py-3 px-4">Account Role</th>
-                        <th className="py-3 px-4">Team & Position</th>
-                        <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4">Registered</th>
-                        <th className="py-3 px-4 text-right">Actions</th>
+                        <th className="py-3 px-4 whitespace-nowrap">{roleFilter === 'resident' ? 'Resident' : 'Staff Member'}</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Contact Phone</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Account Role</th>
+                        {roleFilter === 'resident' ? (
+                            <th className="py-3 px-4 whitespace-nowrap">Barangay</th>
+                        ) : (
+                            <>
+                                <th className="py-3 px-4 whitespace-nowrap">Team</th>
+                                <th className="py-3 px-4 whitespace-nowrap">Position</th>
+                            </>
+                        )}
+                        <th className="py-3 px-4 whitespace-nowrap">Status</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Registered</th>
+                        <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -225,7 +232,7 @@ export default function UserTable({
                                 </td>
 
                                 {/* Contact Phone */}
-                                <td className="py-3.5 px-4">
+                                <td className="py-3.5 px-4 whitespace-nowrap">
                                     <div className="flex items-center gap-1.5 font-mono text-slate-700 dark:text-slate-300">
                                         <Phone className="w-3 h-3 text-slate-400 shrink-0" />
                                         <span>{row.phone_number ?? '—'}</span>
@@ -233,10 +240,10 @@ export default function UserTable({
                                 </td>
 
                                 {/* Account Role */}
-                                <td className="py-3.5 px-4">
+                                <td className="py-3.5 px-4 whitespace-nowrap">
                                     <span
                                         className={clsx(
-                                            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border backdrop-blur-sm',
+                                            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border backdrop-blur-sm whitespace-nowrap',
                                             conf.style
                                         )}
                                     >
@@ -245,58 +252,49 @@ export default function UserTable({
                                     </span>
                                 </td>
 
-                                {/* Team & Position */}
-                                <td className="py-3.5 px-4">
-                                    {row.responder_profile ? (
-                                        <div className="flex flex-col gap-1 items-start">
-                                            <div className="flex items-center gap-1.5">
-                                                <span
-                                                    className={clsx(
-                                                        'text-[10px] font-bold px-2 py-0.5 rounded-md border uppercase tracking-wider',
-                                                        row.responder_profile.is_reliever
-                                                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                                                            : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
-                                                    )}
-                                                >
-                                                    {row.responder_profile.is_reliever
-                                                        ? 'Reliever'
-                                                        : `Team ${row.responder_profile.team || 'Alpha'}`}
+                                {roleFilter === 'resident' ? (
+                                    /* Barangay for Residents */
+                                    <td className="py-3.5 px-4 whitespace-nowrap">
+                                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                            {row.resident_profile?.barangay?.barangay_name ?? (row as any).barangay ?? '—'}
+                                        </span>
+                                    </td>
+                                ) : (
+                                    <>
+                                        {/* Team (Blank if no team) */}
+                                        <td className="py-3.5 px-4 whitespace-nowrap">
+                                            {row.responder_profile?.is_reliever ? (
+                                                <span className="inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-lg border uppercase tracking-wider whitespace-nowrap bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25 shadow-xs">
+                                                    Reliever
                                                 </span>
-                                                <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                                            ) : row.responder_profile?.team ? (
+                                                <span className="inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-lg border uppercase tracking-wider whitespace-nowrap bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/25 shadow-xs">
+                                                    Team {row.responder_profile.team}
+                                                </span>
+                                            ) : null}
+                                        </td>
+
+                                        {/* Position */}
+                                        <td className="py-3.5 px-4 whitespace-nowrap">
+                                            {row.role === 'resident' ? null : row.responder_profile ? (
+                                                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                                                     {row.responder_profile.position === 'driver' ? 'Driver' : 'EMT'}
                                                 </span>
-                                            </div>
-                                            <span className="text-[10px] text-slate-400">
-                                                {row.responder_profile.is_reliever
-                                                    ? 'Standby Reliever Pool'
-                                                    : 'Active Deployment Crew'}
-                                            </span>
-                                        </div>
-                                    ) : row.role === 'dispatcher' ? (
-                                        <div className="flex flex-col gap-0.5">
-                                            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                                                Radio & Call Intake
-                                            </span>
-                                            <span className="text-[10px] text-slate-400">
-                                                Dispatch Center Unit
-                                            </span>
-                                        </div>
-                                    ) : row.role === 'admin' ? (
-                                        <div className="flex flex-col gap-0.5">
-                                            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                                                System Governance
-                                            </span>
-                                            <span className="text-[10px] text-slate-400">
-                                                Executive Command HQ
-                                            </span>
-                                        </div>
-                                    ) : (
-                                        <span className="text-slate-400">—</span>
-                                    )}
-                                </td>
+                                            ) : row.role === 'dispatcher' ? (
+                                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                    Dispatcher
+                                                </span>
+                                            ) : row.role === 'admin' ? (
+                                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                    Administrator
+                                                </span>
+                                            ) : null}
+                                        </td>
+                                    </>
+                                )}
 
                                 {/* Account Status */}
-                                <td className="py-3.5 px-4">
+                                <td className="py-3.5 px-4 whitespace-nowrap">
                                     {isArchived ? (
                                         <div className="flex flex-col gap-1 items-start">
                                             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20">
@@ -343,7 +341,7 @@ export default function UserTable({
                                 </td>
 
                                 {/* Registration Date */}
-                                <td className="py-3.5 px-4 font-mono text-slate-500 dark:text-slate-400 text-[11px]">
+                                <td className="py-3.5 px-4 font-mono text-slate-500 dark:text-slate-400 text-[11px] whitespace-nowrap">
                                     {row.created_at
                                         ? new Date(row.created_at).toLocaleDateString('en-PH', {
                                               month: 'short',
@@ -354,7 +352,7 @@ export default function UserTable({
                                 </td>
 
                                 {/* Manage Actions */}
-                                <td className="py-3.5 px-4 text-right">
+                                <td className="py-3.5 px-4 text-right whitespace-nowrap">
                                     <div className="flex items-center justify-end gap-1.5">
                                         {isArchived ? (
                                             <>
@@ -380,16 +378,18 @@ export default function UserTable({
                                             </>
                                         ) : (
                                             <>
-                                                {/* Edit Button */}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => onEdit?.(row)}
-                                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200/80 dark:border-white/10 transition-all cursor-pointer active:scale-95"
-                                                    title="Edit user details"
-                                                >
-                                                    <Pencil className="w-3 h-3 text-slate-500" />
-                                                    <span>Edit</span>
-                                                </button>
+                                                {/* Edit Button - Not allowed for Resident App users */}
+                                                {row.role !== 'resident' && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => onEdit?.(row)}
+                                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200/80 dark:border-white/10 transition-all cursor-pointer active:scale-95"
+                                                        title="Edit user details"
+                                                    >
+                                                        <Pencil className="w-3 h-3 text-slate-500" />
+                                                        <span>Edit</span>
+                                                    </button>
+                                                )}
 
                                                 {/* Reset Password Button */}
                                                 <button
@@ -415,15 +415,17 @@ export default function UserTable({
                                                     </span>
                                                 </button>
 
-                                                {/* Delete / Archive Button */}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => onDelete?.(row)}
-                                                    className="p-1.5 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all cursor-pointer active:scale-95"
-                                                    title="Archive user account"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
+                                                {/* Delete / Archive Button - Not allowed for Resident App users */}
+                                                {row.role !== 'resident' && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => onDelete?.(row)}
+                                                        className="p-1.5 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all cursor-pointer active:scale-95"
+                                                        title="Archive user account"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
                                             </>
                                         )}
                                     </div>

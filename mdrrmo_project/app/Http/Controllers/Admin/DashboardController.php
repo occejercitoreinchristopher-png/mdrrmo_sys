@@ -26,8 +26,12 @@ class DashboardController extends Controller
 
         // Core Incident Metrics
         $totalIncidents = Incident::count();
-        $activeIncidents = Incident::whereIn('incident_status', ['pending', 'verified', 'assigned', 'responding'])->count();
-        $pendingDispatch = Incident::whereIn('incident_status', ['pending', 'verified'])->count();
+        $pendingCount = Incident::where('incident_status', 'pending')->count();
+        $verifiedCount = Incident::where('incident_status', 'verified')->count();
+        $assignedCount = Incident::where('incident_status', 'assigned')->count();
+        $respondingCount = Incident::where('incident_status', 'responding')->count();
+        $activeIncidents = $pendingCount + $verifiedCount + $assignedCount + $respondingCount;
+        $pendingDispatch = $pendingCount + $verifiedCount;
         $resolvedIncidents = Incident::where('incident_status', 'resolved')->count();
         $resolvedToday = Incident::where('incident_status', 'resolved')
             ->where(function ($q) {
@@ -61,6 +65,8 @@ class DashboardController extends Controller
         // Fleet, Dispatch, Responder & Patient Metrics
         $totalAmbulances = Ambulance::count();
         $availableAmbulances = Ambulance::where('status', 'available')->count();
+        $dispatchedAmbulances = Ambulance::whereIn('status', ['dispatched', 'in_mission', 'en_route', 'on_scene'])->count();
+        $maintenanceAmbulances = Ambulance::where('status', 'maintenance')->count();
         $totalDispatches = Dispatch::count();
         $activeDispatches = Dispatch::whereNotIn('dispatch_status', ['completed', 'cancelled'])->count();
         $completedDispatches = Dispatch::where('dispatch_status', 'completed')->count();
@@ -116,7 +122,10 @@ class DashboardController extends Controller
             'users_trend' => $usersTrend,
             'total_incidents' => $totalIncidents,
             'active_incidents' => $activeIncidents,
-            'pending_incidents' => Incident::where('incident_status', 'pending')->count(),
+            'pending_incidents' => $pendingCount,
+            'verified_incidents' => $verifiedCount,
+            'assigned_incidents' => $assignedCount,
+            'responding_incidents' => $respondingCount,
             'pending_dispatch' => $pendingDispatch,
             'resolved_incidents' => $resolvedIncidents,
             'resolved_today' => $resolvedToday,
@@ -128,6 +137,8 @@ class DashboardController extends Controller
             'active_resident_reporters' => $activeResidentReporters,
             'total_ambulances' => $totalAmbulances,
             'available_ambulances' => $availableAmbulances,
+            'dispatched_ambulances' => $dispatchedAmbulances,
+            'maintenance_ambulances' => $maintenanceAmbulances,
             'total_dispatches' => $totalDispatches,
             'active_dispatches' => $activeDispatches,
             'completed_dispatches' => $completedDispatches,
@@ -179,26 +190,62 @@ class DashboardController extends Controller
             ->get()
             ->filter(fn ($type) => (int) $type->incidents_count > 0)
             ->map(fn ($type) => [
-                'name' => $type->name ?? $type->incident_type_name,
+                'id' => $type->id,
+                'name' => $type->incident_type_name ?? $type->name ?? 'Unknown',
                 'count' => (int) $type->incidents_count,
             ])
             ->values()
             ->toArray();
 
-        // Top Barangays by Incident Count
-        $barangayCounts = [];
-        $allIncidents = Incident::with(['resident.residentProfile.barangay'])->get();
+        // Top Barangays with rich operational breakdown
+        $barangayGroups = [];
+        $allIncidents = Incident::with(['resident.residentProfile.barangay', 'incidentType'])->get();
         foreach ($allIncidents as $inc) {
             $b = $inc->barangay;
             if (empty($b) || strtolower($b) === 'unknown') {
                 $b = 'Unassigned';
             }
-            $barangayCounts[$b] = ($barangayCounts[$b] ?? 0) + 1;
+            if (!isset($barangayGroups[$b])) {
+                $barangayGroups[$b] = [
+                    'name' => $b,
+                    'count' => 0,
+                    'resolved' => 0,
+                    'active' => 0,
+                    'types' => [],
+                ];
+            }
+            $barangayGroups[$b]['count']++;
+            if ($inc->incident_status === 'resolved') {
+                $barangayGroups[$b]['resolved']++;
+            } elseif (in_array($inc->incident_status, ['pending', 'verified', 'assigned', 'responding'])) {
+                $barangayGroups[$b]['active']++;
+            }
+            $typeName = $inc->incidentType?->incident_type_name ?? $inc->incidentType?->name ?? 'General Emergency';
+            $barangayGroups[$b]['types'][$typeName] = ($barangayGroups[$b]['types'][$typeName] ?? 0) + 1;
         }
-        arsort($barangayCounts);
+
+        // Sort by total incident count DESC; if tied, break tie by resolved count DESC
+        uasort($barangayGroups, function ($a, $b) {
+            if ($b['count'] !== $a['count']) {
+                return $b['count'] <=> $a['count'];
+            }
+            return $b['resolved'] <=> $a['resolved'];
+        });
+
         $topBarangays = [];
-        foreach (array_slice($barangayCounts, 0, 6, true) as $name => $count) {
-            $topBarangays[] = ['name' => $name, 'count' => $count];
+        foreach (array_slice($barangayGroups, 0, 5, true) as $name => $data) {
+            arsort($data['types']);
+            $topType = key($data['types']) ?? 'General';
+            $topTypeCount = current($data['types']) ?: 0;
+            $topBarangays[] = [
+                'name' => $name,
+                'count' => $data['count'],
+                'resolved' => $data['resolved'],
+                'active' => $data['active'],
+                'top_type' => $topType,
+                'top_type_count' => $topTypeCount,
+                'percentage' => $totalIncidents > 0 ? round(($data['count'] / $totalIncidents) * 100) : 0,
+            ];
         }
 
         // Report Sources Breakdown
@@ -206,6 +253,24 @@ class DashboardController extends Controller
         $phoneSimReports = $simCallerReports;
         $dispatcherWalkInReports = Incident::whereIn('report_source', ['dispatcher', 'walk_in'])->count();
         $otherReports = max(0, $totalIncidents - ($residentAppReports + $phoneSimReports + $dispatcherWalkInReports));
+
+        // Monthly trend for top active incident types
+        $incidentTypesTrend = [];
+        $topTypes = array_slice($incidentTypes, 0, 6);
+        foreach ($topTypes as $typeItem) {
+            $tData = [];
+            for ($i = 5; $i >= 0; $i--) {
+                $m = $now->copy()->subMonths($i);
+                $tData[] = Incident::where('incident_type_id', $typeItem['id'])
+                    ->whereYear('created_at', $m->year)
+                    ->whereMonth('created_at', $m->month)
+                    ->count();
+            }
+            $incidentTypesTrend[] = [
+                'name' => $typeItem['name'],
+                'data' => $tData,
+            ];
+        }
 
         $charts = [
             'monthly_incidents' => [
@@ -221,6 +286,7 @@ class DashboardController extends Controller
                 'data' => $monthlyDispatchData,
             ],
             'incident_types' => $incidentTypes,
+            'incident_types_trend' => $incidentTypesTrend,
             'dispatch_status' => [
                 'labels' => ['Completed', 'On Scene', 'En Route', 'Assigned'],
                 'data' => [

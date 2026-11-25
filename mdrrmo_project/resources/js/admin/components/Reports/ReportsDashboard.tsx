@@ -3,12 +3,6 @@ import { usePage } from '@inertiajs/react';
 import {
     Printer,
     FileText,
-    TrendingUp,
-    Truck,
-    Stethoscope,
-    MapPin,
-    Layers,
-    Table,
     ArrowDownToLine,
     Shield
 } from 'lucide-react';
@@ -177,12 +171,12 @@ export default function ReportsDashboard({
     };
 
     const tabs = [
-        { id: 'all', label: 'All Modules', icon: Layers, badge: incidents.length },
-        { id: 'intelligence', label: 'Incident Trends', icon: TrendingUp },
-        { id: 'fleet', label: 'Fleet & Response', icon: Truck },
-        { id: 'pcr', label: 'Patient Care (PCR)', icon: Stethoscope },
-        { id: 'geographic', label: 'Spatial Heatmap', icon: MapPin },
-        { id: 'records', label: 'Incident Records', icon: Table, badge: incidents.length },
+        { id: 'all', label: 'All Modules', badge: incidents.length },
+        { id: 'intelligence', label: 'Incident Trends' },
+        { id: 'fleet', label: 'Fleet & Response' },
+        { id: 'pcr', label: 'Patient Care (PCR)' },
+        { id: 'geographic', label: 'Spatial Heatmap' },
+        { id: 'records', label: 'Incident Records', badge: incidents.length },
     ];
 
     return (
@@ -303,10 +297,6 @@ export default function ReportsDashboard({
                                     <Shield className="w-3 h-3 text-red-500" />
                                     <span>MDRRMO HQ • Executive Intelligence</span>
                                 </span>
-                                <span className="text-slate-400 text-xs hidden sm:inline">•</span>
-                                <span className="text-slate-400 text-xs font-mono hidden sm:inline">
-                                    Municipality of Opol
-                                </span>
                             </div>
 
                             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
@@ -353,7 +343,6 @@ export default function ReportsDashboard({
                 <div className="border-b border-slate-200/80 dark:border-white/10 pt-2">
                     <div className="flex items-center gap-2 overflow-x-auto pb-3 scrollbar-none">
                         {tabs.map((tab) => {
-                            const Icon = tab.icon;
                             const isActive = activeTab === tab.id;
                             return (
                                 <button
@@ -367,7 +356,6 @@ export default function ReportsDashboard({
                                             : 'bg-white/80 dark:bg-[#0c1220]/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200/80 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/15'
                                     )}
                                 >
-                                    <Icon className="w-3.5 h-3.5" />
                                     <span>{tab.label}</span>
                                     {typeof tab.badge === 'number' && (
                                         <span

@@ -256,10 +256,6 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST }: D
                                 <Shield className="w-3 h-3 text-blue-500" />
                                 Operations Fleet &amp; Incident Audit
                             </span>
-                            <span className="text-slate-400 text-xs hidden sm:inline">•</span>
-                            <span className="text-slate-400 text-xs font-mono hidden sm:inline">
-                                Municipality of Opol
-                            </span>
                         </div>
                         <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
                             <PhoneCall className="w-6 h-6 text-red-500 shrink-0" />

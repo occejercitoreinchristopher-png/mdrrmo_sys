@@ -172,7 +172,7 @@ export default function TopResidentsPanel({ community = {}, linkPrefix = '/dispa
                             onClick={() => setSortMode('resolved')}
                             className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                                 sortMode === 'resolved'
-                                    ? 'bg-emerald-500 text-white shadow-xs'
+                                    ? 'bg-[#F61509] text-white shadow-xs'
                                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                             }`}
                         >
