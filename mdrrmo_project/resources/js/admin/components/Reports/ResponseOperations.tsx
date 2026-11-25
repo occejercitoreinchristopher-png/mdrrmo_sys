@@ -136,9 +136,6 @@ export default function ResponseOperations({
                     </div>
                     <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-white/5">
                         <span>Intake to unit assignment</span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
-                            Target &lt; 2m
-                        </span>
                     </div>
                 </div>
 
@@ -158,9 +155,6 @@ export default function ResponseOperations({
                     </div>
                     <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-white/5">
                         <span>Arrival at incident location</span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
-                            Target &lt; 8m
-                        </span>
                     </div>
                 </div>
 
@@ -180,9 +174,6 @@ export default function ResponseOperations({
                     </div>
                     <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-white/5">
                         <span>Full cycle to base / hospital</span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
-                            Complete
-                        </span>
                     </div>
                 </div>
             </div>

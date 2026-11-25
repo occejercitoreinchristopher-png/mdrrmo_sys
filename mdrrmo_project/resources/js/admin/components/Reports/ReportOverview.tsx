@@ -152,7 +152,6 @@ export default function ReportOverview({ stats = {}, incidents = [] }: ReportOve
                 <ReportStatCard
                     title="Avg Response Time"
                     value={avgResponseTimeStr}
-                    badgeText="Target < 8m"
                     subtitle={`Dispatch ack: ${avgDispatchTimeStr}`}
                     delayMs={300}
                 />
