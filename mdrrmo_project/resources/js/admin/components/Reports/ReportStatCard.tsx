@@ -137,16 +137,6 @@ export default function ReportStatCard({
                         </p>
                     </div>
                 )}
-
-                {/* Progress bar in Unified System Brand Color */}
-                {typeof progress === 'number' && (
-                    <div className="mt-2 w-full bg-slate-100 dark:bg-white/5 h-1 rounded-full overflow-hidden print:hidden">
-                        <div
-                            className="h-full rounded-full bg-[#F61509] transition-all duration-700 ease-out"
-                            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-                        />
-                    </div>
-                )}
             </div>
         </div>
     );
