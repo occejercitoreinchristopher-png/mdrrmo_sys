@@ -14,6 +14,16 @@ export default function ResponseOperations({
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
 
+    const toTitleCase = (str: string) => {
+        if (!str) return '';
+        return str
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+    };
+
     // Calculate responder and ambulance operational stats
     const responderStats: Record<
         string,
@@ -72,7 +82,8 @@ export default function ResponseOperations({
 
             const crewList = disp.crew || [];
             crewList.forEach((member: any) => {
-                const name = `${member.first_name} ${member.last_name}`;
+                const rawName = `${member.first_name || ''} ${member.last_name || ''}`.trim();
+                const name = toTitleCase(rawName) || 'Unknown Responder';
                 if (!responderStats[name]) {
                     responderStats[name] = {
                         missions: 0,
@@ -266,34 +277,37 @@ export default function ResponseOperations({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                {sortedResponders.slice(0, 7).map(([name, rStat]: any) => (
-                                    <tr
-                                        key={name}
-                                        className="hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors"
-                                    >
-                                        <td className="py-2.5 px-3">
-                                            <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                                <div className="w-6 h-6 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 flex items-center justify-center font-bold text-[10px]">
-                                                    {name.slice(0, 2).toUpperCase()}
+                                {sortedResponders.slice(0, 7).map(([name, rStat]: any) => {
+                                    const displayName = toTitleCase(name);
+                                    return (
+                                        <tr
+                                            key={name}
+                                            className="hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors"
+                                        >
+                                            <td className="py-2.5 px-3">
+                                                <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                                    <div className="w-6 h-6 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 flex items-center justify-center font-bold text-[10px]">
+                                                        {displayName.slice(0, 2).toUpperCase()}
+                                                    </div>
+                                                    <span className="capitalize">{displayName}</span>
                                                 </div>
-                                                <span>{name}</span>
-                                            </div>
-                                        </td>
-                                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
-                                            {rStat.missions}
-                                        </td>
-                                        <td className="py-2.5 px-3 text-center font-mono text-slate-700 dark:text-slate-300 font-semibold">
-                                            {formatSeconds(
-                                                rStat.countResponse ? rStat.totalResponse / rStat.countResponse : 0
-                                            )}
-                                        </td>
-                                        <td className="py-2.5 px-3 text-right font-mono text-slate-500 dark:text-slate-400">
-                                            {formatSeconds(
-                                                rStat.countMission ? rStat.totalMission / rStat.countMission : 0
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
+                                                {rStat.missions}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center font-mono text-slate-700 dark:text-slate-300 font-semibold">
+                                                {formatSeconds(
+                                                    rStat.countResponse ? rStat.totalResponse / rStat.countResponse : 0
+                                                )}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono text-slate-500 dark:text-slate-400">
+                                                {formatSeconds(
+                                                    rStat.countMission ? rStat.totalMission / rStat.countMission : 0
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
 
                                 {sortedResponders.length === 0 && (
                                     <tr>
