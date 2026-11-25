@@ -42,4 +42,9 @@ return [
         'credentials_path' => env('FIREBASE_CREDENTIALS', 'storage/app/firebase/service-account.json'),
     ],
 
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-3.5-flash'),
+    ],
+
 ];

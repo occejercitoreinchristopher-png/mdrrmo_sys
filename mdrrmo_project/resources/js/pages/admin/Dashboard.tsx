@@ -8,6 +8,7 @@ export default function DashboardPage({
     recentIncidents,
     recentDispatches,
     extraData,
+    aiSummary,
 }: any) {
     return (
         <AdminLayout title="Dashboard">
@@ -18,6 +19,7 @@ export default function DashboardPage({
                 recentIncidents={recentIncidents ?? []}
                 recentDispatches={recentDispatches ?? []}
                 extraData={extraData ?? {}}
+                initialAiSummary={aiSummary}
             />
         </AdminLayout>
     );

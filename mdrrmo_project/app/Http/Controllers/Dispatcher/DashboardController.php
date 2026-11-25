@@ -56,9 +56,22 @@ class DashboardController extends Controller
             ? round((($residentsThisMonth - $residentsLastMonth) / $residentsLastMonth) * 100)
             : ($residentsThisMonth > 0 ? 100 : 0);
 
-        // Fleet, Dispatch, Responder & Patient Metrics
-        $totalAmbulances = Ambulance::count();
-        $availableAmbulances = Ambulance::where('status', 'available')->count();
+        // Fleet, Dispatch, Responder & Patient Metrics (exclude station walk-in placeholder from vehicle fleet counts)
+        $fleetQuery = fn () => Ambulance::where('plate_number', '!=', 'WALK-IN')
+            ->where(function ($q) {
+                $q->whereNull('vehicle_type')
+                    ->orWhere('vehicle_type', '!=', 'Station');
+            })
+            ->where(function ($q) {
+                $q->whereNull('ambulance_code')
+                    ->orWhere(function ($sub) {
+                        $sub->where('ambulance_code', 'not like', '%STATION%')
+                            ->where('ambulance_code', 'not like', '%WALK%');
+                    });
+            });
+
+        $totalAmbulances = $fleetQuery()->count();
+        $availableAmbulances = $fleetQuery()->where('status', 'available')->count();
         $totalDispatches = Dispatch::count();
         $activeDispatches = Dispatch::whereNotIn('dispatch_status', ['completed', 'cancelled'])->count();
         $completedDispatches = Dispatch::where('dispatch_status', 'completed')->count();

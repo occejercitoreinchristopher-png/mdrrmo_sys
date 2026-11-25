@@ -8,10 +8,25 @@ export default function ResponseOperations({
     incidents?: any[];
 }) {
     const formatSeconds = (sec: number) => {
-        if (!sec || isNaN(sec)) return '00:00';
-        const m = Math.floor(sec / 60);
-        const s = Math.floor(sec % 60);
-        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        if (!sec || isNaN(sec) || sec <= 0) return '--';
+        const totalSec = Math.round(sec);
+        const d = Math.floor(totalSec / 86400);
+        const remDays = totalSec % 86400;
+        const h = Math.floor(remDays / 3600);
+        const remHours = remDays % 3600;
+        const m = Math.floor(remHours / 60);
+        const s = remHours % 60;
+
+        if (d > 0) {
+            return `${d}d ${h}h ${m.toString().padStart(2, '0')}m`;
+        }
+        if (h > 0) {
+            return `${h}h ${m.toString().padStart(2, '0')}m`;
+        }
+        if (m > 0) {
+            return `${m}m ${s.toString().padStart(2, '0')}s`;
+        }
+        return `${s}s`;
     };
 
     const toTitleCase = (str: string) => {

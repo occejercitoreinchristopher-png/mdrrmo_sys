@@ -11,6 +11,7 @@ interface DashboardProps {
     recentIncidents?: any[];
     recentDispatches?: any[];
     extraData?: any;
+    initialAiSummary?: any;
     [key: string]: any;
 }
 
@@ -20,11 +21,12 @@ export default function Dashboard({
     recentIncidents = [],
     recentDispatches = [],
     extraData = {},
+    initialAiSummary,
 }: DashboardProps) {
     return (
         <div className="space-y-6">
-            {/* Top Greeting & Quick Actions Header */}
-            <DashboardHeader />
+            {/* Top Greeting & Quick Actions Header with AI Summary Trigger & Clock */}
+            <DashboardHeader initialAiSummary={initialAiSummary} />
 
             {/* Main Dashboard Layout (2-Column Architecture matching reference) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

@@ -33,6 +33,17 @@ class Dispatch extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::saved(function () {
+            \App\Services\OperationalSummaryService::invalidateCache();
+        });
+
+        static::deleted(function () {
+            \App\Services\OperationalSummaryService::invalidateCache();
+        });
+    }
+
     public function incident()
     {
         return $this->belongsTo(Incident::class);

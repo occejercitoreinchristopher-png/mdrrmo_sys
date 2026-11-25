@@ -62,11 +62,24 @@ class DashboardController extends Controller
             ? round((($usersThisMonth - $usersLastMonth) / $usersLastMonth) * 100)
             : ($usersThisMonth > 0 ? 100 : 0);
 
-        // Fleet, Dispatch, Responder & Patient Metrics
-        $totalAmbulances = Ambulance::count();
-        $availableAmbulances = Ambulance::where('status', 'available')->count();
-        $dispatchedAmbulances = Ambulance::whereIn('status', ['dispatched', 'in_mission', 'en_route', 'on_scene'])->count();
-        $maintenanceAmbulances = Ambulance::where('status', 'maintenance')->count();
+        // Fleet, Dispatch, Responder & Patient Metrics (exclude station walk-in placeholder from vehicle fleet counts)
+        $fleetQuery = fn () => Ambulance::where('plate_number', '!=', 'WALK-IN')
+            ->where(function ($q) {
+                $q->whereNull('vehicle_type')
+                    ->orWhere('vehicle_type', '!=', 'Station');
+            })
+            ->where(function ($q) {
+                $q->whereNull('ambulance_code')
+                    ->orWhere(function ($sub) {
+                        $sub->where('ambulance_code', 'not like', '%STATION%')
+                            ->where('ambulance_code', 'not like', '%WALK%');
+                    });
+            });
+
+        $totalAmbulances = $fleetQuery()->count();
+        $availableAmbulances = $fleetQuery()->where('status', 'available')->count();
+        $dispatchedAmbulances = $fleetQuery()->whereIn('status', ['dispatched', 'in_mission', 'en_route', 'on_scene'])->count();
+        $maintenanceAmbulances = $fleetQuery()->where('status', 'maintenance')->count();
         $totalDispatches = Dispatch::count();
         $activeDispatches = Dispatch::whereNotIn('dispatch_status', ['completed', 'cancelled'])->count();
         $completedDispatches = Dispatch::where('dispatch_status', 'completed')->count();
@@ -345,8 +358,9 @@ class DashboardController extends Controller
             ->pluck('count', 'incident_status')
             ->toArray();
 
-        // Ambulance Status
-        $ambulanceStatuses = Ambulance::select('status', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
+        // Ambulance Status (exclude station walk-in placeholder)
+        $ambulanceStatuses = $fleetQuery()
+            ->select('status', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
             ->groupBy('status')
             ->pluck('count', 'status')
             ->toArray();
@@ -357,6 +371,8 @@ class DashboardController extends Controller
             'ambulance_status' => $ambulanceStatuses,
         ];
 
+        $operationalSummary = (new \App\Services\OperationalSummaryService())->getSummary(false);
+
         return Inertia::render('admin/Dashboard', [
             'stats' => $stats,
             'charts' => $charts,
@@ -364,6 +380,19 @@ class DashboardController extends Controller
             'recentIncidents' => $recentIncidents,
             'recentDispatches' => $recentDispatches,
             'extraData' => $extraData,
+            'aiSummary' => $operationalSummary,
         ]);
+    }
+
+    /**
+     * API endpoint to get or refresh the AI-powered operational summary.
+     */
+    public function operationalAiSummary(Request $request)
+    {
+        $forceRefresh = $request->boolean('refresh', false);
+        $service = new \App\Services\OperationalSummaryService();
+        $summary = $service->getSummary($forceRefresh);
+
+        return response()->json($summary);
     }
 }

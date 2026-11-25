@@ -404,9 +404,6 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
                                 <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border ${zoneStyle.bg}`}>
                                     {profile.zone}
                                 </span>
-                                <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">
-                                    {profile.elevation}
-                                </span>
                             </div>
                         </div>
                     </div>
@@ -796,14 +793,11 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
                                             </span>
                                         </div>
 
-                                        {/* Barangay Name & Elevation */}
+                                        {/* Barangay Name */}
                                         <div className="mt-3">
                                             <h3 className="text-lg font-black text-slate-900 dark:text-white group-hover:text-red-500 dark:group-hover:text-red-400 transition-colors">
                                                 Barangay {b.name}
                                             </h3>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
-                                                Elevation: {profile.elevation} • Opol
-                                            </p>
                                         </div>
 
                                         {/* Landmarks note */}
@@ -911,10 +905,6 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
                             <span className="flex items-center gap-1.5 text-sky-400 font-medium">
                                 <Compass className="w-3.5 h-3.5" />
                                 {currentPoisCount} Surveyed OpenStreetMap POIs
-                            </span>
-                            <span className="text-slate-500">•</span>
-                            <span className="text-slate-400 font-mono">
-                                Elevation: {currentProfile.elevation}
                             </span>
                         </div>
                     </div>

@@ -116,6 +116,14 @@ class Incident extends Model
                 $incident->incident_type_id = $type->id;
             }
         });
+
+        static::saved(function () {
+            \App\Services\OperationalSummaryService::invalidateCache();
+        });
+
+        static::deleted(function () {
+            \App\Services\OperationalSummaryService::invalidateCache();
+        });
     }
 
     public function locationCode()

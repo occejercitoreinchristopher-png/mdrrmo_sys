@@ -92,6 +92,7 @@ Route::middleware(['auth', 'role:admin,dispatcher'])->group(function () {
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->group(function () {
     Route::get('/', fn () => redirect()->route('admin.dashboard'));
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/dashboard/ai-summary', [AdminDashboardController::class, 'operationalAiSummary'])->name('dashboard.ai-summary');
     Route::get('/users', [UserController::class, 'index'])->name('users');
     Route::get('/residents', [UserController::class, 'residents'])->name('residents');
     Route::get('/residents/{resident}', [UserController::class, 'showResident'])->name('residents.show');

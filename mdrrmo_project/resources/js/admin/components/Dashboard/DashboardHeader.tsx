@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
 import { usePage } from '@inertiajs/react';
 import { Clock } from 'lucide-react';
+import OperationalSummaryModal from './OperationalSummaryModal';
 
-export default function DashboardHeader() {
+interface DashboardHeaderProps {
+    initialAiSummary?: any;
+}
+
+export default function DashboardHeader({ initialAiSummary }: DashboardHeaderProps) {
     const { auth } = usePage().props as any;
     const user = auth?.user;
     const adminName = user?.first_name || 'Admin';
@@ -45,8 +50,12 @@ export default function DashboardHeader() {
                 </p>
             </div>
 
-            {/* Live Clock */}
-            <div className="flex items-center gap-2.5 sm:self-center">
+            {/* AI Summary Button & Live Clock */}
+            <div className="flex flex-wrap items-center gap-3 sm:self-center">
+                {/* AI Operational Summary Modal Button */}
+                <OperationalSummaryModal initialSummary={initialAiSummary} />
+
+                {/* Live Clock */}
                 <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-white/10 shadow-sm text-right">
                     <Clock className="w-4 h-4 text-slate-400" />
                     <div>

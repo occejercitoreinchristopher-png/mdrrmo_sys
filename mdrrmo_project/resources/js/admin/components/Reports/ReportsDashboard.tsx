@@ -102,7 +102,12 @@ export default function ReportsDashboard({
         }
         const hours = Math.floor(totalMinutes / 60);
         const mins = totalMinutes % 60;
-        return `${hours}h ${mins}m`;
+        if (hours >= 24) {
+            const d = Math.floor(hours / 24);
+            const remH = hours % 24;
+            return `${d}d ${remH}h ${mins.toString().padStart(2, '0')}m`;
+        }
+        return `${hours}h ${mins.toString().padStart(2, '0')}m`;
     };
 
     const avgResponseTimeStr = formatDuration(stats.avg_response_time ?? 0);

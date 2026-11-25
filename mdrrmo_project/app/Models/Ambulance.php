@@ -11,6 +11,17 @@ class Ambulance extends Model
 
     protected $guarded = [];
 
+    protected static function booted(): void
+    {
+        static::saved(function () {
+            \App\Services\OperationalSummaryService::invalidateCache();
+        });
+
+        static::deleted(function () {
+            \App\Services\OperationalSummaryService::invalidateCache();
+        });
+    }
+
     public function driver()
     {
         return $this->belongsTo(User::class, 'driver_id');

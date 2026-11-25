@@ -61,19 +61,36 @@ export default function AmbulanceTable({
         return `AMB-${String(maxNum + 1).padStart(2, '0')}`;
     }, [ambulances, nextAmbulanceCode]);
 
-    // Fleet Counts & Readiness Rate
+    // Fleet Counts & Readiness Rate (excluding Station/Walk-in clinic from vehicle counts)
     const counts = useMemo(() => {
+        const isFleetVehicle = (a: Ambulance) => {
+            const isStation =
+                a.ambulance_code?.toUpperCase().includes('STATION') ||
+                a.ambulance_code?.toUpperCase().includes('WALK-IN') ||
+                a.plate_number?.toUpperCase().includes('WALK-IN') ||
+                a.vehicle_type?.toLowerCase().includes('station');
+            return !isStation;
+        };
+
+        const fleetAmbulances = ambulances.filter(isFleetVehicle);
+
         return {
-            total: ambulances.length,
-            available: ambulances.filter((a) => a.status === 'available').length,
-            dispatched: ambulances.filter((a) => a.status === 'dispatched' || a.status === 'busy').length,
-            maintenance: ambulances.filter((a) => a.status === 'maintenance' || a.status === 'inactive').length,
+            total: fleetAmbulances.length,
+            available: fleetAmbulances.filter((a) => a.status === 'available').length,
+            dispatched: fleetAmbulances.filter((a) => a.status === 'dispatched' || a.status === 'busy').length,
+            maintenance: fleetAmbulances.filter((a) => a.status === 'maintenance' || a.status === 'inactive').length,
         };
     }, [ambulances]);
 
     // Filter by search and status tab
     const filtered = useMemo(() => {
         return ambulances.filter((a) => {
+            const isStation =
+                a.ambulance_code?.toUpperCase().includes('STATION') ||
+                a.ambulance_code?.toUpperCase().includes('WALK-IN') ||
+                a.plate_number?.toUpperCase().includes('WALK-IN') ||
+                a.vehicle_type?.toLowerCase().includes('station');
+
             const q = search.trim().toLowerCase();
             const matchSearch =
                 !q ||
@@ -82,8 +99,12 @@ export default function AmbulanceTable({
                 a.ambulance_code?.toLowerCase().includes(q) ||
                 a.vehicle_type?.toLowerCase().includes(q);
 
-            const matchStatus = statusFilter === 'all' || a.status === statusFilter;
-            return matchSearch && matchStatus;
+            if (statusFilter === 'all') {
+                return matchSearch;
+            }
+
+            // Status tabs (Available, Dispatched, Maintenance) strictly filter fleet ambulances
+            return matchSearch && !isStation && a.status === statusFilter;
         });
     }, [ambulances, search, statusFilter]);
 
@@ -388,31 +409,40 @@ export default function AmbulanceTable({
                                                     onClick={(e) => e.stopPropagation()}
                                                 >
                                                     <div className="flex items-center gap-2">
-                                                        <AmbulanceStatusBadge status={amb.status} />
+                                                        {isStation ? (
+                                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/25">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                                                                Station Open
+                                                            </span>
+                                                        ) : (
+                                                            <>
+                                                                <AmbulanceStatusBadge status={amb.status} />
 
-                                                        {/* Quick Switch Button (Available <-> Maintenance) */}
-                                                        {amb.status !== 'dispatched' && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() =>
-                                                                    handleQuickStatusChange(
-                                                                        amb,
-                                                                        amb.status === 'available'
-                                                                            ? 'maintenance'
-                                                                            : 'available'
-                                                                    )
-                                                                }
-                                                                title={`Switch to ${
-                                                                    amb.status === 'available'
-                                                                        ? 'Maintenance'
-                                                                        : 'Available'
-                                                                }`}
-                                                                className="px-2 py-0.5 rounded text-[10px] font-bold text-slate-400 hover:text-slate-800 dark:hover:text-white bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 transition-all cursor-pointer"
-                                                            >
-                                                                {amb.status === 'available'
-                                                                    ? 'Set Service'
-                                                                    : 'Set Ready'}
-                                                            </button>
+                                                                {/* Quick Switch Button (Available <-> Maintenance) */}
+                                                                {amb.status !== 'dispatched' && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            handleQuickStatusChange(
+                                                                                amb,
+                                                                                amb.status === 'available'
+                                                                                    ? 'maintenance'
+                                                                                    : 'available'
+                                                                            )
+                                                                        }
+                                                                        title={`Switch to ${
+                                                                            amb.status === 'available'
+                                                                                ? 'Maintenance'
+                                                                                : 'Available'
+                                                                        }`}
+                                                                        className="px-2 py-0.5 rounded text-[10px] font-bold text-slate-400 hover:text-slate-800 dark:hover:text-white bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 transition-all cursor-pointer"
+                                                                    >
+                                                                        {amb.status === 'available'
+                                                                            ? 'Set Service'
+                                                                            : 'Set Ready'}
+                                                                    </button>
+                                                                )}
+                                                            </>
                                                         )}
                                                     </div>
                                                 </td>

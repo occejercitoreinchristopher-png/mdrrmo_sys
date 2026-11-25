@@ -424,6 +424,9 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST }: D
                             <div className="pt-3 border-t border-slate-100 dark:border-white/5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50/50 dark:bg-white/[0.01] p-3 rounded-xl animate-fadeIn">
                                 {/* Report Channel */}
                                 <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                                        Report Channel
+                                    </label>
                                     <select
                                         value={reportSource}
                                         onChange={(e) => setReportSource(e.target.value)}
@@ -438,6 +441,9 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST }: D
 
                                 {/* Fleet Assignment */}
                                 <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                                        Fleet Assignment
+                                    </label>
                                     <select
                                         value={hasDispatches}
                                         onChange={(e) => setHasDispatches(e.target.value)}
@@ -451,6 +457,9 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST }: D
 
                                 {/* Custom Start Date */}
                                 <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                                        From (Start Date)
+                                    </label>
                                     <input
                                         type="date"
                                         title="Start Date"
@@ -465,6 +474,9 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST }: D
 
                                 {/* Custom End Date */}
                                 <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                                        To (End Date)
+                                    </label>
                                     <input
                                         type="date"
                                         title="End Date"
