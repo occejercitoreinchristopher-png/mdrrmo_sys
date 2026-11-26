@@ -400,11 +400,6 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
                                     Barangay {toPascalCase(v)}
                                 </span>
                             </div>
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border ${zoneStyle.bg}`}>
-                                    {profile.zone}
-                                </span>
-                            </div>
                         </div>
                     </div>
                 );
@@ -412,25 +407,14 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
         },
         {
             key: 'profile',
-            header: 'Geographic Profile & Surveyed POIs',
+            header: 'Geographic Profile',
             render: (_: any, row: Barangay) => {
                 const profile = OPOL_BARANGAY_PROFILES[row.name];
-                const cleanName = row.name.toLowerCase().replace(/\s+/g, '');
-                const poisCount = landmarkCounts[cleanName] || 0;
 
                 return (
                     <div className="space-y-1 max-w-sm">
                         <div className="text-xs text-slate-700 dark:text-slate-300 font-medium line-clamp-1">
                             {profile?.keyLandmarks || 'LGU Center & Residential District'}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 text-[11px] text-sky-600 dark:text-sky-400 bg-sky-500/10 dark:bg-sky-500/15 border border-sky-500/25 px-2 py-0.5 rounded font-mono font-medium">
-                                <Compass className="w-3 h-3" />
-                                {poisCount} Surveyed POIs
-                            </span>
-                            <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                                Municipality of Opol
-                            </span>
                         </div>
                     </div>
                 );
@@ -445,13 +429,12 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
                 return (
                     <div>
                         {total > 0 ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-xs">
-                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                <MapPin className="w-3 h-3" />
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10">
+                                <MapPin className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                                 {total} {total === 1 ? 'Registered Marker' : 'Registered Markers'}
                             </span>
                         ) : (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10">
                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500" />
                                 0 Markers (Pending Survey)
                             </span>
@@ -811,8 +794,8 @@ export default function BarangayTable({ barangays = [] }: BarangayTableProps) {
                                         <div className="flex items-center justify-between text-xs">
                                             <span className="text-slate-500 dark:text-slate-400">CAD Markers:</span>
                                             {markersCount > 0 ? (
-                                                <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500" />
                                                     {markersCount} Registered
                                                 </span>
                                             ) : (

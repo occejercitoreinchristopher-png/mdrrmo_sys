@@ -85,14 +85,14 @@ function InfoFieldCard({
     return (
         <div
             className={clsx(
-                'group relative flex items-center justify-between p-4 rounded-2xl transition-all duration-200',
+                'group relative flex items-start justify-between p-4 rounded-2xl transition-all duration-200',
                 'bg-slate-50/80 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 hover:border-blue-500/30 dark:hover:border-blue-500/30',
                 'shadow-xs hover:shadow-md hover:shadow-slate-200/40 dark:hover:shadow-none',
                 className
             )}
         >
-            <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 group-hover:scale-105 transition-transform">
+            <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 group-hover:scale-105 transition-transform mt-0.5">
                     <Icon className="w-4 h-4" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -101,10 +101,11 @@ function InfoFieldCard({
                     </p>
                     <p
                         className={clsx(
-                            'text-xs sm:text-sm font-semibold text-slate-900 dark:text-white mt-1 truncate tracking-tight',
+                            'text-xs sm:text-sm font-semibold text-slate-900 dark:text-white mt-1 break-words leading-relaxed tracking-tight',
                             uppercaseValue && 'uppercase',
                             mono && 'font-mono'
                         )}
+                        title={typeof value === 'string' ? value : undefined}
                     >
                         {value || fallback}
                     </p>
@@ -116,7 +117,7 @@ function InfoFieldCard({
                     type="button"
                     onClick={action.onClick}
                     title={action.title}
-                    className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-white/10 transition-colors shrink-0 ml-2 cursor-pointer"
+                    className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-white/10 transition-colors shrink-0 ml-2 cursor-pointer mt-0.5"
                 >
                     <action.icon className="w-3.5 h-3.5" />
                 </button>

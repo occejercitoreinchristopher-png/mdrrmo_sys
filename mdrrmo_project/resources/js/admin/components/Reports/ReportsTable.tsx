@@ -48,9 +48,15 @@ export default function ReportsTable({ incidents = [] }: { incidents?: IncidentR
 
         // Search
         if (search.trim()) {
-            const q = search.toLowerCase();
+            const q = search.toLowerCase().trim();
+            const cleanQueryId = q.replace(/^#?inc-?/i, '').replace(/^0+/, '');
             list = list.filter((inc) => {
-                const idMatch = String(inc.id).includes(q);
+                const idMatch = String(inc.id).includes(q) ||
+                    (cleanQueryId !== '' && String(inc.id) === cleanQueryId) ||
+                    `#${inc.id}`.includes(q) ||
+                    `inc-${String(inc.id).padStart(4, '0')}`.includes(q) ||
+                    `#inc-${String(inc.id).padStart(4, '0')}`.includes(q) ||
+                    String(inc.id).padStart(4, '0').includes(q);
                 const typeMatch = (inc.incident_type?.name || inc.incident_type?.incident_type_name || '')
                     .toLowerCase()
                     .includes(q);

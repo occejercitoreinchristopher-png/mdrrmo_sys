@@ -384,31 +384,54 @@ class IncidentController extends Controller
 
             // 4. Keyword Search Query
             if ($search !== '') {
-                $q = strtolower($search);
-                $rawBarangay = $inc->barangay;
-                $barangayStr = is_array($rawBarangay)
-                    ? ($rawBarangay['barangay_name'] ?? $rawBarangay['name'] ?? '')
-                    : (is_object($rawBarangay) ? ($rawBarangay->barangay_name ?? $rawBarangay->name ?? '') : (string) $rawBarangay);
-                $locStr = is_string($inc->location) ? $inc->location : '';
-                $residentName = trim(($inc->resident?->first_name ?? '') . ' ' . ($inc->resident?->last_name ?? ''));
+                $rawSearch = trim($search);
+                $q = strtolower($rawSearch);
+                $cleanId = ltrim(preg_replace('/^#?inc-?/i', '', $rawSearch), '0');
 
-                $haystack = strtolower(implode(' ', [
-                    (string) $inc->id,
-                    '#' . $inc->id,
-                    (string) ($inc->place_of_incident ?? ''),
-                    (string) ($inc->incident_address ?? ''),
-                    $locStr,
-                    $barangayStr,
-                    (string) ($inc->incident_description ?? ''),
-                    $incTypeName,
-                    $incComplaint,
-                    $authoritativeCat,
-                    (string) ($inc->caller_phone_number ?? ''),
-                    $residentName,
-                ]));
+                // If user searched for an incident code/ID like INC-0016, INC-16, #16, 0016, 16
+                $idMatches = ($cleanId !== '' && (string) $inc->id === $cleanId);
 
-                if (! str_contains($haystack, $q)) {
-                    return false;
+                if (! $idMatches) {
+                    $rawBarangay = $inc->barangay;
+                    $barangayStr = is_array($rawBarangay)
+                        ? ($rawBarangay['barangay_name'] ?? $rawBarangay['name'] ?? '')
+                        : (is_object($rawBarangay) ? ($rawBarangay->barangay_name ?? $rawBarangay->name ?? '') : (string) $rawBarangay);
+                    $locStr = is_string($inc->location) ? $inc->location : '';
+                    $residentName = trim(($inc->resident?->first_name ?? '') . ' ' . ($inc->resident?->last_name ?? ''));
+
+                    $incCode4 = 'inc-' . str_pad((string) $inc->id, 4, '0', STR_PAD_LEFT);
+                    $incCode5 = 'inc-' . str_pad((string) $inc->id, 5, '0', STR_PAD_LEFT);
+                    $incCodeSimple = 'inc-' . $inc->id;
+                    $incPadded4 = str_pad((string) $inc->id, 4, '0', STR_PAD_LEFT);
+                    $incPadded5 = str_pad((string) $inc->id, 5, '0', STR_PAD_LEFT);
+
+                    $haystack = strtolower(implode(' ', [
+                        (string) $inc->id,
+                        '#' . $inc->id,
+                        $incCode4,
+                        '#' . $incCode4,
+                        $incCode5,
+                        '#' . $incCode5,
+                        $incCodeSimple,
+                        '#' . $incCodeSimple,
+                        $incPadded4,
+                        $incPadded5,
+                        (string) ($inc->incident_number ?? ''),
+                        (string) ($inc->place_of_incident ?? ''),
+                        (string) ($inc->incident_address ?? ''),
+                        $locStr,
+                        $barangayStr,
+                        (string) ($inc->incident_description ?? ''),
+                        $incTypeName,
+                        $incComplaint,
+                        $authoritativeCat,
+                        (string) ($inc->caller_phone_number ?? ''),
+                        $residentName,
+                    ]));
+
+                    if (! str_contains($haystack, $q)) {
+                        return false;
+                    }
                 }
             }
 

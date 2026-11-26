@@ -264,17 +264,17 @@ export default function ResidentsPage({
             <button
                 type="button"
                 onClick={() => handleSort(sortKey)}
-                className="flex items-center gap-1.5 uppercase font-semibold text-[11px] tracking-wider text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors group cursor-pointer"
+                className="flex items-center gap-1.5 uppercase font-semibold text-[11px] tracking-wider text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors group cursor-pointer whitespace-nowrap"
             >
-                <span>{label}</span>
+                <span className="whitespace-nowrap">{label}</span>
                 {isActive ? (
                     currentDirection === 'asc' ? (
-                        <ChevronUp className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                        <ChevronUp className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                     ) : (
-                        <ChevronDown className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                        <ChevronDown className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                     )
                 ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-600 group-hover:text-slate-600 dark:group-hover:text-slate-400 transition-colors" />
+                    <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-600 group-hover:text-slate-600 dark:group-hover:text-slate-400 transition-colors shrink-0" />
                 )}
             </button>
         );
@@ -312,15 +312,6 @@ export default function ResidentsPage({
                         }`}
                     >
                         <span>Registered Residents</span>
-                        <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                activeTab === 'registered'
-                                    ? 'bg-slate-100 dark:bg-white/10 text-slate-900 dark:text-white'
-                                    : 'bg-slate-200/60 dark:bg-white/5 text-slate-500'
-                            }`}
-                        >
-                            {residents?.total ?? residentList.length}
-                        </span>
                     </button>
                     <button
                         type="button"
@@ -332,15 +323,6 @@ export default function ResidentsPage({
                         }`}
                     >
                         <span>SIM / Anonymous Callers</span>
-                        <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                activeTab === 'sim_callers'
-                                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/20'
-                                    : 'bg-slate-200/60 dark:bg-white/5 text-slate-500'
-                            }`}
-                        >
-                            {simCallers?.total ?? simCallerList.length}
-                        </span>
                     </button>
                 </div>
 
@@ -422,28 +404,28 @@ export default function ResidentsPage({
                             <table className="w-full text-left text-sm">
                                 <thead>
                                     <tr className="border-b border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
-                                        <th className="px-5 py-3.5">
+                                        <th className="px-5 py-3.5 whitespace-nowrap">
                                             {renderSortHeader('Resident Name', 'name')}
                                         </th>
-                                        <th className="px-5 py-3.5">
+                                        <th className="px-5 py-3.5 whitespace-nowrap">
                                             {renderSortHeader('Email', 'email')}
                                         </th>
-                                        <th className="px-5 py-3.5">
+                                        <th className="px-5 py-3.5 whitespace-nowrap">
                                             {renderSortHeader('Phone Number', 'phone_number')}
                                         </th>
-                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                             Barangay
                                         </th>
-                                        <th className="px-5 py-3.5">
+                                        <th className="px-5 py-3.5 whitespace-nowrap">
                                             {renderSortHeader('Registration Date', 'created_at')}
                                         </th>
-                                        <th className="px-5 py-3.5">
+                                        <th className="px-5 py-3.5 whitespace-nowrap">
                                             {renderSortHeader('Status', 'status')}
                                         </th>
-                                        <th className="px-5 py-3.5 text-center">
+                                        <th className="px-5 py-3.5 text-center whitespace-nowrap">
                                             {renderSortHeader('Incidents', 'reported_incidents_count')}
                                         </th>
-                                        <th className="px-5 py-3.5 text-right text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                        <th className="px-5 py-3.5 text-right text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                             Actions
                                         </th>
                                     </tr>

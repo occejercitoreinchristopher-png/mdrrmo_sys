@@ -342,12 +342,19 @@ export default function ActiveDispatchWorkspace({
     const filteredVerified = useMemo(() => {
         const q = search.trim().toLowerCase();
         if (!q) return verifiedIncidents;
+        const cleanQueryId = q.replace(/^#?inc-?/i, '').replace(/^0+/, '');
         return verifiedIncidents.filter((inc) => {
+            const idMatch = String(inc.id).includes(q) ||
+                (cleanQueryId !== '' && String(inc.id) === cleanQueryId) ||
+                `#${inc.id}`.includes(q) ||
+                `inc-${String(inc.id).padStart(4, '0')}`.includes(q) ||
+                `#inc-${String(inc.id).padStart(4, '0')}`.includes(q) ||
+                String(inc.id).padStart(4, '0').includes(q);
             const type = inc.incident_type?.name?.toLowerCase() || '';
             const loc = (typeof inc.barangay === 'object' ? inc.barangay?.barangay_name || inc.barangay?.name : inc.barangay)?.toLowerCase() || '';
             const desc = (inc.place_of_incident || inc.incident_address || '')?.toLowerCase();
             const resident = `${inc.resident?.first_name || ''} ${inc.resident?.last_name || ''}`.toLowerCase();
-            return type.includes(q) || loc.includes(q) || desc.includes(q) || resident.includes(q) || String(inc.id).includes(q);
+            return idMatch || type.includes(q) || loc.includes(q) || desc.includes(q) || resident.includes(q);
         });
     }, [verifiedIncidents, search]);
 
@@ -376,10 +383,20 @@ export default function ActiveDispatchWorkspace({
     };
 
     const filtered = dispatches.filter((d) => {
-        const q = search.toLowerCase();
+        const q = search.trim().toLowerCase();
+        if (!q) return true;
+        const cleanQueryId = q.replace(/^#?(?:inc|dsp)-?/i, '').replace(/^0+/, '');
+        const incId = d.incident_id || d.incident?.id;
+        const idMatch = String(d.id).includes(q) || 
+            (cleanQueryId !== '' && (String(d.id) === cleanQueryId || (incId && String(incId) === cleanQueryId))) ||
+            (incId && (
+                String(incId).includes(q) ||
+                `#${incId}`.includes(q) ||
+                `inc-${String(incId).padStart(4, '0')}`.includes(q) ||
+                `#inc-${String(incId).padStart(4, '0')}`.includes(q)
+            ));
         return (
-            !q ||
-            String(d.id).includes(q) ||
+            idMatch ||
             d.ambulance?.plate_number?.toLowerCase().includes(q) ||
             (d.driver?.first_name + ' ' + d.driver?.last_name).toLowerCase().includes(q) ||
             (d.emt?.first_name + ' ' + d.emt?.last_name).toLowerCase().includes(q) ||
@@ -464,53 +481,61 @@ export default function ActiveDispatchWorkspace({
                         </div>
 
                         {/* Filter Segmented Control */}
-                        <div className="flex items-center gap-1 bg-slate-100/90 dark:bg-white/[0.04] p-1 rounded-xl border border-slate-200/60 dark:border-white/5 overflow-x-auto hide-scrollbar">
+                        <div className="flex items-center gap-1 bg-slate-100/90 dark:bg-white/[0.04] p-1 rounded-xl border border-slate-200/60 dark:border-white/5">
                             <button
                                 type="button"
                                 onClick={() => setViewFilter('all')}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer ${
+                                title={`All Operations (${filteredVerified.length + filtered.length})`}
+                                className={`px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center gap-1 shrink-0 ${
                                     viewFilter === 'all'
                                         ? 'bg-red-600 text-white shadow-xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                             >
-                                All ({filteredVerified.length + filtered.length})
+                                <span>All</span>
+                                <span className="text-[10px] font-semibold opacity-90">({filteredVerified.length + filtered.length})</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setViewFilter('pending')}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                                title={`Needs Crew / Pending Assignments (${filteredVerified.length})`}
+                                className={`flex-1 px-1.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center gap-1 ${
                                     viewFilter === 'pending'
                                         ? 'bg-amber-600 text-white shadow-xs'
                                         : 'text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300'
                                 }`}
                             >
-                                <AlertCircle className="w-3 h-3" />
-                                <span>Needs Crew ({filteredVerified.length})</span>
+                                <AlertCircle className="w-3 h-3 shrink-0" />
+                                <span>Pending</span>
+                                <span className="text-[10px] font-semibold opacity-90">({filteredVerified.length})</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setViewFilter('dispatched')}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                                title={`Active Dispatches (${filtered.length})`}
+                                className={`flex-1 px-1.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center gap-1 ${
                                     viewFilter === 'dispatched'
                                         ? 'bg-red-600 text-white shadow-xs'
                                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                             >
-                                <Truck className="w-3 h-3" />
-                                <span>Active Runs ({filtered.length})</span>
+                                <Truck className="w-3 h-3 shrink-0" />
+                                <span>Active</span>
+                                <span className="text-[10px] font-semibold opacity-90">({filtered.length})</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setViewFilter('fleet')}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                                title={`Ready Ambulance Fleet (${readyAmbulances.length})`}
+                                className={`flex-1 px-1.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center gap-1 ${
                                     viewFilter === 'fleet'
                                         ? 'bg-emerald-600 text-white shadow-xs'
                                         : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300'
                                 }`}
                             >
-                                <Shield className="w-3 h-3" />
-                                <span>Fleet ({readyAmbulances.length})</span>
+                                <Shield className="w-3 h-3 shrink-0" />
+                                <span>Fleet</span>
+                                <span className="text-[10px] font-semibold opacity-90">({readyAmbulances.length})</span>
                             </button>
                         </div>
                     </div>

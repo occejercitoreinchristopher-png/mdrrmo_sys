@@ -86,11 +86,7 @@ class PatientController extends Controller
 
             $barangayName = $patient->barangay?->barangay_name ?? $residentProfile?->barangay?->barangay_name ?? null;
 
-            $addressParts = array_filter([
-                $patient->home_address,
-                $barangayName ? "Barangay {$barangayName}" : null,
-            ]);
-            $address = ! empty($addressParts) ? implode(', ', $addressParts) : null;
+            $address = $this->formatPatientAddress($patient->home_address, $barangayName);
 
             $contactNumber = $patient->registeredUser?->phone_number
                 ?? $latestPcr?->contact_number
@@ -201,11 +197,7 @@ class PatientController extends Controller
 
             $barangayName = $patient->barangay?->barangay_name ?? $residentProfile?->barangay?->barangay_name ?? null;
 
-            $addressParts = array_filter([
-                $patient->home_address,
-                $barangayName ? "Barangay {$barangayName}" : null,
-            ]);
-            $address = ! empty($addressParts) ? implode(', ', $addressParts) : null;
+            $address = $this->formatPatientAddress($patient->home_address, $barangayName);
 
             $contactNumber = $patient->registeredUser?->phone_number
                 ?? $latestPcr?->contact_number
@@ -274,11 +266,7 @@ class PatientController extends Controller
 
         $barangayName = $patient->barangay?->barangay_name ?? $residentProfile?->barangay?->barangay_name ?? null;
 
-        $addressParts = array_filter([
-            $patient->home_address,
-            $barangayName ? "Barangay {$barangayName}" : null,
-        ]);
-        $address = ! empty($addressParts) ? implode(', ', $addressParts) : null;
+        $address = $this->formatPatientAddress($patient->home_address, $barangayName);
 
         $contactNumber = $patient->registeredUser?->phone_number
             ?? $latestPcr?->contact_number
@@ -443,5 +431,37 @@ class PatientController extends Controller
         }
 
         return back()->with('success', $msg);
+    }
+
+    private function formatPatientAddress(?string $homeAddress, ?string $barangayName): ?string
+    {
+        $homeAddr = trim((string) $homeAddress);
+        $brgy = trim((string) $barangayName);
+
+        if ($homeAddr === '' && $brgy === '') {
+            return null;
+        }
+
+        if ($homeAddr === '') {
+            return "Barangay {$brgy}";
+        }
+
+        if ($brgy === '') {
+            return $homeAddr;
+        }
+
+        $cleanBrgy = preg_replace('/^(brgy\.?|barangay)\s*/i', '', $brgy);
+        $cleanHome = preg_replace('/^(brgy\.?|barangay)\s*/i', '', $homeAddr);
+
+        if (strcasecmp($cleanHome, $cleanBrgy) === 0) {
+            return "Barangay {$cleanBrgy}";
+        }
+
+        if (preg_match('/\b' . preg_quote($cleanBrgy, '/') . '\b/i', $homeAddr)) {
+            $deduped = preg_replace('/(\b(?:brgy\.?|barangay)?\s*' . preg_quote($cleanBrgy, '/') . '\b[\s,]*){2,}/i', "Barangay {$cleanBrgy}, ", $homeAddr);
+            return rtrim(trim($deduped), ',');
+        }
+
+        return "{$homeAddr}, Barangay {$cleanBrgy}";
     }
 }

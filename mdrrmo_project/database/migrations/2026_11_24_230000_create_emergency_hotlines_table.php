@@ -66,7 +66,7 @@ return new class extends Migration
             [
                 'name' => 'OPOL RESQ',
                 'short_label' => 'MDRRMO',
-                'phone_number' => '0881234567',
+                'phone_number' => '09670610573',
                 'description' => '24/7 disaster & emergency response',
                 'icon_type' => 'siren',
                 'accent_color' => '#208AEF',

@@ -41,6 +41,42 @@ const STATUS_OPTIONS = [
     { value: 'unidentified', label: 'Unidentified / Trauma' },
 ];
 
+function formatHomeAddress(barangay?: string | null, address?: string | null): string {
+    const rawBrgy = (barangay || '').trim();
+    const rawAddr = (address || '').trim();
+
+    if (!rawBrgy && !rawAddr) {
+        return '—';
+    }
+
+    const cleanBrgy = rawBrgy.replace(/^(brgy\.?|barangay)\s*/i, '').trim();
+    const formattedBrgy = cleanBrgy ? `Brgy. ${toPascalCase(cleanBrgy)}` : '';
+
+    if (!rawAddr) {
+        return formattedBrgy || '—';
+    }
+
+    if (!cleanBrgy) {
+        return toPascalCase(rawAddr);
+    }
+
+    const addrCleaned = rawAddr.replace(/^(brgy\.?|barangay)\s*/i, '').trim();
+    if (addrCleaned.toLowerCase() === cleanBrgy.toLowerCase()) {
+        return formattedBrgy;
+    }
+
+    const regex = new RegExp(`\\b${cleanBrgy}\\b`, 'i');
+    if (regex.test(rawAddr)) {
+        const deduplicated = rawAddr.replace(
+            new RegExp(`(\\b(?:Brgy\\.?|Barangay)?\\s*${cleanBrgy}\\b[\\s,]*){2,}`, 'gi'),
+            `Brgy. ${toPascalCase(cleanBrgy)}, `
+        ).replace(/,\s*$/, '').trim();
+        return toPascalCase(deduplicated);
+    }
+
+    return `${toPascalCase(rawAddr)}, ${formattedBrgy}`;
+}
+
 export default function PatientTable({
     patients = [],
     pagination = null,
@@ -203,22 +239,22 @@ export default function PatientTable({
                     <table className="w-full text-left text-sm">
                         <thead>
                             <tr className="border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-slate-800/60">
-                                <th className="px-6 py-4 text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 w-20">
+                                <th className="px-6 py-4 text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 w-20 whitespace-nowrap">
                                     #
                                 </th>
-                                <th className="px-6 py-4 text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
+                                <th className="px-6 py-4 text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                     Patient Profile
                                 </th>
-                                <th className="px-6 py-4 text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
+                                <th className="px-6 py-4 text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                     Contact Number
                                 </th>
-                                <th className="px-6 py-4 text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
-                                    Location / Address
+                                <th className="px-6 py-4 text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                    Home Address
                                 </th>
-                                <th className="px-6 py-4 text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 text-center">
+                                <th className="px-6 py-4 text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 text-center whitespace-nowrap">
                                     Care Records
                                 </th>
-                                <th className="px-6 py-4 text-right text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
+                                <th className="px-6 py-4 text-right text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                     Actions
                                 </th>
                             </tr>
@@ -254,10 +290,7 @@ export default function PatientTable({
                                         patient.full_name || `${patient.first_name} ${patient.last_name}`
                                     );
                                     const initials = `${patient.first_name?.[0] || 'P'}${patient.last_name?.[0] || ''}`.toUpperCase();
-                                    const location =
-                                        patient.barangay
-                                            ? `Brgy. ${toPascalCase(patient.barangay)}${patient.address ? ` • ${patient.address}` : ''}`
-                                            : patient.address || '—';
+                                    const homeAddress = formatHomeAddress(patient.barangay, patient.address);
 
                                     const pcrCount = patient.care_records_count ?? 0;
 
@@ -289,11 +322,6 @@ export default function PatientTable({
                                                             <p className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors capitalize">
                                                                 {fullName}
                                                             </p>
-                                                            {patient.is_unidentified && (
-                                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25">
-                                                                    Unidentified
-                                                                </span>
-                                                            )}
                                                         </div>
                                                         <p className="text-xs text-slate-500 dark:text-slate-400 capitalize mt-0.5">
                                                             {patient.gender ? patient.gender : 'Gender unrecorded'}
@@ -332,10 +360,10 @@ export default function PatientTable({
                                                 )}
                                             </td>
 
-                                            {/* Barangay / Address */}
+                                            {/* Home Address */}
                                             <td className="px-6 py-4.5 text-xs text-slate-600 dark:text-slate-300 max-w-sm">
-                                                <span className="break-words leading-relaxed block font-medium" title={location}>
-                                                    {location}
+                                                <span className="break-words leading-relaxed block font-medium" title={homeAddress}>
+                                                    {homeAddress}
                                                 </span>
                                             </td>
 

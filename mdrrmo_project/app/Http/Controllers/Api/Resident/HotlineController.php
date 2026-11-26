@@ -15,7 +15,7 @@ class HotlineController extends Controller
      */
     public function index(Request $request)
     {
-        $hotlines = Cache::remember('active_emergency_hotlines', now()->addDay(), function () {
+        $hotlines = Cache::remember('active_emergency_hotlines', now()->addHour(), function () {
             return EmergencyHotline::active()
                 ->get([
                     'id',

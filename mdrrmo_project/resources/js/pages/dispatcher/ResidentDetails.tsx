@@ -29,6 +29,7 @@ interface ResidentProfile {
 
 interface IncidentRecord {
     id: number;
+    incident_number?: string | null;
     resident_id: number;
     incident_type_id: number;
     description: string;
@@ -139,14 +140,14 @@ function InfoFieldCard({
     return (
         <div
             className={clsx(
-                'group relative flex items-center justify-between p-4 rounded-2xl transition-all duration-200',
+                'group relative flex items-start justify-between p-4 rounded-2xl transition-all duration-200',
                 'bg-slate-50/80 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 hover:border-blue-500/30 dark:hover:border-blue-500/30',
                 'shadow-xs hover:shadow-md hover:shadow-slate-200/40 dark:hover:shadow-none',
                 className
             )}
         >
-            <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 group-hover:scale-105 transition-transform">
+            <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 group-hover:scale-105 transition-transform mt-0.5">
                     <Icon className="w-4 h-4" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -155,10 +156,11 @@ function InfoFieldCard({
                     </p>
                     <p
                         className={clsx(
-                            'text-xs sm:text-sm font-semibold text-slate-900 dark:text-white mt-1 truncate tracking-tight',
+                            'text-xs sm:text-sm font-semibold text-slate-900 dark:text-white mt-1 break-words leading-relaxed tracking-tight',
                             uppercaseValue && 'uppercase',
                             mono && 'font-mono'
                         )}
+                        title={typeof value === 'string' ? value : undefined}
                     >
                         {value || fallback}
                     </p>
@@ -170,7 +172,7 @@ function InfoFieldCard({
                     type="button"
                     onClick={action.onClick}
                     title={action.title}
-                    className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-white/10 transition-colors shrink-0 ml-2 cursor-pointer"
+                    className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-white/10 transition-colors shrink-0 ml-2 cursor-pointer mt-0.5"
                 >
                     <action.icon className="w-3.5 h-3.5" />
                 </button>
@@ -342,9 +344,29 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
                   })
                 : '';
 
+            const cleanQueryId = query.replace(/^#?inc-?/i, '').replace(/^0+/, '');
+            if (cleanQueryId && String(inc.id) === cleanQueryId) {
+                return true;
+            }
+
+            const incCode4 = `inc-${String(inc.id).padStart(4, '0')}`;
+            const incCode5 = `inc-${String(inc.id).padStart(5, '0')}`;
+            const incCodeSimple = `inc-${inc.id}`;
+            const incPadded4 = String(inc.id).padStart(4, '0');
+            const incPadded5 = String(inc.id).padStart(5, '0');
+
             const haystack = [
                 `#${inc.id}`,
                 String(inc.id),
+                incCode4,
+                `#${incCode4}`,
+                incCode5,
+                `#${incCode5}`,
+                incCodeSimple,
+                `#${incCodeSimple}`,
+                incPadded4,
+                incPadded5,
+                inc.incident_number,
                 inc.incident_type?.name,
                 inc.description,
                 inc.chief_complaint,
@@ -940,7 +962,8 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
                                                 <tr className="border-b border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-white/[0.03]">
                                                     <th className="px-5 py-3.5 text-xs font-semibold text-slate-600 dark:text-slate-400 capitalize">#ID</th>
                                                     <th className="px-5 py-3.5 text-xs font-semibold text-slate-600 dark:text-slate-400 capitalize">Incident Type</th>
-                                                    <th className="px-5 py-3.5 text-xs font-semibold text-slate-600 dark:text-slate-400 capitalize">Date & Location</th>
+                                                    <th className="px-5 py-3.5 text-xs font-semibold text-slate-600 dark:text-slate-400 capitalize whitespace-nowrap">Date Reported</th>
+                                                    <th className="px-5 py-3.5 text-xs font-semibold text-slate-600 dark:text-slate-400 capitalize">Location</th>
                                                     <th className="px-5 py-3.5 text-xs font-semibold text-slate-600 dark:text-slate-400 capitalize whitespace-nowrap">Status</th>
                                                     <th className="px-5 py-3.5 text-xs font-semibold text-slate-600 dark:text-slate-400 capitalize whitespace-nowrap">Source</th>
                                                     <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 dark:text-slate-400 capitalize">Action</th>
@@ -949,7 +972,7 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
                                             <tbody className="divide-y divide-slate-200/80 dark:divide-white/5">
                                                 {incidents.length === 0 ? (
                                                     <tr>
-                                                        <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400">
+                                                        <td colSpan={7} className="py-12 text-center text-slate-500 dark:text-slate-400">
                                                             <div className="flex flex-col items-center justify-center gap-2">
                                                                 <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-white/10 flex items-center justify-center text-slate-400">
                                                                     <FileText className="w-5 h-5" />
@@ -963,7 +986,7 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
                                                     </tr>
                                                 ) : filteredIncidents.length === 0 ? (
                                                     <tr>
-                                                        <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400">
+                                                        <td colSpan={7} className="py-12 text-center text-slate-500 dark:text-slate-400">
                                                             <div className="flex flex-col items-center justify-center gap-2.5">
                                                                 <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 flex items-center justify-center text-slate-400">
                                                                     <Search className="w-5 h-5" />
@@ -1019,19 +1042,21 @@ export default function ResidentDetailsPage({ resident, incidents = [], missingF
                                                                     </p>
                                                                 </td>
 
-                                                                {/* Date & Location */}
-                                                                <td className="px-5 py-4 max-w-[220px]">
-                                                                    <div className="flex flex-col gap-1">
-                                                                        <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
-                                                                            <Clock className="w-3 h-3 text-slate-400" />
-                                                                            <span>{reportedDate}</span>
-                                                                        </div>
-                                                                        <div className="flex items-start gap-1.5 text-xs">
-                                                                            <MapPin className="w-3 h-3 text-[#F61509] mt-0.5 shrink-0" />
-                                                                            <span className="font-medium text-slate-800 dark:text-slate-200 capitalize break-words leading-relaxed" title={locationDisplay}>
-                                                                                {locationDisplay}
-                                                                            </span>
-                                                                        </div>
+                                                                {/* Date Reported */}
+                                                                <td className="px-5 py-4 whitespace-nowrap">
+                                                                    <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 font-mono">
+                                                                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                                        <span>{reportedDate}</span>
+                                                                    </div>
+                                                                </td>
+
+                                                                {/* Location */}
+                                                                <td className="px-5 py-4 min-w-[200px] max-w-[280px]">
+                                                                    <div className="flex items-start gap-1.5 text-xs">
+                                                                        <MapPin className="w-3.5 h-3.5 text-[#F61509] mt-0.5 shrink-0" />
+                                                                        <span className="font-medium text-slate-800 dark:text-slate-200 capitalize break-words leading-relaxed" title={locationDisplay}>
+                                                                            {locationDisplay}
+                                                                        </span>
                                                                     </div>
                                                                 </td>
 
