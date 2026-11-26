@@ -23,12 +23,42 @@ use Inertia\Inertia;
 Route::inertia('/', 'welcome')->name('home');
 
 Route::get('/download/app', function () {
+    $customApk = public_path('downloads/opolresq.apk');
+    if (file_exists($customApk)) {
+        return response()->download($customApk, 'OpolResq-App-v1.0.4.apk', [
+            'Content-Type' => 'application/vnd.android.package-archive',
+        ]);
+    }
+
+    $customResidentApk = public_path('downloads/opolresq-resident.apk');
+    if (file_exists($customResidentApk)) {
+        return response()->download($customResidentApk, 'OpolResq-App-v1.0.4.apk', [
+            'Content-Type' => 'application/vnd.android.package-archive',
+        ]);
+    }
+
     $downloadUrl = env('MOBILE_APP_DOWNLOAD_URL');
-    if (! empty($downloadUrl) && $downloadUrl !== url('/download/app')) {
+    if (! empty($downloadUrl) && $downloadUrl !== url('/download/app') && ! str_contains($downloadUrl, '#mobile-app')) {
         return redirect()->away($downloadUrl);
     }
+
+    $debugApk = base_path('../mdrrmo_mobile/android/app/build/outputs/apk/debug/app-debug.apk');
+    if (file_exists($debugApk)) {
+        return response()->download($debugApk, 'OpolResq-App-v1.0.4.apk', [
+            'Content-Type' => 'application/vnd.android.package-archive',
+        ]);
+    }
+
     return redirect()->to(url('/#mobile-app'));
 })->name('app.download');
+
+Route::get('/download/resident', function () {
+    return redirect()->route('app.download');
+})->name('app.download.resident');
+
+Route::get('/download/responder', function () {
+    return redirect()->route('app.download');
+})->name('app.download.responder');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/change-password', [PasswordChangeController::class, 'show'])->name('password.change');

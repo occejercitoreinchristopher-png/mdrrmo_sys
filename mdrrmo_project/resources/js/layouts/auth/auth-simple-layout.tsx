@@ -67,7 +67,7 @@ export default function AuthSimpleLayout({ children }: AuthLayoutProps) {
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-[#E63946]"></span>
                                 </span>
                                 <PhoneCall className="w-3.5 h-3.5 text-[#E63946]" />
-                                <span>24/7 Hotline: 911</span>
+                                <span>24/7 Hotline: 0967-061-0573</span>
                             </div>
 
                             <ThemeToggle />

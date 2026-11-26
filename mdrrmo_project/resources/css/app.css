@@ -180,6 +180,34 @@
     }
 }
 
+@keyframes heroBreathe {
+    0%, 100% {
+        transform: scale(1.0);
+    }
+    50% {
+        transform: scale(1.025);
+    }
+}
+
+.animate-hero-breathe {
+    animation: heroBreathe 12s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+    0%, 100% {
+        opacity: 0.6;
+        transform: scale(0.995);
+    }
+    50% {
+        opacity: 0.95;
+        transform: scale(1.008);
+    }
+}
+
+.animate-pulse-glow {
+    animation: pulseGlow 4s ease-in-out infinite;
+}
+
 @media print {
     /* Reset all root containers to pure white without height or margins */
     html,

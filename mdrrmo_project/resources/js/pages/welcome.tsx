@@ -3,10 +3,8 @@ import Navbar from '@/components/landing/Navbar';
 import HeroSection from '@/components/landing/HeroSection';
 import EmergencyServices from '@/components/landing/EmergencyServices';
 import HowItWorks from '@/components/landing/HowItWorks';
-import LiveOperationsPreview from '@/components/landing/LiveOperationsPreview';
+import OurPeople from '@/components/landing/OurPeople';
 import MobileAppSection from '@/components/landing/MobileAppSection';
-import SystemRoles from '@/components/landing/SystemRoles';
-import CommunitySection from '@/components/landing/CommunitySection';
 import CallToAction from '@/components/landing/CallToAction';
 import Footer from '@/components/landing/Footer';
 
@@ -39,10 +37,8 @@ export default function Welcome() {
                     <HeroSection />
                     <EmergencyServices />
                     <HowItWorks />
-                    <LiveOperationsPreview />
+                    <OurPeople />
                     <MobileAppSection />
-                    <SystemRoles />
-                    <CommunitySection />
                     <CallToAction />
                 </main>
 

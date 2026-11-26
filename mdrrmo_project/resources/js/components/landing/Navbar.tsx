@@ -19,9 +19,8 @@ export default function Navbar() {
         { label: 'Home', href: '#hero' },
         { label: 'Services', href: '#services' },
         { label: 'How It Works', href: '#how-it-works' },
-        { label: 'Live Operations', href: '#operations' },
-        { label: 'Resident App', href: '#mobile-app' },
-        { label: 'Coverage', href: '#community' },
+        { label: 'Our People', href: '#our-people' },
+        { label: 'OpolResq App', href: '#mobile-app' },
     ];
 
     const loginUrl = login ? login() : '/login';
@@ -55,14 +54,9 @@ export default function Navbar() {
                             </div>
                         </div>
                         <div>
-                            <div className="flex items-center gap-2">
-                                <span className="font-black text-base sm:text-lg tracking-tight text-white group-hover:text-blue-400 transition-colors">
-                                    MDRRMO OPOL
-                                </span>
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-500/15 text-blue-400 border border-blue-500/30">
-                                    EMS
-                                </span>
-                            </div>
+                            <span className="font-black text-base sm:text-lg tracking-tight text-white group-hover:text-blue-400 transition-colors block">
+                                MDRRMO OPOL
+                            </span>
                             <p className="text-[11px] text-slate-400 font-medium tracking-wide">
                                 Emergency Medical Services • Opol, MisOr
                             </p>
@@ -84,28 +78,6 @@ export default function Navbar() {
 
                     {/* Right Desktop Actions */}
                     <div className="hidden sm:flex items-center gap-3">
-                        {/* 24/7 Hotline Badge */}
-                        <a
-                            href="tel:911"
-                            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/25 text-rose-400 text-xs font-bold hover:bg-rose-500/15 transition-colors"
-                        >
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-                            </span>
-                            <PhoneCall className="w-3.5 h-3.5 text-rose-400" />
-                            <span>Hotline: 911</span>
-                        </a>
-
-                        {/* Resident Mobile App Link */}
-                        <a
-                            href="#mobile-app"
-                            className="hidden md:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-200 hover:text-white bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 rounded-xl transition-all"
-                        >
-                            <Smartphone className="w-3.5 h-3.5 text-sky-400" />
-                            <span>Resident App</span>
-                        </a>
-
                         {/* Sign In CTA */}
                         <Link
                             href={loginUrl}
@@ -118,14 +90,6 @@ export default function Navbar() {
 
                     {/* Mobile Hamburger Button */}
                     <div className="lg:hidden flex items-center gap-2">
-                        <a
-                            href="tel:911"
-                            className="sm:hidden flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 text-[11px] font-bold"
-                        >
-                            <PhoneCall className="w-3 h-3 text-rose-400" />
-                            <span>911</span>
-                        </a>
-
                         <button
                             type="button"
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -156,11 +120,11 @@ export default function Navbar() {
 
                     <div className="pt-3 border-t border-slate-800 space-y-2.5">
                         <a
-                            href="tel:911"
+                            href="tel:09670610573"
                             className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-400 text-xs font-bold"
                         >
                             <PhoneCall className="w-4 h-4 text-rose-400" />
-                            <span>Emergency Hotline: 911 / 0917-707-6765</span>
+                            <span>MDRRMO Hotline: 0967-061-0573</span>
                         </a>
 
                         <a
@@ -169,7 +133,7 @@ export default function Navbar() {
                             className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs font-bold"
                         >
                             <Smartphone className="w-4 h-4 text-sky-400" />
-                            <span>Explore Resident Mobile App</span>
+                            <span>Explore OpolResq App</span>
                         </a>
 
                         <Link

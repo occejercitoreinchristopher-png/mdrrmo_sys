@@ -74,15 +74,9 @@ export default function Footer() {
                         </p>
                         <ul className="space-y-2.5 text-xs">
                             <li className="p-2.5 rounded-xl bg-[#111B2D] border border-slate-800">
-                                <span className="text-[10px] text-slate-400 font-medium block">National Emergency</span>
-                                <a href="tel:911" className="text-sm font-black text-rose-400 hover:underline">
-                                    911 (Toll-Free)
-                                </a>
-                            </li>
-                            <li className="p-2.5 rounded-xl bg-[#111B2D] border border-slate-800">
                                 <span className="text-[10px] text-slate-400 font-medium block">MDRRMO Opol Command Center</span>
-                                <a href="tel:09177076765" className="text-sm font-bold text-white hover:text-blue-400">
-                                    0917-707-6765
+                                <a href="tel:09670610573" className="text-sm font-black text-rose-400 hover:underline">
+                                    0967-061-0573
                                 </a>
                             </li>
                             <li className="p-2.5 rounded-xl bg-[#111B2D] border border-slate-800">
@@ -122,23 +116,13 @@ export default function Footer() {
                                 </a>
                             </li>
                             <li>
-                                <a href="#operations" className="hover:text-white transition-colors">
-                                    Live Operations
+                                <a href="#our-people" className="hover:text-white transition-colors">
+                                    Our People
                                 </a>
                             </li>
                             <li>
                                 <a href="#mobile-app" className="hover:text-white transition-colors">
-                                    Resident App
-                                </a>
-                            </li>
-                            <li>
-                                <a href="#roles" className="hover:text-white transition-colors">
-                                    System Roles
-                                </a>
-                            </li>
-                            <li>
-                                <a href="#community" className="hover:text-white transition-colors">
-                                    14 Barangays
+                                    OpolResq App
                                 </a>
                             </li>
                         </ul>
@@ -164,7 +148,7 @@ export default function Footer() {
                                     href="#mobile-app"
                                     className="p-3 rounded-xl bg-[#111B2D] border border-slate-800 text-slate-200 font-bold block hover:border-slate-700 transition-colors"
                                 >
-                                    <span className="block text-white">Resident Mobile App</span>
+                                    <span className="block text-white">OpolResq Mobile App</span>
                                     <span className="text-[10px] text-slate-400 font-normal">Direct reporting & tracking</span>
                                 </a>
                             </li>

@@ -3,63 +3,79 @@ import {
     ShieldCheck,
     Send,
     Navigation,
-    HeartHandshake,
-    ArrowRight,
-    CheckCircle2,
-    Clock,
-    Activity,
+    HeartPulse,
 } from 'lucide-react';
 
 const steps = [
     {
-        number: '01',
-        name: 'Emergency Request',
-        tag: 'Instant Alert',
-        description: 'Resident triggers an incident alert with automatic GPS coordinates and photo evidence via the mobile app, or calls the 24/7 hotline 911.',
+        number: 'STEP 01',
+        tag: 'INSTANT ALERT',
+        title: 'Emergency Request',
+        description: 'Resident triggers an incident alert with automatic GPS coordinates and photo evidence via the mobile app, or calls the 24/7 hotline 0967-061-0573.',
+        speedStandard: '< 30 Seconds',
         icon: PhoneCall,
-        timeframe: '< 30 Seconds',
-        accent: 'from-rose-500 to-red-600',
-        badge: 'bg-rose-500/10 text-rose-400 border-rose-500/25',
+        color: '#F43F5E', // rose
+        nodeBorder: 'border-rose-500',
+        nodeGlow: 'rgba(244, 63, 94, 0.4)',
+        cardTopBorder: 'border-t-2 border-t-rose-500',
+        stemColor: 'bg-rose-500',
+        tagBadge: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
     },
     {
-        number: '02',
-        name: 'Verification & Triage',
-        tag: 'Command Center',
+        number: 'STEP 02',
+        tag: 'COMMAND CENTER',
+        title: 'Verification & Triage',
         description: 'MDRRMO dispatchers validate incident severity (Priority 1–3), confirm the exact location, and queue resources in the dispatch console.',
+        speedStandard: '< 60 Seconds',
         icon: ShieldCheck,
-        timeframe: '< 60 Seconds',
-        accent: 'from-blue-500 to-indigo-600',
-        badge: 'bg-blue-500/10 text-blue-400 border-blue-500/25',
+        color: '#3B82F6', // blue
+        nodeBorder: 'border-blue-500',
+        nodeGlow: 'rgba(59, 130, 246, 0.4)',
+        cardTopBorder: 'border-t-2 border-t-blue-500',
+        stemColor: 'bg-blue-500',
+        tagBadge: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
     },
     {
-        number: '03',
-        name: 'Ambulance Dispatch',
-        tag: 'Fleet Deployment',
+        number: 'STEP 03',
+        tag: 'FLEET DEPLOYMENT',
+        title: 'Ambulance Dispatch',
         description: 'The nearest available ambulance and EMT response team receive automated digital dispatch orders with incident briefing on mobile.',
+        speedStandard: '< 90 Seconds',
         icon: Send,
-        timeframe: '< 90 Seconds',
-        accent: 'from-sky-500 to-blue-600',
-        badge: 'bg-sky-500/10 text-sky-400 border-sky-500/25',
+        color: '#0EA5E9', // sky
+        nodeBorder: 'border-sky-500',
+        nodeGlow: 'rgba(14, 165, 233, 0.4)',
+        cardTopBorder: 'border-t-2 border-t-sky-500',
+        stemColor: 'bg-sky-500',
+        tagBadge: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
     },
     {
-        number: '04',
-        name: 'Rapid Response',
-        tag: 'Turn-by-Turn GPS',
+        number: 'STEP 04',
+        tag: 'TURN-BY-TURN GPS',
+        title: 'Rapid Response',
         description: 'Responders navigate directly to the incident scene with optimized municipal routing while the resident monitors ambulance arrival live.',
+        speedStandard: 'Avg 4.2 Mins',
         icon: Navigation,
-        timeframe: 'Avg 4.2 Mins',
-        accent: 'from-amber-500 to-orange-600',
-        badge: 'bg-amber-500/10 text-amber-400 border-amber-500/25',
+        color: '#F97316', // orange
+        nodeBorder: 'border-orange-500',
+        nodeGlow: 'rgba(249, 115, 22, 0.4)',
+        cardTopBorder: 'border-t-2 border-t-orange-500',
+        stemColor: 'bg-orange-500',
+        tagBadge: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
     },
     {
-        number: '05',
-        name: 'Patient Care & ePCR',
-        tag: 'Clinical Handover',
+        number: 'STEP 05',
+        tag: 'CLINICAL HANDOVER',
+        title: 'Patient Care & ePCR',
         description: 'Responders deliver pre-hospital life support, document digital Patient Care Records (ePCR), and safely transfer the patient to the hospital.',
-        icon: HeartHandshake,
-        timeframe: 'Full Care Protocol',
-        accent: 'from-emerald-500 to-teal-600',
-        badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25',
+        speedStandard: 'Full Care Protocol',
+        icon: HeartPulse,
+        color: '#10B981', // emerald
+        nodeBorder: 'border-emerald-500',
+        nodeGlow: 'rgba(16, 185, 129, 0.4)',
+        cardTopBorder: 'border-t-2 border-t-emerald-500',
+        stemColor: 'bg-emerald-500',
+        tagBadge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
     },
 ];
 
@@ -69,72 +85,91 @@ export default function HowItWorks() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                 {/* Section Header */}
                 <div className="text-center max-w-3xl mx-auto mb-16">
-                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/25 text-blue-400 text-xs font-bold uppercase tracking-wider mb-3">
-                        <Activity className="w-3.5 h-3.5" />
+                    <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/25 text-blue-400 text-xs font-mono font-bold uppercase tracking-wider mb-4">
                         <span>Standard Operating Protocol</span>
                     </div>
                     <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
                         How Emergency Response Works
                     </h2>
-                    <p className="mt-4 text-base sm:text-lg text-slate-300 leading-relaxed font-normal">
+                    <p className="mt-4 text-base sm:text-lg text-slate-300 leading-relaxed font-normal max-w-2xl mx-auto">
                         From the initial citizen alert to on-scene medical triage, every step in the MDRRMO protocol is optimized for speed, precision, and saving lives.
                     </p>
                 </div>
 
-                {/* 5-Step Process Timeline Grid */}
+                {/* 5-Step Process Timeline Pipeline */}
                 <div className="relative">
-                    {/* Connecting Top Gradient Line for Desktop */}
-                    <div className="hidden xl:block absolute top-14 left-16 right-16 h-1 bg-gradient-to-r from-rose-500 via-blue-500 via-sky-400 to-emerald-500 opacity-20 rounded-full -z-0" />
+                    {/* Horizontal Connecting Pipeline with 5 Glowing Circular Nodes (Desktop) */}
+                    <div className="hidden lg:grid grid-cols-5 gap-4 relative mb-2">
+                        {/* Continuous Connecting Line passing through center of all 5 nodes */}
+                        <div className="absolute top-7 left-[10%] right-[10%] h-[2px] z-0 pointer-events-none">
+                            <div className="w-full h-full bg-gradient-to-r from-rose-500 via-blue-500 via-sky-400 via-orange-500 to-emerald-500 opacity-80" />
+                        </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 relative z-10">
+                        {steps.map((step) => {
+                            const Icon = step.icon;
+                            return (
+                                <div key={step.number} className="flex flex-col items-center relative z-10 group">
+                                    {/* Glowing Circular Node */}
+                                    <div
+                                        className={`w-14 h-14 rounded-full bg-[#080D19] border-2 ${step.nodeBorder} flex items-center justify-center shadow-lg transition-transform duration-300 group-hover:scale-110`}
+                                        style={{ boxShadow: `0 0 20px -2px ${step.nodeGlow}` }}
+                                    >
+                                        <Icon className="w-6 h-6" style={{ color: step.color }} />
+                                    </div>
+
+                                    {/* Vertical Connector Stem leading down to the top of the card */}
+                                    <div className={`w-[2px] h-6 ${step.stemColor}`} />
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* The 5 Step Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 relative z-10">
                         {steps.map((step) => {
                             const Icon = step.icon;
                             return (
                                 <div
                                     key={step.number}
-                                    className="group rounded-3xl bg-[#0D1424]/90 hover:bg-[#0F172A] border border-slate-800 hover:border-slate-700 p-6 backdrop-blur-xl shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
+                                    className={`rounded-2xl bg-[#0B101D] border border-slate-800/90 ${step.cardTopBorder} p-5 backdrop-blur-xl shadow-xl flex flex-col justify-between hover:bg-[#0D1424] hover:border-slate-700 transition-all duration-300 group`}
                                 >
-                                    <div>
-                                        {/* Step Number & Icon Header */}
-                                        <div className="flex items-center justify-between mb-5">
-                                            <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${step.accent} p-0.5 shadow-md group-hover:scale-105 transition-transform`}>
-                                                <div className="w-full h-full bg-[#080D19] rounded-[14px] flex items-center justify-center text-white">
-                                                    <Icon className="w-5 h-5" />
-                                                </div>
-                                            </div>
+                                    {/* Mobile Node Header (shown only on small viewports where top pipeline is hidden) */}
+                                    <div className="lg:hidden flex items-center gap-3 mb-4">
+                                        <div
+                                            className={`w-11 h-11 rounded-full bg-[#080D19] border-2 ${step.nodeBorder} flex items-center justify-center shadow-md`}
+                                            style={{ boxShadow: `0 0 15px -2px ${step.nodeGlow}` }}
+                                        >
+                                            <Icon className="w-5 h-5" style={{ color: step.color }} />
+                                        </div>
+                                        <span className="font-mono text-xs font-bold text-slate-400 tracking-wider">
+                                            {step.number}
+                                        </span>
+                                    </div>
 
-                                            <span className="font-mono text-xl font-black text-slate-600 group-hover:text-blue-400 transition-colors">
+                                    <div>
+                                        {/* Desktop Step Label */}
+                                        <div className="hidden lg:block mb-2">
+                                            <span className="font-mono text-[11px] font-bold text-slate-400 tracking-wider">
                                                 {step.number}
                                             </span>
                                         </div>
 
-                                        {/* Step Tag */}
-                                        <div className="mb-2.5">
-                                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${step.badge}`}>
+                                        {/* Tag Badge */}
+                                        <div className="mb-3">
+                                            <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-mono font-extrabold uppercase tracking-wider border ${step.tagBadge}`}>
                                                 {step.tag}
                                             </span>
                                         </div>
 
-                                        {/* Step Title */}
-                                        <h3 className="text-base font-bold text-white mb-2 tracking-tight group-hover:text-blue-300 transition-colors">
-                                            {step.name}
+                                        {/* Title */}
+                                        <h3 className="text-base font-bold text-white mb-3 tracking-tight group-hover:text-blue-200 transition-colors">
+                                            {step.title}
                                         </h3>
 
                                         {/* Description */}
                                         <p className="text-xs text-slate-400 leading-relaxed font-normal">
                                             {step.description}
                                         </p>
-                                    </div>
-
-                                    {/* Timing Metric Footer */}
-                                    <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-semibold text-slate-400">
-                                        <span className="flex items-center gap-1.5 text-slate-400">
-                                            <Clock className="w-3.5 h-3.5 text-blue-400" />
-                                            <span>Speed Standard</span>
-                                        </span>
-                                        <span className="font-mono text-emerald-400 font-bold">
-                                            {step.timeframe}
-                                        </span>
                                     </div>
                                 </div>
                             );
