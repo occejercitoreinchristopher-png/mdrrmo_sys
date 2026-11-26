@@ -9,6 +9,7 @@ import {
     CheckCircle2,
     Smartphone,
     Loader2,
+    ArrowLeft,
 } from 'lucide-react';
 import { ThemeProvider } from '@/shared/contexts/ThemeContext';
 import ThemeToggle from '@/shared/components/ThemeToggle';
@@ -63,6 +64,17 @@ function LoginForm({ status, canResetPassword = true }: LoginProps) {
                 />
             </div>
 
+            {/* Top Left: Back to Landing Page */}
+            <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-30 flex items-center gap-2 animate-fade-in delay-1">
+                <Link
+                    href="/"
+                    className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 bg-white/90 dark:bg-[#0D1B2A]/90 backdrop-blur-md border border-slate-200/80 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/40 hover:bg-white dark:hover:bg-[#13253B] hover:text-[#2455C5] dark:hover:text-blue-400 transition-all duration-200 transform hover:-translate-x-0.5 active:translate-x-0"
+                >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Back to Website</span>
+                </Link>
+            </div>
+
             {/* Top Right Theme Toggle */}
             <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-30 flex items-center gap-2 animate-fade-in delay-1">
                 <ThemeToggle className="shadow-md shadow-black/5 dark:shadow-black/40 transition-transform duration-200 hover:scale-105 active:scale-95" />
@@ -91,7 +103,7 @@ function LoginForm({ status, canResetPassword = true }: LoginProps) {
                     <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[#10264B]/50 to-transparent pointer-events-none" />
 
                     {/* Top Branding Content */}
-                    <div className="relative z-10 flex items-center gap-3">
+                    <Link href="/" className="relative z-10 flex items-center gap-3 group transition-transform hover:scale-[1.02]">
                         <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white/10 backdrop-blur-md p-1.5 border border-white/20 shadow-lg shadow-black/20 flex items-center justify-center flex-shrink-0 animate-logo">
                             <img
                                 src="/images/opol-logo.png"
@@ -112,7 +124,7 @@ function LoginForm({ status, canResetPassword = true }: LoginProps) {
                                 Municipality of Opol
                             </p>
                         </div>
-                    </div>
+                    </Link>
 
                     {/* Center area kept completely clear to showcase helicopter and rescue responders */}
                     <div className="flex-1 pointer-events-none" />
@@ -145,6 +157,17 @@ function LoginForm({ status, canResetPassword = true }: LoginProps) {
                     />
 
                     <div className="relative z-10 w-full max-w-[400px] mx-auto flex flex-col justify-center">
+                        {/* Back to Landing Page Button */}
+                        <div className="mb-4 animate-fade-up">
+                            <Link
+                                href="/"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white/80 hover:text-white bg-white/10 hover:bg-white/20 border border-white/15 transition-all duration-200 group w-fit"
+                            >
+                                <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+                                <span>Back to Landing Page</span>
+                            </Link>
+                        </div>
+
                         {/* Login Heading with upward slide entrance */}
                         <div className="mb-5 sm:mb-6 animate-fade-up delay-1">
                             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white drop-shadow-sm">
