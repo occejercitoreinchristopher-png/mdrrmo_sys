@@ -31,7 +31,7 @@ const sizes = {
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
     children: ReactNode;
-    variant?: 'primary' | 'secondary' | 'danger' | 'destructive' | 'ghost' | 'outline' | 'success' | 'blue' | 'admin';
+    variant?: 'primary' | 'secondary' | 'danger' | 'destructive' | 'ghost' | 'outline' | 'success' | 'blue' | 'admin' | 'default';
     size?: 'xs' | 'sm' | 'md' | 'lg';
     loading?: boolean;
 }
@@ -47,7 +47,7 @@ export default function Button({
     onClick,
     ...props
 }: ButtonProps) {
-    let resolvedVariant = variant;
+    let resolvedVariant = variant === 'default' ? 'primary' : variant;
     try {
         const page = usePage();
         const user = (page?.props as any)?.auth?.user;

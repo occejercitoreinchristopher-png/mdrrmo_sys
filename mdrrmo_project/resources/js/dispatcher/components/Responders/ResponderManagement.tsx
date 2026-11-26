@@ -711,7 +711,7 @@ export default function ResponderManagement({
                                     <Button
                                         type="button"
                                         size="sm"
-                                        variant="default"
+                                        variant="blue"
                                         loading={badgeUpdating}
                                         onClick={handleUpdateBadge}
                                         className="text-xs px-3 py-1.5 h-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
