@@ -181,6 +181,7 @@ Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:disp
 
     // Residents
     Route::get('/residents', [ResidentController::class, 'index'])->name('residents');
+    Route::get('/residents/caller-history', [ResidentController::class, 'callerHistory'])->name('residents.caller-history');
     Route::get('/residents/{resident}', [ResidentController::class, 'show'])->name('residents.show');
 
     // PCRs

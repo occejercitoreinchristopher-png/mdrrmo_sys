@@ -82,6 +82,7 @@ class ResidentController extends Controller
                 caller_phone_number,
                 MAX(caller_name) as caller_name,
                 COUNT(*) as total_calls,
+                SUM(CASE WHEN is_prank = 1 OR rejection_category = \'prank\' THEN 1 ELSE 0 END) as prank_count,
                 MAX(reported_at) as last_called_at,
                 MAX(id) as latest_incident_id
             ')
@@ -104,6 +105,7 @@ class ResidentController extends Controller
             $row->place_of_incident = $latest?->place_of_incident;
             $row->incident_address = $latest?->incident_address;
             $row->incident_status = $latest?->incident_status ?? 'verified';
+            $row->prank_count = (int) ($row->prank_count ?? 0);
             return $row;
         });
 
@@ -169,6 +171,70 @@ class ResidentController extends Controller
             'resident' => $resident,
             'incidents' => $incidents,
             'missingFields' => $completeness['missing_fields'],
+        ]);
+    }
+
+    public function callerHistory(Request $request)
+    {
+        $request->validate([
+            'phone' => 'required|string',
+        ]);
+
+        $phone = trim($request->phone);
+        $digits = preg_replace('/\D/', '', $phone);
+        $last9 = strlen($digits) >= 9 ? substr($digits, -9) : $digits;
+
+        $incidents = Incident::where(function ($q) use ($phone, $last9) {
+                $q->where('caller_phone_number', $phone);
+                if (!empty($last9)) {
+                    $q->orWhere('caller_phone_number', 'like', "%{$last9}");
+                }
+            })
+            ->with(['incidentType', 'dispatches.ambulance', 'dispatches.driver', 'dispatches.patientCareRecord'])
+            ->orderByDesc('reported_at')
+            ->orderByDesc('created_at')
+            ->get();
+
+        $firstWithCallerName = $incidents->first(function ($inc) {
+            return !empty($inc->caller_name);
+        });
+        $resolvedCallerName = $firstWithCallerName?->caller_name ?? 'Anonymous Caller';
+
+        $totalCalls = $incidents->count();
+        $prankCount = $incidents->filter(function ($i) {
+            return $i->is_prank || $i->rejection_category === 'prank';
+        })->count();
+
+        return response()->json([
+            'phone' => $phone,
+            'caller_name' => $resolvedCallerName,
+            'total_calls' => $totalCalls,
+            'prank_count' => $prankCount,
+            'incidents' => $incidents->map(function ($inc) {
+                $reportedDate = $inc->reported_at
+                    ? $inc->reported_at->format('M d, Y h:i A')
+                    : ($inc->created_at ? $inc->created_at->format('M d, Y h:i A') : '—');
+
+                $firstDispatch = $inc->dispatches->first();
+                $ambulanceName = $firstDispatch?->ambulance?->plate_number
+                    ?? $firstDispatch?->ambulance?->vehicle_name
+                    ?? null;
+
+                return [
+                    'id' => $inc->id,
+                    'incident_number' => $inc->incident_number ?? "#{$inc->id}",
+                    'caller_name' => $inc->caller_name,
+                    'incident_type' => $inc->incidentType?->incident_type_name ?? $inc->incidentType?->name ?? 'General Emergency',
+                    'incident_status' => $inc->incident_status,
+                    'place_of_incident' => $inc->place_of_incident ?? $inc->incident_address ?? 'Location not specified',
+                    'reported_at' => $reportedDate,
+                    'is_prank' => (bool) ($inc->is_prank || $inc->rejection_category === 'prank'),
+                    'rejection_category' => $inc->rejection_category,
+                    'rejection_reason' => $inc->rejection_reason,
+                    'ambulance' => $ambulanceName,
+                    'has_pcr' => (bool) $firstDispatch?->patientCareRecord,
+                ];
+            }),
         ]);
     }
 }

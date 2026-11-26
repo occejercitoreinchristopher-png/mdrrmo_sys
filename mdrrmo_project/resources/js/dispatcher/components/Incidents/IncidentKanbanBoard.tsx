@@ -67,11 +67,11 @@ export default function IncidentKanbanBoard({
 
             // Origin filter
             if (originFilter === 'hotline') {
-                const isHotline = Boolean(i.caller_phone_number || i.description?.includes('Reported via Phone/SIM') || !i.resident);
+                const isHotline = Boolean(i.caller_phone_number || i.report_source === 'phone_sim' || i.description?.includes('Reported via Phone/SIM') || !i.resident);
                 if (!isHotline) return false;
             }
             if (originFilter === 'app') {
-                const isApp = Boolean(i.resident && !i.caller_phone_number && !i.description?.includes('Reported via Phone/SIM'));
+                const isApp = Boolean(i.resident && !i.caller_phone_number && i.report_source !== 'phone_sim' && !i.description?.includes('Reported via Phone/SIM'));
                 if (!isApp) return false;
             }
 
@@ -131,80 +131,6 @@ export default function IncidentKanbanBoard({
 
     return (
         <div className="space-y-4 w-full">
-            {/* ======================================================== */}
-            {/* TOP EXECUTIVE TELEMETRY RIBBON (4 METRIC CHIPS)         */}
-            {/* ======================================================== */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Total Active Queue */}
-                <div 
-                    onClick={() => {
-                        setPriorityFilter('all');
-                        setOriginFilter('all');
-                        setSearch('');
-                    }}
-                    className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 shadow-xs flex items-center justify-between cursor-pointer hover:border-slate-300 dark:hover:border-white/20 transition-all"
-                >
-                    <div className="space-y-0.5">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                            Active Queue
-                        </div>
-                        <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {counts.total}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Pending Verification */}
-                <div 
-                    onClick={() => setPriorityFilter('all')}
-                    className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 shadow-xs flex items-center justify-between cursor-pointer hover:border-amber-500/40 transition-all"
-                >
-                    <div className="space-y-0.5">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                            Pending Triage
-                        </div>
-                        <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {counts.pending}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Verified (Ready to Dispatch) */}
-                <div 
-                    onClick={() => setPriorityFilter('all')}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                        counts.verified > 0
-                            ? 'bg-blue-500/10 border-blue-500/40 shadow-md ring-1 ring-blue-500/30'
-                            : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-white/10 hover:border-blue-500/40'
-                    }`}
-                >
-                    <div className="space-y-0.5">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
-                            {counts.verified > 0 && <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />}
-                            Ready to Dispatch
-                        </div>
-                        <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {counts.verified}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Active Field Dispatches */}
-                <div 
-                    onClick={() => setPriorityFilter('all')}
-                    className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 shadow-xs flex items-center justify-between cursor-pointer hover:border-orange-500/40 transition-all"
-                >
-                    <div className="space-y-0.5">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-orange-600 dark:text-orange-400">
-                            Responding / Field
-                        </div>
-                        <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {counts.activeField}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {/* ======================================================== */}
             {/* SEARCH & FILTER TOOLBAR                                  */}
             {/* ======================================================== */}

@@ -8,10 +8,6 @@ import {
     Copy,
     Check,
     UserCheck,
-    Users,
-    CheckCircle2,
-    UserX,
-    Activity,
 } from 'lucide-react';
 import PageHeader from '@/shared/components/PageHeader';
 import Card from '@/shared/components/Card';
@@ -137,103 +133,7 @@ export default function PatientTable({
                 subtitle="Master clinical directory of patient records, identity resolution, and emergency care history."
             />
 
-            {/* Top Clinical Telemetry Ribbon (4 Metric Cards matching Incident Records) */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Card 1: Total Registered Patients */}
-                <div
-                    onClick={() => setStatusFilter('all')}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                        statusFilter === 'all'
-                            ? 'bg-blue-500/10 border-blue-500/40 shadow-md ring-1 ring-blue-500/30'
-                            : 'bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 hover:border-blue-500/40 shadow-xs'
-                    }`}
-                >
-                    <div className="space-y-0.5">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                            Total Patients
-                        </div>
-                        <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {summary?.total ?? patients.length}
-                        </div>
-                        <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                            Clinical Directory
-                        </div>
-                    </div>
-                    <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-500 border border-blue-500/20 flex items-center justify-center shrink-0">
-                        <Users className="w-4 h-4" />
-                    </div>
-                </div>
-
-                {/* Card 2: Identified Patients */}
-                <div
-                    onClick={() => setStatusFilter('identified')}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                        statusFilter === 'identified'
-                            ? 'bg-emerald-500/10 border-emerald-500/40 shadow-md ring-1 ring-emerald-500/30'
-                            : 'bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 hover:border-emerald-500/40 shadow-xs'
-                    }`}
-                >
-                    <div className="space-y-0.5">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                            Identified Profiles
-                        </div>
-                        <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {summary?.identified ?? 0}
-                        </div>
-                        <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                            Verified Identity
-                        </div>
-                    </div>
-                    <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                        <CheckCircle2 className="w-4 h-4" />
-                    </div>
-                </div>
-
-                {/* Card 3: Unidentified Patients */}
-                <div
-                    onClick={() => setStatusFilter('unidentified')}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                        statusFilter === 'unidentified'
-                            ? 'bg-amber-500/10 border-amber-500/40 shadow-md ring-1 ring-amber-500/30'
-                            : 'bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 hover:border-amber-500/40 shadow-xs'
-                    }`}
-                >
-                    <div className="space-y-0.5">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                            Awaiting Identity
-                        </div>
-                        <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {summary?.unidentified ?? 0}
-                        </div>
-                        <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                            Unidentified Cases
-                        </div>
-                    </div>
-                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center justify-center shrink-0">
-                        <UserX className="w-4 h-4" />
-                    </div>
-                </div>
-
-                {/* Card 4: Total PCR Records */}
-                <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 shadow-xs flex items-center justify-between">
-                    <div className="space-y-0.5">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
-                            Clinical Care Records
-                        </div>
-                        <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {summary?.pcr_records ?? 0}
-                        </div>
-                        <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                            PCR Documentation
-                        </div>
-                    </div>
-                    <div className="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-500 border border-cyan-500/20 flex items-center justify-center shrink-0">
-                        <Activity className="w-4 h-4" />
-                    </div>
-                </div>
-            </div>
-
-            {/* 2. Main Synchronized DataTable Card (Full Width matching Incident Records) */}
+            {/* Main Synchronized DataTable Card (Full Width matching Incident Records) */}
             <Card padding={false} className="w-full bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-sm overflow-hidden">
                 {/* Search & Filter Toolbar Header */}
                 <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-slate-800/50 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -433,21 +333,15 @@ export default function PatientTable({
                                             </td>
 
                                             {/* Barangay / Address */}
-                                            <td className="px-6 py-4.5 text-xs text-slate-600 dark:text-slate-300 max-w-[280px]">
-                                                <span className="truncate block font-medium" title={location}>
+                                            <td className="px-6 py-4.5 text-xs text-slate-600 dark:text-slate-300 max-w-sm">
+                                                <span className="break-words leading-relaxed block font-medium" title={location}>
                                                     {location}
                                                 </span>
                                             </td>
 
                                             {/* Care Records */}
                                             <td className="px-6 py-4.5 text-center">
-                                                <span
-                                                    className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${
-                                                        pcrCount > 0
-                                                            ? 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/25'
-                                                            : 'bg-slate-100 dark:bg-white/5 text-slate-500 border border-slate-200/60 dark:border-white/5'
-                                                    }`}
-                                                >
+                                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/10">
                                                     {pcrCount} {pcrCount === 1 ? 'PCR' : 'PCRs'}
                                                 </span>
                                             </td>

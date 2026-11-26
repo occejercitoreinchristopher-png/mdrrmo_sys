@@ -16,7 +16,7 @@ export default function IncidentsPage({
     responders = []
 }) {
     return (
-        <DispatcherLayout title={statusFilter === 'history' ? "Incident Records" : "Incoming Incidents"}>
+        <DispatcherLayout title={statusFilter === 'history' ? "Incident Records" : "Active Incidents"}>
             <IncidentTable 
                 incidents={incidents ?? []} 
                 allHistoryIncidents={allHistoryIncidents}

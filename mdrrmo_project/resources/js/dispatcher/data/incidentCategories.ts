@@ -66,6 +66,8 @@ export const INCIDENT_TYPES_BY_CATEGORY: Record<MainCategory, string[]> = {
     ],
     'Fire Emergency': [
         'Fire Incidents',
+        'Burns',
+        'Smoke Inhalation',
         'Hazardous Materials',
         'Hazardous Condition',
     ],
@@ -102,12 +104,22 @@ export const ALL_INCIDENT_TYPES: string[] = Object.values(INCIDENT_TYPES_BY_CATE
 /**
  * Returns the proper Main Category for a given incident complaint or incident type.
  */
-export function getCategoryForIncident(complaintOrType?: string | null): string {
+export function getCategoryForIncident(complaintOrType?: string | null): string | null {
     if (!complaintOrType || typeof complaintOrType !== 'string') {
-        return 'Medical Emergency';
+        return null;
     }
 
     const norm = complaintOrType.trim().toLowerCase();
+    if (!norm) {
+        return null;
+    }
+
+    // Direct check if complaintOrType is ITSELF one of the MAIN_CATEGORIES
+    for (const cat of MAIN_CATEGORIES) {
+        if (cat.toLowerCase() === norm) {
+            return cat;
+        }
+    }
 
     // Check custom incidents first
     try {
@@ -147,7 +159,7 @@ export function getCategoryForIncident(complaintOrType?: string | null): string 
         return 'Medical Emergency';
     }
 
-    return 'Medical Emergency';
+    return null;
 }
 
 /**

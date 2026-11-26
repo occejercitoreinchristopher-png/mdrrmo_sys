@@ -71,11 +71,11 @@ export const RISK_LEVELS = [
 
 export const getRiskColorHex = (level?: string | null): string => {
     const l = (level || '').toLowerCase();
-    if (l.includes('high') && !l.includes('mod')) return '#E53935';
-    if (l.includes('mod-high') || l.includes('moderate-high')) return '#FB8C00';
-    if (l.includes('mod')) return '#FDD835';
-    if (l.includes('low')) return '#43A047';
-    return '#FDD835';
+    if (l.includes('high') && !l.includes('mod')) return '#EF4444';
+    if (l.includes('mod-high') || l.includes('moderate-high')) return '#F97316';
+    if (l.includes('mod')) return '#FACC15';
+    if (l.includes('low')) return '#3B82F6';
+    return '#FACC15';
 };
 
 // Simple Ray-Casting algorithm to check if a point [lng, lat] is inside a polygon ring

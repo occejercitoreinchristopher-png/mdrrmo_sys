@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { router } from '@inertiajs/react';
 import { clsx } from 'clsx';
-import { 
-    Copy, 
+import {
+    Copy,
     Check
 } from 'lucide-react';
 import StatusBadge from '@/shared/components/StatusBadge';
@@ -95,6 +95,7 @@ export default function IncidentCard({
     // Origin detection (Hotline call vs Mobile app)
     const isHotlineCall = Boolean(
         incident.caller_phone_number ||
+        incident.report_source === 'phone_sim' ||
         incident.description?.includes('Reported via Phone/SIM') ||
         !incident.resident
     );
@@ -146,11 +147,10 @@ export default function IncidentCard({
                         <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
                             {timeInfo.display}
                         </span>
-                        <span className={`text-[10px] font-semibold mt-0.5 ${
-                            timeInfo.isUrgent 
-                                ? 'text-amber-600 dark:text-amber-400 font-bold animate-pulse'
-                                : 'text-slate-500 dark:text-slate-400'
-                        }`}>
+                        <span className={`text-[10px] font-semibold mt-0.5 ${timeInfo.isUrgent
+                            ? 'text-amber-600 dark:text-amber-400 font-bold animate-pulse'
+                            : 'text-slate-500 dark:text-slate-400'
+                            }`}>
                             {timeInfo.elapsed}
                         </span>
                     </div>
@@ -184,14 +184,14 @@ export default function IncidentCard({
 
                 {/* Reporter / Caller Info */}
                 <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200/60 dark:border-white/5 text-xs">
-                    <div className="truncate">
-                        <div className="font-bold text-slate-900 dark:text-white truncate text-xs">
+                    <div className="min-w-0 flex-1">
+                        <div className="font-bold text-slate-900 dark:text-white break-words text-xs">
                             {incident.resident
                                 ? `${incident.resident.first_name} ${incident.resident.last_name}`
                                 : (incident.caller_name || 'Resident / Caller')}
                         </div>
                         {callerPhone && (
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono break-all">
                                 {callerPhone}
                             </div>
                         )}
@@ -215,14 +215,14 @@ export default function IncidentCard({
 
                 {/* Incident Location */}
                 <div className="text-xs text-slate-600 dark:text-slate-300">
-                    <span className="line-clamp-2 font-medium leading-relaxed" title={locationText}>
+                    <span className="font-medium leading-relaxed break-words" title={locationText}>
                         {locationText}
                     </span>
                 </div>
 
                 {/* Description / Caller Notes */}
-                {incident.description && (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 italic bg-slate-50 dark:bg-white/5 p-2 rounded-lg border border-slate-200/40 dark:border-white/5">
+                {incident.description && !incident.description.startsWith('Reported via Phone') && !incident.description.includes('Reported via Phone/SIM Call') && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 break-words italic bg-slate-50 dark:bg-white/5 p-2 rounded-lg border border-slate-200/40 dark:border-white/5">
                         "{incident.description}"
                     </p>
                 )}
@@ -283,43 +283,53 @@ export default function IncidentCard({
                 )}
 
                 {(incident.incident_status === 'assigned' || incident.incident_status === 'responding') && incident.dispatches?.length > 0 && (() => {
-                    const activeDispatch = incident.dispatches.find(
+                    const activeDispatches = incident.dispatches.filter(
                         (d: any) => !['completed', 'cancelled'].includes(d.dispatch_status)
-                    ) || incident.dispatches[incident.dispatches.length - 1];
-
-                    const isCancelled = activeDispatch?.dispatch_status === 'cancelled';
+                    );
+                    const listToDisplay = activeDispatches.length > 0
+                        ? activeDispatches
+                        : [incident.dispatches[incident.dispatches.length - 1]];
+                    const hasActive = activeDispatches.length > 0;
 
                     return (
                         <div className="pt-2 border-t border-slate-200/80 dark:border-white/10 space-y-2">
-                            {/* Assigned Team / Ambulance badge */}
-                            <div className={clsx(
-                                "flex items-center justify-between gap-1 p-2 rounded-xl border text-xs",
-                                isCancelled
-                                    ? "bg-rose-500/10 dark:bg-rose-950/40 border-rose-500/30"
-                                    : "bg-indigo-500/10 dark:bg-indigo-950/40 border-indigo-500/20"
-                            )}>
-                                <div className="truncate">
-                                    <span className={clsx("font-bold", isCancelled ? "text-rose-700 dark:text-rose-300" : "text-indigo-700 dark:text-indigo-300")}>
-                                        {activeDispatch?.team ? `Unit ${activeDispatch.team}` : 'Response Unit'}
-                                    </span>
-                                    {(activeDispatch?.ambulance?.vehicle_name || activeDispatch?.ambulance?.plate_number) && (
-                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate font-mono">
-                                            {activeDispatch.ambulance?.vehicle_name || activeDispatch.ambulance?.plate_number}
+                            {/* Assigned Team / Ambulance badge(s) */}
+                            {listToDisplay.map((d: any, dIdx: number) => {
+                                const isCancelled = d?.dispatch_status === 'cancelled';
+                                return (
+                                    <div
+                                        key={d?.id || dIdx}
+                                        className={clsx(
+                                            "flex items-center justify-between gap-1 p-2 rounded-xl border text-xs",
+                                            isCancelled
+                                                ? "bg-rose-500/10 dark:bg-rose-950/40 border-rose-500/30"
+                                                : "bg-indigo-500/10 dark:bg-indigo-950/40 border-indigo-500/20"
+                                        )}
+                                    >
+                                        <div className="min-w-0 flex-1 pr-2">
+                                            <span className={clsx("font-bold block break-words", isCancelled ? "text-rose-700 dark:text-rose-300" : "text-indigo-700 dark:text-indigo-300")}>
+                                                {d?.team ? `Unit ${d.team}` : 'Response Unit'}
+                                            </span>
+                                            {(d?.ambulance?.vehicle_name || d?.ambulance?.plate_number) && (
+                                                <span className="text-[11px] text-slate-500 dark:text-slate-400 block break-words font-mono">
+                                                    {d.ambulance?.vehicle_name || d.ambulance?.plate_number}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <span className={clsx(
+                                            "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border shrink-0",
+                                            isCancelled
+                                                ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                                                : "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30"
+                                        )}>
+                                            {d?.dispatch_status?.replace(/_/g, ' ') || incident.incident_status}
                                         </span>
-                                    )}
-                                </div>
-                                <span className={clsx(
-                                    "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border shrink-0",
-                                    isCancelled
-                                        ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30"
-                                        : "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30"
-                                )}>
-                                    {activeDispatch?.dispatch_status?.replace(/_/g, ' ') || incident.incident_status}
-                                </span>
-                            </div>
+                                    </div>
+                                );
+                            })}
 
                             <div className="flex items-center gap-2">
-                                {isCancelled ? (
+                                {!hasActive ? (
                                     <button
                                         type="button"
                                         onClick={(e) => {

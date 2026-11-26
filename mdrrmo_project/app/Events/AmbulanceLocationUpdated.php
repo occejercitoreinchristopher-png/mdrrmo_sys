@@ -23,6 +23,7 @@ class AmbulanceLocationUpdated implements ShouldBroadcastNow
     public $accuracy;
     public $timestamp;
     public $dispatch_status;
+    public $sequence;
 
     /**
      * Create a new event instance.
@@ -37,7 +38,8 @@ class AmbulanceLocationUpdated implements ShouldBroadcastNow
         $heading = null,
         $accuracy = null,
         $timestamp = null,
-        $dispatch_status = null
+        $dispatch_status = null,
+        $sequence = null
     ) {
         if (is_array($ambulance)) {
             $this->ambulance = $ambulance['ambulance'] ?? $ambulance;
@@ -50,6 +52,7 @@ class AmbulanceLocationUpdated implements ShouldBroadcastNow
             $this->accuracy = $ambulance['accuracy'] ?? $accuracy;
             $this->timestamp = $ambulance['timestamp'] ?? $timestamp;
             $this->dispatch_status = $ambulance['dispatch_status'] ?? $dispatch_status;
+            $this->sequence = $ambulance['sequence'] ?? $sequence;
         } else {
             $this->ambulance = $ambulance;
             $this->dispatch_id = $dispatch_id;
@@ -61,6 +64,7 @@ class AmbulanceLocationUpdated implements ShouldBroadcastNow
             $this->accuracy = $accuracy;
             $this->timestamp = $timestamp;
             $this->dispatch_status = $dispatch_status;
+            $this->sequence = $sequence;
         }
     }
 

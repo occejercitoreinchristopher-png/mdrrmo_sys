@@ -587,7 +587,7 @@ class DispatchController extends Controller
             }
         }
 
-        // 3. Validate coordinates
+        // 3. Validate coordinates and monotonic timestamp/sequence
         if ($request->has('heading') && $request->heading !== null && (float) $request->heading < 0) {
             $request->merge(['heading' => null]);
         }
@@ -598,22 +598,86 @@ class DispatchController extends Controller
             'heading' => 'nullable|numeric|between:0,360',
             'accuracy' => 'nullable|numeric',
             'timestamp' => 'nullable|string',
+            'sequence' => 'nullable|numeric',
         ]);
 
         $lat = (float) $validated['latitude'];
         $lng = (float) $validated['longitude'];
-        $heading = isset($validated['heading']) ? (float) $validated['heading'] : null;
-        $accuracy = isset($validated['accuracy']) ? (float) $validated['accuracy'] : null;
+        $heading = isset($validated['heading']) && $validated['heading'] !== null ? (float) $validated['heading'] : null;
+        $accuracy = isset($validated['accuracy']) && $validated['accuracy'] !== null ? (float) $validated['accuracy'] : null;
         $timestamp = $validated['timestamp'] ?? now()->toIso8601String();
 
-        // 4. Update the dispatch record
-        $dispatch->update([
-            'last_latitude' => $lat,
-            'last_longitude' => $lng,
-            'last_heading' => $heading,
-            'last_accuracy' => $accuracy,
-            'last_location_updated_at' => now(),
-        ]);
+        // 3.1 Monotonic Ordering Guard: Parse client epoch millisecond timestamp / sequence
+        $incomingMs = null;
+        if (!empty($validated['sequence']) && is_numeric($validated['sequence']) && $validated['sequence'] > 0) {
+            $incomingMs = (int) $validated['sequence'];
+        } elseif (!empty($validated['timestamp'])) {
+            try {
+                $incomingMs = (int) (\Carbon\Carbon::parse($validated['timestamp'])->valueOf());
+            } catch (\Throwable $e) {
+                $incomingMs = (int) (now()->valueOf());
+            }
+        } else {
+            $incomingMs = (int) (now()->valueOf());
+        }
+
+        // Sanity check: if client clock is skewed by more than 1 day from server time, normalize to server time
+        $serverMs = (int) (now()->valueOf());
+        if (abs($serverMs - $incomingMs) > 86400000) {
+            $incomingMs = $serverMs;
+            $timestamp = now()->toIso8601String();
+        }
+
+        // 3.2 Concurrency & Out-of-Order Packet Guard
+        $lockKey = "dispatch_loc_lock_{$dispatch->id}";
+        $cacheKey = "dispatch_loc_latest_{$dispatch->id}";
+
+        $lock = \Illuminate\Support\Facades\Cache::lock($lockKey, 3);
+        try {
+            $lock->block(2);
+
+            $lastRecorded = \Illuminate\Support\Facades\Cache::get($cacheKey);
+            $lastMs = $lastRecorded['time_ms'] ?? null;
+
+            // Fallback: If cache is empty, check database record
+            if ($lastMs === null && $dispatch->last_location_updated_at) {
+                $lastMs = (int) ($dispatch->last_location_updated_at->valueOf());
+            }
+
+            // REJECT OUT-OF-ORDER UPDATES: If incoming coordinate is older than what we already accepted
+            if ($lastMs !== null && $incomingMs < $lastMs) {
+                return response()->json([
+                    'message' => 'Outdated location update ignored (newer coordinate already received).',
+                    'status' => 'outdated_ignored',
+                    'data' => [
+                        'dispatch_id' => $dispatch->id,
+                        'rejected_timestamp' => $timestamp,
+                        'rejected_sequence' => $incomingMs,
+                        'current_timestamp' => $lastRecorded['timestamp'] ?? ($dispatch->last_location_updated_at?->toIso8601String()),
+                    ],
+                ], 200);
+            }
+
+            // 4. Update the dispatch record
+            $dispatch->update([
+                'last_latitude' => $lat,
+                'last_longitude' => $lng,
+                'last_heading' => $heading,
+                'last_accuracy' => $accuracy,
+                'last_location_updated_at' => now(),
+            ]);
+
+            // Cache the latest accepted client timestamp
+            \Illuminate\Support\Facades\Cache::put($cacheKey, [
+                'time_ms' => $incomingMs,
+                'timestamp' => $timestamp,
+                'latitude' => $lat,
+                'longitude' => $lng,
+            ], now()->addDay());
+
+        } finally {
+            optional($lock)->release();
+        }
 
         $responderName = $user->first_name && $user->last_name
             ? "{$user->first_name} {$user->last_name}"
@@ -636,7 +700,8 @@ class DispatchController extends Controller
             heading: $heading,
             accuracy: $accuracy,
             timestamp: $timestamp,
-            dispatch_status: $dispatch->dispatch_status
+            dispatch_status: $dispatch->dispatch_status,
+            sequence: $incomingMs
         ));
 
         return response()->json([
@@ -648,6 +713,7 @@ class DispatchController extends Controller
                 'heading' => $heading,
                 'accuracy' => $accuracy,
                 'timestamp' => $timestamp,
+                'sequence' => $incomingMs,
             ],
         ]);
     }

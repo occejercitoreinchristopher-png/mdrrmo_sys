@@ -385,7 +385,7 @@ export default function ReportsDashboard({
                     {/* 1. Incident Intelligence */}
                     {(activeTab === 'all' || activeTab === 'intelligence') && (
                         <section className="space-y-4 animate-in fade-in duration-300">
-                            <IncidentIntelligence incidents={incidents} />
+                            <IncidentIntelligence incidents={incidents} filters={initialFilters} />
                         </section>
                     )}
 

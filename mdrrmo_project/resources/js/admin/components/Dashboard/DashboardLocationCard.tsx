@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, router } from '@inertiajs/react';
+import AnimatedCounter from '@/shared/components/AnimatedCounter';
 import {
     Activity,
     AlertTriangle,
@@ -48,7 +49,7 @@ export default function DashboardLocationCard({ charts = {}, extraData = {} }: D
     const topList = useMemo(() => {
         return rawBarangays
             .filter((b) => b.name && b.name.toLowerCase() !== 'unknown' && b.name.toLowerCase() !== 'unassigned')
-            .slice(0, 4);
+            .slice(0, 5);
     }, [rawBarangays]);
 
     const maxCount = useMemo(() => {
@@ -61,11 +62,11 @@ export default function DashboardLocationCard({ charts = {}, extraData = {} }: D
     }, [topList]);
 
     return (
-        <div className="rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white dark:bg-[#0b1120] p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+        <div className="rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white dark:bg-[#0b1120] p-4 sm:p-5 shadow-xs flex flex-col justify-between animate-in fade-in-50 slide-in-from-bottom-2 duration-700 delay-300">
             {/* Header: Title */}
             <div className="pb-2.5 border-b border-slate-100 dark:border-white/[0.06]">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">
-                    Top Incident Locations
+                    Top Incident Barangays
                 </h3>
             </div>
 
@@ -78,7 +79,6 @@ export default function DashboardLocationCard({ charts = {}, extraData = {} }: D
                 ) : (
                     topList.map((item, idx) => {
                         const cleanName = item.name.replace(/^brgy\.?\s*/i, '').trim();
-                        const barPercent = Math.max(12, Math.round((item.count / maxCount) * 100));
                         const sharePercent = item.percentage ?? (totalMunicipalIncidents > 0 ? Math.round((item.count / totalMunicipalIncidents) * 100) : 0);
                         const resolvedCount = item.resolved ?? 0;
                         const activeCount = item.active ?? Math.max(0, item.count - resolvedCount);
@@ -141,8 +141,8 @@ export default function DashboardLocationCard({ charts = {}, extraData = {} }: D
                                 )}
 
                                 {/* Main Row Content */}
-                                <div className="flex items-center justify-between gap-2.5">
-                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
                                         {/* Rank Medal Badge */}
                                         <div
                                             className={clsx(
@@ -154,7 +154,7 @@ export default function DashboardLocationCard({ charts = {}, extraData = {} }: D
                                         </div>
 
                                         {/* Name */}
-                                        <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white capitalize group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors leading-tight truncate">
+                                        <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white capitalize group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors leading-snug break-words" title={`Brgy. ${toPascalCase(cleanName)}`}>
                                             Brgy. {toPascalCase(cleanName)}
                                         </p>
                                     </div>
@@ -163,27 +163,9 @@ export default function DashboardLocationCard({ charts = {}, extraData = {} }: D
                                     <div className="flex items-center gap-1.5 shrink-0">
                                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 whitespace-nowrap">
                                             <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
-                                            {resolvedCount} Resolved
-                                        </span>
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-slate-200/70 dark:bg-white/10 text-slate-700 dark:text-slate-300 font-mono whitespace-nowrap">
-                                            {item.count} Total
+                                            <AnimatedCounter value={resolvedCount} duration={800} /> Resolved
                                         </span>
                                     </div>
-                                </div>
-
-                                {/* Animated Rising Progress Bar (matching Picture 2) */}
-                                <div className="mt-2 flex items-center gap-2">
-                                    <div className="flex-1 h-1.5 rounded-full bg-slate-200/80 dark:bg-white/[0.07] overflow-hidden">
-                                        <div
-                                            style={{
-                                                width: `${barPercent}%`,
-                                            }}
-                                            className="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 group-hover:brightness-110"
-                                        />
-                                    </div>
-                                    <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 w-8 text-right shrink-0">
-                                        {barPercent}%
-                                    </span>
                                 </div>
                             </div>
                         );
@@ -232,9 +214,6 @@ export default function DashboardLocationCard({ charts = {}, extraData = {} }: D
                                     <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block">Total Emergencies</span>
                                     <span className="text-xl font-black text-slate-900 dark:text-white tabular-nums mt-0.5 block">
                                         {selectedBarangay.count}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                        {selectedBarangay.percentage ?? 0}% of all municipal calls
                                     </span>
                                 </div>
 

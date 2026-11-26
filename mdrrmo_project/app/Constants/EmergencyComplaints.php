@@ -58,6 +58,8 @@ class EmergencyComplaints
         ],
         'Fire Emergency' => [
             'Fire Incidents',
+            'Burns',
+            'Smoke Inhalation',
             'Hazardous Materials',
             'Hazardous Condition',
         ],
@@ -143,6 +145,8 @@ class EmergencyComplaints
 
         // Fire Emergency
         'Fire Incidents',
+        'Burns',
+        'Smoke Inhalation',
         'Hazardous Materials',
         'Hazardous Condition',
 
@@ -177,13 +181,27 @@ class EmergencyComplaints
         return self::CATEGORIES[$category] ?? [];
     }
 
-    public static function getCategoryForComplaint(?string $complaint): string
+    public static function getCategoryForComplaint(?string $complaint, ?string $defaultCategory = null): string
     {
         if (empty($complaint)) {
-            return 'Medical Emergency';
+            return $defaultCategory ?: 'Medical Emergency';
         }
 
         $normalized = strtolower(trim($complaint));
+
+        // If defaultCategory is provided and complaint is listed in that category, preserve defaultCategory
+        if (!empty($defaultCategory)) {
+            $normDefault = strtolower(trim($defaultCategory));
+            foreach (self::CATEGORIES as $category => $complaints) {
+                if (strtolower($category) === $normDefault) {
+                    foreach ($complaints as $item) {
+                        if (strtolower($item) === $normalized) {
+                            return $category;
+                        }
+                    }
+                }
+            }
+        }
 
         // 1. Direct match with constant list
         foreach (self::CATEGORIES as $category => $complaints) {

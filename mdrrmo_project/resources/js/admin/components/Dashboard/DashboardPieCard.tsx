@@ -91,8 +91,16 @@ export default function DashboardPieCard({
                 fontFamily: 'inherit',
                 animations: {
                     enabled: true,
-                    easing: 'easeinout',
-                    speed: 700,
+                    easing: 'easeout',
+                    speed: 900,
+                    animateGradually: {
+                        enabled: true,
+                        delay: 150,
+                    },
+                    dynamicAnimation: {
+                        enabled: true,
+                        speed: 600,
+                    },
                 },
             },
             colors: opColors.length > 0 ? opColors : ['#f59e0b', '#F61509', '#3b82f6', '#10b981'],
@@ -189,8 +197,16 @@ export default function DashboardPieCard({
                 fontFamily: 'inherit',
                 animations: {
                     enabled: true,
-                    easing: 'easeinout',
-                    speed: 800,
+                    easing: 'easeout',
+                    speed: 1000,
+                    animateGradually: {
+                        enabled: true,
+                        delay: 150,
+                    },
+                    dynamicAnimation: {
+                        enabled: true,
+                        speed: 650,
+                    },
                 },
                 dropShadow: {
                     enabled: true,
@@ -326,7 +342,7 @@ export default function DashboardPieCard({
     }, [recentIncidents, recentDispatches]);
 
     return (
-        <div className="rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white dark:bg-[#0b1120] p-5 sm:p-6 shadow-xs flex flex-col justify-between">
+        <div className="rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white dark:bg-[#0b1120] p-5 sm:p-6 shadow-xs flex flex-col justify-between animate-in fade-in-50 slide-in-from-bottom-2 duration-700 delay-200">
             {/* Header: Title + Live Mode Switcher */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-white/[0.06]">
                 <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
@@ -448,7 +464,7 @@ export default function DashboardPieCard({
                 </div>
             ) : (
                 /* DONUT CHART FOR LIVE STATUS */
-                <div className="py-3 flex-1 flex items-center justify-center">
+                <div className="py-2 flex-1 flex flex-col items-center justify-center animate-in fade-in zoom-in-98 duration-300">
                     {totalOpsCount === 0 ? (
                         <div className="py-12 text-center text-xs text-slate-400">
                             No active emergencies in progress

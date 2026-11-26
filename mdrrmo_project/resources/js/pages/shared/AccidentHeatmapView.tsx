@@ -10,7 +10,9 @@ import PageHeader from '@/shared/components/PageHeader';
 import { printPatientCareRecord } from '@/dispatcher/utils/printPatientCareRecord';
 import MultiSelectFilterCombobox from '@/dispatcher/components/Incidents/MultiSelectFilterCombobox';
 import ManualPinModal, { getRiskColorHex } from '@/shared/components/ManualPinModal';
-import Map, { Marker, Source, Layer, type MapRef } from 'react-map-gl/mapbox';
+import { OPOL_LANDMARKS } from '@/dispatcher/data/opolLandmarks';
+import { useAppearance } from '@/shared/contexts/ThemeContext';
+import Map, { Source, Layer, type MapRef } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
     Flame,
@@ -197,6 +199,8 @@ interface AccidentHeatmapProps {
     hotspots?: HotspotRecord[];
     analytics?: AnalyticsData;
     barangayGeojson?: any;
+    municipalBoundaryGeojson?: any;
+    barangayIncidentCounts?: Record<string, number>;
     incidentTypes?: Array<{ id: number; incident_type_name: string }>;
     customPinTypes?: string[];
     availableYears?: number[];
@@ -208,7 +212,7 @@ interface AccidentHeatmapProps {
         barangays?: string[];
         emergency_types?: string[];
         status?: string;
-        min_threshold?: number;
+        min_threshold?: number | string;
     };
     totalIncidentsCount?: number;
     validCoordinatesCount?: number;
@@ -405,6 +409,8 @@ export default function AccidentHeatmapView({
     hotspots = [],
     analytics,
     barangayGeojson = null,
+    municipalBoundaryGeojson = null,
+    barangayIncidentCounts,
     incidentTypes = [],
     customPinTypes = [],
     availableYears = [],
@@ -419,20 +425,9 @@ export default function AccidentHeatmapView({
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const inspectorScrollRef = useRef<HTMLDivElement>(null);
 
-    // Sync chart theme with app Light/Dark mode toggle
-    const [isDarkMode, setIsDarkMode] = useState<boolean>(() =>
-        typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : true
-    );
-
-    useEffect(() => {
-        if (typeof document === 'undefined') return;
-        const root = document.documentElement;
-        const syncTheme = () => setIsDarkMode(root.classList.contains('dark'));
-        syncTheme();
-        const observer = new MutationObserver(syncTheme);
-        observer.observe(root, { attributes: true, attributeFilter: ['class'] });
-        return () => observer.disconnect();
-    }, []);
+    // Sync theme with app Light/Dark mode toggle
+    const { theme } = useAppearance();
+    const isDark = theme === 'dark';
 
     // Multi-Select Filter states
     const [selectedPeriod, setSelectedPeriod] = useState<string>(filters.period || 'all');
@@ -441,7 +436,7 @@ export default function AccidentHeatmapView({
     const [selectedBarangays, setSelectedBarangays] = useState<string[]>(filters.barangays || []);
     const [selectedEmergencyTypes, setSelectedEmergencyTypes] = useState<string[]>(filters.emergency_types || []);
     const [selectedStatus, setSelectedStatus] = useState<string>(filters.status || 'all');
-    const [minThreshold, setMinThreshold] = useState<number>(filters.min_threshold ?? 1);
+    const [minThreshold, setMinThreshold] = useState<number | string>(filters.min_threshold ?? 1);
     const [isManualModalOpen, setIsManualModalOpen] = useState(false);
     const [deletingPinId, setDeletingPinId] = useState<number | null>(null);
     const [confirmDeletePin, setConfirmDeletePin] = useState<IncidentRecord | null>(null);
@@ -461,7 +456,7 @@ export default function AccidentHeatmapView({
         setSelectedBarangays(Array.isArray(filters.barangays) ? filters.barangays : []);
         setSelectedEmergencyTypes(Array.isArray(filters.emergency_types) ? filters.emergency_types : []);
         setSelectedStatus(filters.status || 'all');
-        setMinThreshold(Number(filters.min_threshold ?? 1));
+        setMinThreshold(filters.min_threshold !== undefined && filters.min_threshold !== null ? filters.min_threshold : 1);
     }, [
         filters.period,
         JSON.stringify(filters.years || []),
@@ -474,10 +469,16 @@ export default function AccidentHeatmapView({
 
     // Map view and layer controls
     const [viewState, setViewState] = useState(OPOL_CENTER);
-    const [mapStyle, setMapStyle] = useState<'dark' | 'satellite'>('dark');
-    const [showMarkers, setShowMarkers] = useState(true);
+    const [mapStyleType, setMapStyleType] = useState<'tactical' | 'satellite' | 'streets'>('tactical');
     const [showBarangayBoundaries, setShowBarangayBoundaries] = useState(true);
     const [showRiskZones, setShowRiskZones] = useState(true);
+
+    // Resolve Mapbox style URL based on active mode and current theme
+    const getMapStyleUrl = () => {
+        if (mapStyleType === 'satellite') return 'mapbox://styles/mapbox/satellite-streets-v12';
+        if (mapStyleType === 'streets') return 'mapbox://styles/mapbox/streets-v12';
+        return theme === 'dark' ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
+    };
     const [hoveredBarangay, setHoveredBarangay] = useState<{
         barangayName: string;
         locationName?: string;
@@ -494,6 +495,7 @@ export default function AccidentHeatmapView({
         radiusMeters?: number;
         incidents?: IncidentRecord[];
         isPinned?: boolean;
+        isManual?: boolean;
     } | null>(null);
     const hoveredBarangayRef = useRef<any>(null);
     const [selectedHotspot, setSelectedHotspot] = useState<HotspotRecord | null>(null);
@@ -514,6 +516,26 @@ export default function AccidentHeatmapView({
     const [grayscaleOverrides, setGrayscaleOverrides] = useState<Record<string, boolean>>({});
     const [copiedCoord, setCopiedCoord] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
+    const [isMapFullscreen, setIsMapFullscreen] = useState(false);
+
+    const toggleMapFullscreen = () => {
+        if (!document.fullscreenElement) {
+            mapContainerRef.current?.requestFullscreen().catch(() => {});
+            setIsMapFullscreen(true);
+        } else {
+            document.exitFullscreen().catch(() => {});
+            setIsMapFullscreen(false);
+        }
+    };
+
+    useEffect(() => {
+        const handleFsChange = () => {
+            setIsMapFullscreen(!!document.fullscreenElement);
+            setTimeout(() => mapRef.current?.resize(), 100);
+        };
+        document.addEventListener('fullscreenchange', handleFsChange);
+        return () => document.removeEventListener('fullscreenchange', handleFsChange);
+    }, []);
 
     const getPhotoKey = (img?: { id?: number; url?: string; is_manual_pin_image?: boolean } | null) =>
         img?.id
@@ -1032,10 +1054,22 @@ export default function AccidentHeatmapView({
         };
     };
 
+    const getRiskScore = (lvl?: string | null): number => {
+        if (!lvl) return 0;
+        const l = lvl.toLowerCase().trim();
+        if (l.includes('high') && !l.includes('mod')) return 4;
+        if (l.includes('mod-high') || l.includes('moderate-high')) return 3;
+        if (l.includes('mod')) return 2;
+        if (l.includes('low')) return 1;
+        return 0;
+    };
+
     // Classify 20-Meter Localized Incident Risk:
-    // - Specific Emergency Type: 1 Low (Green), 2 Moderate (Yellow), 3 Mod-High (Orange), 4+ High (Red)
-    // - All Emergency Types:     1-2 Low (Green), 3-4 Moderate (Yellow), 5-8 Mod-High (Orange), 9+ High (Red)
-    // - Explicit manual pin risk (High, Moderate-High, Moderate, Low) elevates the cluster risk
+    // - High: 9+ -> Red #EF4444 (or 4+ if specific single type)
+    // - Moderate-High: 5–8 -> Orange #F97316 (or 3 if specific single type)
+    // - Moderate: 3–4 -> Yellow #FACC15 (or 2 if specific single type)
+    // - Low: 1–2 -> Blue #3B82F6 (or 1 if specific single type)
+    // - No Incidents: 0 -> Green #22C55E
     const classifyClusterRisk = (count: number, isSpecificType: boolean, explicitRiskLevel?: string | null) => {
         const highMin = isSpecificType ? 4 : 9;
         const modHighMin = isSpecificType ? 3 : 5;
@@ -1044,31 +1078,28 @@ export default function AccidentHeatmapView({
         const countIsRed = count >= highMin;
         const countIsOrange = !countIsRed && count >= modHighMin;
         const countIsYellow = !countIsRed && !countIsOrange && count >= modMin;
+        const countIsBlue = !countIsRed && !countIsOrange && !countIsYellow && count > 0;
         const countRank = countIsRed ? 4 : countIsOrange ? 3 : countIsYellow ? 2 : count > 0 ? 1 : 0;
 
-        let explicitRank = 0;
-        if (explicitRiskLevel) {
-            const l = explicitRiskLevel.toLowerCase().trim();
-            if (l.includes('high') && !l.includes('mod')) explicitRank = 4;
-            else if (l.includes('mod-high') || l.includes('moderate-high')) explicitRank = 3;
-            else if (l.includes('mod')) explicitRank = 2;
-            else if (l.includes('low')) explicitRank = 1;
-        }
+        const explicitRank = getRiskScore(explicitRiskLevel);
 
         const effectiveRank = Math.max(countRank, explicitRank);
 
         const isRed = effectiveRank >= 4;
         const isOrange = effectiveRank === 3;
         const isYellow = effectiveRank === 2;
-        const isGreen = effectiveRank === 1 || (effectiveRank === 0 && count > 0);
+        const isBlue = effectiveRank === 1 || (effectiveRank === 0 && count > 0);
+        const isGreen = count === 0;
 
         const color = isRed
-            ? '#E53935'
+            ? '#EF4444'
             : isOrange
-                ? '#FB8C00'
+                ? '#F97316'
                 : isYellow
-                    ? '#FDD835'
-                    : '#43A047';
+                    ? '#FACC15'
+                    : isBlue
+                        ? '#3B82F6'
+                        : '#22C55E';
 
         const level = isRed
             ? 'HIGH RISK'
@@ -1076,7 +1107,9 @@ export default function AccidentHeatmapView({
                 ? 'MODERATE-HIGH RISK'
                 : isYellow
                     ? 'MODERATE RISK'
-                    : 'LOW RISK';
+                    : isBlue
+                        ? 'LOW RISK'
+                        : 'NO INCIDENTS';
 
         const classification = isRed
             ? 'High Risk Area'
@@ -1084,7 +1117,9 @@ export default function AccidentHeatmapView({
                 ? 'Moderate-High Risk Area'
                 : isYellow
                     ? 'Moderate Risk Area'
-                    : 'Low Risk Area';
+                    : isBlue
+                        ? 'Low Risk Area'
+                        : 'No Incidents (Monitored Area)';
 
         const intensity = (isRed ? 'Critical' : isOrange ? 'High' : 'Moderate') as HotspotRecord['intensity'];
         const intensityClass = (isRed ? 'critical' : isOrange ? 'high' : 'moderate') as HotspotRecord['intensity_class'];
@@ -1096,14 +1131,17 @@ export default function AccidentHeatmapView({
             badgeText = count >= modHighMin ? (isSpecificType ? 'Mod-High (3)' : 'Mod-High (5-8)') : 'Mod-High Risk';
         } else if (isYellow) {
             badgeText = count >= modMin ? (isSpecificType ? 'Moderate (2)' : 'Moderate (3-4)') : 'Moderate Risk';
-        } else {
+        } else if (isBlue) {
             badgeText = isSpecificType ? 'Low (1)' : 'Low (1-2)';
+        } else {
+            badgeText = 'No Incidents (0)';
         }
 
         return {
             isRed,
             isOrange,
             isYellow,
+            isBlue,
             isGreen,
             color,
             level,
@@ -1134,6 +1172,64 @@ export default function AccidentHeatmapView({
         }
         ring.push(ring[0]);
         return polygon([ring]);
+    };
+
+    /**
+     * Helper to match an incident cluster / hotspot against the selected Risk Level filter.
+     * Supports exact risk tiers ('low', 'moderate_only', 'mod_high_only', 'high')
+     * as well as cumulative thresholds ('1'/'all', '2', '3', '5', '9').
+     */
+    const matchesRiskFilter = (
+        spotLevel: string,
+        spotCount: number,
+        filterVal: number | string,
+        isSpecificType: boolean
+    ): boolean => {
+        const fStr = String(filterVal).toLowerCase().trim();
+        if (fStr === '1' || fStr === 'all' || !fStr) {
+            return spotCount >= 1;
+        }
+
+        if (fStr === 'low') {
+            return spotLevel === 'LOW RISK';
+        }
+
+        if (fStr === 'moderate_only') {
+            return spotLevel === 'MODERATE RISK';
+        }
+
+        if (fStr === 'mod_high_only') {
+            return spotLevel === 'MODERATE-HIGH RISK';
+        }
+
+        if (fStr === 'high' || fStr === 'high_only') {
+            return spotLevel === 'HIGH RISK';
+        }
+
+        const num = Number(filterVal);
+        if (!isNaN(num)) {
+            if (num >= (isSpecificType ? 4 : 9)) {
+                return spotLevel === 'HIGH RISK' || spotCount >= (isSpecificType ? 4 : 9);
+            }
+            if (num >= (isSpecificType ? 3 : 5)) {
+                return (
+                    spotLevel === 'HIGH RISK' ||
+                    spotLevel === 'MODERATE-HIGH RISK' ||
+                    spotCount >= (isSpecificType ? 3 : 5)
+                );
+            }
+            if (num >= (isSpecificType ? 2 : 3)) {
+                return (
+                    spotLevel === 'HIGH RISK' ||
+                    spotLevel === 'MODERATE-HIGH RISK' ||
+                    spotLevel === 'MODERATE RISK' ||
+                    spotCount >= (isSpecificType ? 2 : 3)
+                );
+            }
+            return spotCount >= num;
+        }
+
+        return true;
     };
 
     // =========================================================================
@@ -1200,7 +1296,12 @@ export default function AccidentHeatmapView({
         let clusterCounter = 1;
         const built: HotspotRecord[] = clusters
             .map((incidentsInCluster) => {
-                const sorted = [...incidentsInCluster].sort((a, b) => b.id - a.id);
+                const sorted = [...incidentsInCluster].sort((a, b) => {
+                    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                    if (timeB !== timeA) return timeB - timeA;
+                    return b.id - a.id;
+                });
                 const count = sorted.length;
 
                 // Find highest explicit risk level among incidents in this cluster (e.g. from manual pins)
@@ -1312,12 +1413,33 @@ export default function AccidentHeatmapView({
                     intensity_class: intensityClass,
                     badge_text: badgeText,
                     radius_meters: circleRadiusMeters,
-                    meets_threshold: count >= minThreshold,
+                    meets_threshold: matchesRiskFilter(level, count, minThreshold, isSpecificEmergencyType),
                     union_geometry: unionGeometry,
+                    latest_incident_timestamp: sorted[0]?.created_at ? new Date(sorted[0].created_at).getTime() : 0,
+                    latest_incident_id: sorted[0]?.id || 0,
                 } as any;
             })
-            .filter((spot) => spot.incident_count >= minThreshold)
-            .sort((a, b) => b.incident_count - a.incident_count)
+            .filter((spot) => matchesRiskFilter(spot.level, spot.incident_count, minThreshold, isSpecificEmergencyType))
+            .sort((a, b) => {
+                // 1. Primary Sort: Highest incident count first
+                if (b.incident_count !== a.incident_count) {
+                    return b.incident_count - a.incident_count;
+                }
+                // 2. Secondary Tie-breaker: Highest Risk Level / Severity
+                const scoreA = getRiskScore(a.level || a.intensity);
+                const scoreB = getRiskScore(b.level || b.intensity);
+                if (scoreB !== scoreA) {
+                    return scoreB - scoreA;
+                }
+                // 3. Tertiary Tie-breaker: Recency (Most recent incident timestamp first)
+                const timeA = Number((a as any).latest_incident_timestamp) || 0;
+                const timeB = Number((b as any).latest_incident_timestamp) || 0;
+                if (timeB !== timeA) {
+                    return timeB - timeA;
+                }
+                // 4. Fallback Tie-breaker: Latest incident ID descending
+                return (Number((b as any).latest_incident_id) || 0) - (Number((a as any).latest_incident_id) || 0);
+            })
             .map((spot, idx) => ({ ...spot, rank: idx + 1 }));
 
         return built;
@@ -1499,8 +1621,8 @@ export default function AccidentHeatmapView({
     }, [activeIncidents, absorbedManualPinIds]);
 
     // GeoJSON Feature Collection for 20-Meter Cluster Monochromatic Radial Glows from activeHotspots
-    // Exact Localized Risk Zone Polygons Strictly Clipped to Barangay Boundaries (Never Crosses Border)
-    // NOTE: When absorbed by a matching manual prone polygon, the generic 20m circle is suppressed!
+    // AND Confirmed Zero-Incident Monitored Coverage Areas (GREEN #22C55E)
+    // STRICT RULE: All overlays are strictly clipped to official Opol Municipal Boundary (NEVER CROSSES BORDER)
     const clippedRiskZonesGeojson = useMemo(() => {
         const steps = 48;
         const earthRadius = 6371000;
@@ -1511,12 +1633,64 @@ export default function AccidentHeatmapView({
                 .replace(/^(brgy\.?|barangay)\s*/i, '')
                 .replace(/[^a-z0-9]/g, '');
 
-        const features = activeHotspots
+        // Helper: Check if a point [lng, lat] is strictly inside official Opol Municipal Boundary
+        const findOpolBarangayFeature = (lng: number, lat: number, preferredName?: string) => {
+            if (!barangayGeojson?.features?.length) return null;
+            const pt: [number, number] = [lng, lat];
+
+            // 1. If preferred barangay name provided, try matching by name first
+            if (preferredName) {
+                const targetNorm = normalize(preferredName);
+                const named = barangayGeojson.features.find((f: any) => {
+                    const raw = f.properties?.name || f.properties?.barangay_name || '';
+                    return normalize(raw) === targetNorm;
+                });
+                if (named) {
+                    const geom = named.geometry;
+                    if (geom?.type === 'Polygon') {
+                        for (const ring of geom.coordinates) {
+                            if (isPointInPolygon(pt, ring)) return named;
+                        }
+                    } else if (geom?.type === 'MultiPolygon') {
+                        for (const poly of geom.coordinates) {
+                            for (const ring of poly) {
+                                if (isPointInPolygon(pt, ring)) return named;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Spatial search across all 14 official Opol barangay polygons
+            for (const feat of barangayGeojson.features) {
+                const geom = feat.geometry;
+                if (!geom) continue;
+                if (geom.type === 'Polygon') {
+                    for (const ring of geom.coordinates) {
+                        if (isPointInPolygon(pt, ring)) return feat;
+                    }
+                } else if (geom.type === 'MultiPolygon') {
+                    for (const poly of geom.coordinates) {
+                        for (const ring of poly) {
+                            if (isPointInPolygon(pt, ring)) return feat;
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+
+        // 1. Process Active Hotspot Features (Risk Levels: High, Mod-High, Moderate, Low)
+        const hotspotFeatures = activeHotspots
             .map((spot) => {
-                // If absorbed by an authorized manual prone area of the same emergency type,
-                // suppress the 20-meter circle so the clean manual polygon takes visual precedence!
                 if (absorbedHotspotClusterKeys.has(spot.cluster_key)) {
                     return null;
+                }
+
+                // Strictly ensure spot is inside Opol Municipal Boundary
+                const brgyFeature = findOpolBarangayFeature(spot.longitude, spot.latitude, spot.barangay);
+                if (!brgyFeature) {
+                    return null; // Reject points outside Opol!
                 }
 
                 let finalGeometry: any = null;
@@ -1561,31 +1735,23 @@ export default function AccidentHeatmapView({
                 const rawBrgy = (spot.barangay || '').trim();
                 const brgyName = rawBrgy && rawBrgy.toLowerCase() !== 'opol'
                     ? (rawBrgy.toLowerCase().startsWith('brgy') ? rawBrgy : `Brgy. ${rawBrgy}`)
-                    : 'Barangay Area';
+                    : `Brgy. ${brgyFeature.properties?.name ? (brgyFeature.properties.name.charAt(0).toUpperCase() + brgyFeature.properties.name.slice(1)) : 'Area'}`;
 
-                // Clip against the incident's barangay boundary polygon so color NEVER crosses the border!
-                if (barangayGeojson?.features?.length && finalGeometry) {
-                    const spotNorm = normalize(spot.barangay);
-                    const brgyFeature = barangayGeojson.features.find((f: any) => {
-                        const raw = f.properties?.name || f.properties?.barangay_name || '';
-                        return normalize(raw) === spotNorm;
-                    });
-
-                    if (brgyFeature) {
-                        try {
-                            const spotPoly = {
-                                type: 'Feature' as const,
-                                properties: {},
-                                geometry: finalGeometry,
-                            };
-                            const clipped = intersect(featureCollection([spotPoly as any, brgyFeature]));
-                            if (clipped?.geometry) {
-                                finalGeometry = clipped.geometry;
-                            }
-                        } catch {
-                            // Fallback to unclipped polygon if geometric degenerate
-                        }
+                // Clip against the official Opol barangay boundary polygon so NO color ever spills outside Opol!
+                try {
+                    const spotPoly = {
+                        type: 'Feature' as const,
+                        properties: {},
+                        geometry: finalGeometry,
+                    };
+                    const clipped = intersect(featureCollection([spotPoly as any, brgyFeature]));
+                    if (clipped?.geometry) {
+                        finalGeometry = clipped.geometry;
+                    } else {
+                        return null; // outside Opol, omit!
                     }
+                } catch {
+                    // Fallback to unclipped polygon if geometric degenerate
                 }
 
                 const risk = (spot as any).risk_record || classifyClusterRisk(spot.incident_count, isSpecificEmergencyType, (spot as any).highest_manual_risk);
@@ -1607,6 +1773,12 @@ export default function AccidentHeatmapView({
                         classification: spot.classification,
                         is_red: risk.isRed,
                         is_merged: (spot.incident_count || 1) > 1,
+                        is_zero_incident: false,
+                        is_manual: Boolean(
+                            spot.incidents?.some((i: any) => i.is_manual_pin) ||
+                            spot.cluster_key?.startsWith('poly_') ||
+                            (spot as any).is_manual
+                        ),
                     },
                     geometry: finalGeometry,
                 };
@@ -1615,36 +1787,93 @@ export default function AccidentHeatmapView({
 
         return {
             type: 'FeatureCollection' as const,
+            features: hotspotFeatures,
+        };
+    }, [
+        activeHotspots,
+        barangayGeojson,
+        municipalBoundaryGeojson,
+        absorbedHotspotClusterKeys,
+        isSpecificEmergencyType,
+    ]);
+
+    // =========================================================================
+    // OPTION B: ALL-BARANGAY GREEN BASE WITH 20-METER INCIDENT OVERLAYS ON TOP
+    // 1. All barangays in Opol Municipality display subtle transparent GREEN fill (#22C55E).
+    // 2. Incident-prone spots display localized 20-meter risk circles (Blue, Yellow, Orange, Red)
+    //    rendered ON TOP of the green base with solid opacity (0.90) so NO green shows through.
+    // =========================================================================
+    const zeroIncidentBarangaysGeojson = useMemo(() => {
+        if (!barangayGeojson?.features?.length) {
+            return { type: 'FeatureCollection' as const, features: [] };
+        }
+
+        const normalize = (name: string) =>
+            (name || '')
+                .toLowerCase()
+                .replace(/^(brgy\.?|barangay)\s*/i, '')
+                .replace(/[^a-z0-9]/g, '');
+
+        const features = barangayGeojson.features
+            .map((feat: any) => {
+                const rawName = feat.properties?.name || feat.properties?.barangay_name || '';
+                const normName = normalize(rawName);
+                if (!normName) return null;
+
+                // If user filtered by specific barangays, respect the filter
+                if (selectedBarangays.length > 0) {
+                    const isSelected = selectedBarangays.some((b) => normalize(b) === normName);
+                    if (!isSelected) return null;
+                }
+
+                // Determine incident count using actual database records and barangay relationships
+                let matchingIncidentsCount = 0;
+                if (barangayIncidentCounts && Object.keys(barangayIncidentCounts).length > 0) {
+                    const matchedKey = Object.keys(barangayIncidentCounts).find(
+                        (k) => normalize(k) === normName
+                    );
+                    if (matchedKey) {
+                        matchingIncidentsCount = Number(barangayIncidentCounts[matchedKey]) || 0;
+                    }
+                } else {
+                    // Fallback: Count actual system incidents in this barangay (exclude manual pins)
+                    matchingIncidentsCount = activeIncidents.filter((inc) => {
+                        if (inc.is_manual_pin) return false;
+                        const incBrgy = normalize(inc.barangay);
+                        if (incBrgy === normName) return true;
+                        if (normName === 'luyongbonbon' && (inc.barangay || '').toLowerCase().includes('luyong')) return true;
+                        return false;
+                    }).length;
+                }
+
+                // In Option B: ALL barangays within Opol have the green polygon fill,
+                // and 20-meter incident circles appear on top of it.
+                const isZero = matchingIncidentsCount === 0;
+                const displayName = `Brgy. ${rawName.charAt(0).toUpperCase() + rawName.slice(1)}`;
+                return {
+                    type: 'Feature' as const,
+                    id: feat.id || normName,
+                    properties: {
+                        id: feat.id || normName,
+                        barangay_name: rawName,
+                        display_name: displayName,
+                        color: '#22C55E',
+                        fill_color: '#22C55E',
+                        risk_level: isZero ? 'NO INCIDENTS' : `${matchingIncidentsCount} INCIDENTS`,
+                        incident_count: matchingIncidentsCount,
+                        classification: isZero ? 'No Incidents (Monitored Area)' : `Monitored Barangay Area (${matchingIncidentsCount} records)`,
+                        is_zero_incident: isZero,
+                    },
+                    geometry: feat.geometry,
+                };
+            })
+            .filter(Boolean);
+
+        return {
+            type: 'FeatureCollection' as const,
             features,
         };
-    }, [activeHotspots, isSpecificEmergencyType, barangayGeojson, absorbedHotspotClusterKeys]);
-
-    // Compute slight visual pixel offset ONLY when two DIFFERENT incident-type clusters occupy virtually identical GPS points (~<=3m)
-    const clusterPinOffsets = useMemo(() => {
-        const offsets: Record<string, [number, number]> = {};
-        const groups: Record<string, HotspotRecord[]> = {};
-
-        activeHotspots.forEach((spot) => {
-            // Bucket to ~3m precision (0.00003 deg)
-            const key = `${Math.round(spot.latitude * 33333)}_${Math.round(spot.longitude * 33333)}`;
-            if (!groups[key]) groups[key] = [];
-            groups[key].push(spot);
-        });
-
-        Object.values(groups).forEach((group) => {
-            if (group.length === 1) {
-                offsets[group[0].cluster_key] = [0, 0];
-            } else {
-                const spread = 16;
-                const startX = -((group.length - 1) * spread) / 2;
-                group.forEach((spot, idx) => {
-                    offsets[spot.cluster_key] = [startX + idx * spread, 0];
-                });
-            }
-        });
-
-        return offsets;
-    }, [activeHotspots]);
+    }, [barangayGeojson, barangayIncidentCounts, activeIncidents, selectedBarangays]);
 
     // Keep inspected cluster synced if activeHotspots updates (e.g., when changing filters)
     const activeSelectedHotspot = useMemo(() => {
@@ -1848,6 +2077,12 @@ export default function AccidentHeatmapView({
             radiusMeters: spot.radius_meters || 20,
             incidents: clusterIncidents,
             isPinned: true,
+            isManual: Boolean(
+                spot.incidents?.some((i) => i.is_manual_pin) ||
+                clusterIncidents.some((i) => i.is_manual_pin) ||
+                spot.cluster_key?.startsWith('poly_') ||
+                (spot as any).is_manual
+            ),
         };
         hoveredBarangayRef.current = pinData;
         setHoveredBarangay(pinData);
@@ -1914,6 +2149,67 @@ export default function AccidentHeatmapView({
     // LOCALIZED INCIDENT RISK ZONES (CLIPPED TO BARANGAY BOUNDARY)
     // =========================================================================
     const onMapMouseMove = (evt: any) => {
+        // If user pinned a popup via click, don't dismiss or override on simple hover movement
+        if (hoveredBarangayRef.current?.isPinned) {
+            return;
+        }
+
+        // 1. Check if hovering over a saved manual prone polygon area
+        const proneFeature = evt.features && evt.features.find((f: any) => f.layer?.id === 'saved-prone-polygons-fill');
+        if (proneFeature && proneFeature.properties) {
+            const id = Number(proneFeature.properties.id);
+            const key = `poly_${id}`;
+            if (hoveredBarangayRef.current?.normName === key) {
+                return;
+            }
+
+            const matched = activeIncidents.find((i) => i.id === id);
+            if (matched) {
+                const ring = matched.polygon_coordinates || [];
+                const absorbed = ring.length >= 3
+                    ? activeIncidents.filter(
+                        (other) =>
+                            !other.is_manual_pin &&
+                            typeof other.latitude === 'number' &&
+                            typeof other.longitude === 'number' &&
+                            isPointInPolygon([other.longitude, other.latitude], ring) &&
+                            isHazardTypeMatch(matched.incident_type, other.incident_type)
+                    )
+                    : [];
+
+                const incidentsToShow = [matched, ...absorbed];
+                const spotColor = getRiskColorHex(matched.risk_level);
+                const proneData = {
+                    barangayName: matched.barangay || 'Barangay Area',
+                    locationName: matched.area_name || matched.address || 'Prone Area Zone',
+                    normName: key,
+                    riskLevel: `${(matched.risk_level || 'MODERATE').toUpperCase()} RISK`,
+                    riskColor: spotColor,
+                    riskLabel: `${matched.risk_level || 'Prone'} Area (${incidentsToShow.length} records)`,
+                    riskBadgeBg: 'bg-slate-700/60',
+                    riskTextColor: 'text-white',
+                    incidentCount: incidentsToShow.length,
+                    dominantType: matched.incident_type || 'General Emergency',
+                    dominantPercentage: 100,
+                    typeBreakdown: [
+                        {
+                            type: matched.incident_type,
+                            count: incidentsToShow.length,
+                            percentage: 100,
+                            color: spotColor,
+                        },
+                    ],
+                    radiusMeters: undefined,
+                    incidents: incidentsToShow,
+                    isPinned: false,
+                    isManual: true,
+                };
+                hoveredBarangayRef.current = proneData;
+                setHoveredBarangay(proneData);
+                return;
+            }
+        }
+
         if (!showRiskZones) {
             if (hoveredBarangayRef.current) {
                 hoveredBarangayRef.current = null;
@@ -1922,16 +2218,35 @@ export default function AccidentHeatmapView({
             return;
         }
 
-        // If user pinned a popup via click, don't dismiss or override on simple hover movement
-        if (hoveredBarangayRef.current?.isPinned) {
-            return;
-        }
-
+        // 2. Check if hovering over localized incident risk circle
         const feature = evt.features && evt.features.find((f: any) => f.layer?.id === 'clipped-risk-fill');
         if (feature && feature.properties) {
             const p = feature.properties;
             const key = p.cluster_key;
             if (hoveredBarangayRef.current?.normName === key) {
+                return;
+            }
+
+            if (p.is_zero_incident || Number(p.incident_count) === 0) {
+                const zeroData = {
+                    barangayName: p.barangay_name || 'Barangay Area',
+                    locationName: p.location_name || 'Monitored Coverage Area',
+                    normName: key,
+                    riskLevel: 'NO INCIDENTS',
+                    riskColor: '#22C55E',
+                    riskLabel: 'No Incidents (0 records)',
+                    riskBadgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+                    riskTextColor: 'text-emerald-300',
+                    incidentCount: 0,
+                    dominantType: 'Zero Incidents Recorded',
+                    dominantPercentage: 100,
+                    typeBreakdown: [{ type: 'No Incidents', count: 0, percentage: 100, color: '#22C55E' }],
+                    radiusMeters: Number(p.radius_meters) || 20,
+                    incidents: [],
+                    isPinned: false,
+                };
+                hoveredBarangayRef.current = zeroData;
+                setHoveredBarangay(zeroData);
                 return;
             }
 
@@ -1967,7 +2282,7 @@ export default function AccidentHeatmapView({
                 locationName: p.location_name || '',
                 normName: key,
                 riskLevel: p.risk_level || 'LOW RISK',
-                riskColor: p.risk_color || '#43A047',
+                riskColor: p.risk_color || '#3B82F6',
                 riskLabel: `${p.risk_level || 'Risk Area'} (${p.incident_count} records)`,
                 riskBadgeBg: 'bg-slate-700/60',
                 riskTextColor: 'text-white',
@@ -1978,15 +2293,22 @@ export default function AccidentHeatmapView({
                 radiusMeters: Number(p.radius_meters) || 20,
                 incidents: clusterIncidents,
                 isPinned: false,
+                isManual: Boolean(
+                    p.is_manual ||
+                    matchedSpot?.incidents?.some((i) => i.is_manual_pin) ||
+                    clusterIncidents.some((i) => i.is_manual_pin) ||
+                    key?.startsWith('poly_')
+                ),
             };
 
             hoveredBarangayRef.current = data;
             setHoveredBarangay(data);
-        } else {
-            if (hoveredBarangayRef.current && !hoveredBarangayRef.current.isPinned) {
-                hoveredBarangayRef.current = null;
-                setHoveredBarangay(null);
-            }
+            return;
+        }
+
+        if (hoveredBarangayRef.current && !hoveredBarangayRef.current.isPinned) {
+            hoveredBarangayRef.current = null;
+            setHoveredBarangay(null);
         }
     };
 
@@ -2086,6 +2408,7 @@ export default function AccidentHeatmapView({
             radiusMeters: undefined,
             incidents: incidentsToShow,
             isPinned: true,
+            isManual: true,
         };
         hoveredBarangayRef.current = proneData;
         setHoveredBarangay(proneData);
@@ -2108,6 +2431,30 @@ export default function AccidentHeatmapView({
         if (feature && feature.properties) {
             const p = feature.properties;
             const key = p.cluster_key;
+
+            if (p.is_zero_incident || Number(p.incident_count) === 0) {
+                const zeroData = {
+                    barangayName: p.barangay_name || 'Barangay Area',
+                    locationName: p.location_name || 'Monitored Coverage Area',
+                    normName: key,
+                    riskLevel: 'NO INCIDENTS',
+                    riskColor: '#22C55E',
+                    riskLabel: 'No Incidents (0 records)',
+                    riskBadgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+                    riskTextColor: 'text-emerald-300',
+                    incidentCount: 0,
+                    dominantType: 'Zero Incidents Recorded',
+                    dominantPercentage: 100,
+                    typeBreakdown: [{ type: 'No Incidents', count: 0, percentage: 100, color: '#22C55E' }],
+                    radiusMeters: Number(p.radius_meters) || 20,
+                    incidents: [],
+                    isPinned: true,
+                };
+                hoveredBarangayRef.current = zeroData;
+                setHoveredBarangay(zeroData);
+                return;
+            }
+
             const matchedSpot = activeHotspots.find((s) => s.cluster_key === key);
 
             let clusterIncidents: IncidentRecord[] = [];
@@ -2142,7 +2489,7 @@ export default function AccidentHeatmapView({
                 locationName: p.location_name || '',
                 normName: key,
                 riskLevel: p.risk_level || 'LOW RISK',
-                riskColor: p.risk_color || '#43A047',
+                riskColor: p.risk_color || '#3B82F6',
                 riskLabel: `${p.risk_level || 'Risk Area'} (${p.incident_count} records)`,
                 riskBadgeBg: 'bg-slate-700/60',
                 riskTextColor: 'text-white',
@@ -2153,6 +2500,12 @@ export default function AccidentHeatmapView({
                 radiusMeters: Number(p.radius_meters) || 20,
                 incidents: clusterIncidents,
                 isPinned: true,
+                isManual: Boolean(
+                    p.is_manual ||
+                    matchedSpot?.incidents?.some((i) => i.is_manual_pin) ||
+                    clusterIncidents.some((i) => i.is_manual_pin) ||
+                    key?.startsWith('poly_')
+                ),
             };
 
             hoveredBarangayRef.current = data;
@@ -2205,32 +2558,6 @@ export default function AccidentHeatmapView({
                     subtitle="Accident-prone area heatmap and incident hotspot analytics across Opol barangays."
                     actions={
                         <div className="flex items-center gap-2.5 flex-wrap">
-                            {/* Total Plotted KPI Pill */}
-                            <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-white/10 shadow-2xs flex items-center gap-2">
-                                <Activity className="w-3.5 h-3.5 text-rose-500" />
-                                <div className="text-xs leading-tight">
-                                    <span className="text-slate-500 dark:text-slate-400 text-[10px] block">Total Plotted</span>
-                                    <span className="font-bold text-slate-900 dark:text-white">
-                                        {validCoordinatesCount} of {totalIncidentsCount}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Rank #1 Hotspot KPI Pill */}
-                            {topHotspot && (
-                                <div className="hidden sm:flex px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900/90 border border-amber-300/60 dark:border-amber-500/30 shadow-2xs items-center gap-2">
-                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                                    <div className="text-xs leading-tight">
-                                        <span className="text-amber-600 dark:text-amber-400 text-[10px] block font-semibold">
-                                            Rank #1 Hotspot
-                                        </span>
-                                        <span className="font-bold text-slate-900 dark:text-slate-100 truncate max-w-[140px] block">
-                                            Brgy. {topHotspot.barangay}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Add Incident-Prone Area Button (Mode A: Pin / Mode B: Draw Polygon) */}
                             <button
                                 type="button"
@@ -2337,8 +2664,19 @@ export default function AccidentHeatmapView({
                             values={selectedEmergencyTypes}
                             onChange={(nextTypes) => {
                                 const nextIsSpecificSingle = nextTypes.length === 1;
-                                const validThresholds = nextIsSpecificSingle ? [1, 2, 3, 4] : [1, 5, 9];
-                                const nextThreshold = validThresholds.includes(minThreshold) ? minThreshold : 1;
+                                let nextThreshold = minThreshold;
+                                if (typeof minThreshold === 'number' || !isNaN(Number(minThreshold))) {
+                                    const num = Number(minThreshold);
+                                    if (nextIsSpecificSingle) {
+                                        if (num === 3) nextThreshold = 2;
+                                        else if (num === 5) nextThreshold = 3;
+                                        else if (num === 9) nextThreshold = 4;
+                                    } else {
+                                        if (num === 2) nextThreshold = 3;
+                                        else if (num === 3) nextThreshold = 5;
+                                        else if (num === 4) nextThreshold = 9;
+                                    }
+                                }
 
                                 setSelectedEmergencyTypes(nextTypes);
                                 if (nextThreshold !== minThreshold) {
@@ -2353,9 +2691,10 @@ export default function AccidentHeatmapView({
 
                         {/* Easy-to-Understand Risk Level Filter (replaces technical Threshold label) */}
                         <select
-                            value={minThreshold}
+                            value={String(minThreshold)}
                             onChange={(e) => {
-                                const val = parseInt(e.target.value, 10);
+                                const rawVal = e.target.value;
+                                const val = !isNaN(Number(rawVal)) && rawVal !== '' ? Number(rawVal) : rawVal;
                                 setMinThreshold(val);
                                 applyFilters({ min_threshold: val });
                             }}
@@ -2364,16 +2703,23 @@ export default function AccidentHeatmapView({
                         >
                             {isSpecificEmergencyType ? (
                                 <>
-                                    <option value={1}>Risk Level: All Areas</option>
-                                    <option value={2}>Risk Level: 2+ Incidents</option>
-                                    <option value={3}>Risk Level: Moderate &amp; High (3+)</option>
-                                    <option value={4}>Risk Level: High Risk Only (4+)</option>
+                                    <option value="1">Risk Level: All Areas</option>
+                                    <option value="low">Risk Level: Low Risk Only (1)</option>
+                                    <option value="moderate_only">Risk Level: Moderate Risk (2)</option>
+                                    <option value="2">Risk Level: Moderate &amp; Above (2+)</option>
+                                    <option value="mod_high_only">Risk Level: Mod-High Risk (3)</option>
+                                    <option value="3">Risk Level: Mod-High &amp; Above (3+)</option>
+                                    <option value="4">Risk Level: High Risk Only (4+)</option>
                                 </>
                             ) : (
                                 <>
-                                    <option value={1}>Risk Level: All Areas</option>
-                                    <option value={5}>Risk Level: Moderate &amp; High (5+)</option>
-                                    <option value={9}>Risk Level: High Risk Only (9+)</option>
+                                    <option value="1">Risk Level: All Areas</option>
+                                    <option value="low">Risk Level: Low Risk Only (1–2)</option>
+                                    <option value="moderate_only">Risk Level: Moderate Risk (3–4)</option>
+                                    <option value="3">Risk Level: Moderate &amp; Above (3+)</option>
+                                    <option value="mod_high_only">Risk Level: Mod-High Risk (5–8)</option>
+                                    <option value="5">Risk Level: Mod-High &amp; Above (5+)</option>
+                                    <option value="9">Risk Level: High Risk Only (9+)</option>
                                 </>
                             )}
                         </select>
@@ -2406,18 +2752,6 @@ export default function AccidentHeatmapView({
 
                         <button
                             type="button"
-                            onClick={() => setShowMarkers(!showMarkers)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${showMarkers
-                                ? 'bg-rose-50 dark:bg-rose-500/15 border-rose-200 dark:border-rose-500/35 text-rose-700 dark:text-rose-300'
-                                : 'bg-slate-50 dark:bg-slate-800/90 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                }`}
-                        >
-                            <MapPin className="w-3.5 h-3.5" />
-                            <span>Pins</span>
-                        </button>
-
-                        <button
-                            type="button"
                             onClick={() => setShowBarangayBoundaries(!showBarangayBoundaries)}
                             className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${showBarangayBoundaries
                                 ? 'bg-indigo-50 dark:bg-indigo-500/15 border-indigo-200 dark:border-indigo-500/35 text-indigo-700 dark:text-indigo-300'
@@ -2426,15 +2760,6 @@ export default function AccidentHeatmapView({
                         >
                             <Compass className="w-3.5 h-3.5" />
                             <span>Boundaries</span>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setMapStyle(mapStyle === 'dark' ? 'satellite' : 'dark')}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-                        >
-                            <Layers className="w-3.5 h-3.5 text-rose-500" />
-                            <span>{mapStyle === 'dark' ? 'Satellite' : 'Dark'}</span>
                         </button>
                     </div>
                 </div>
@@ -2453,20 +2778,17 @@ export default function AccidentHeatmapView({
                                 } xl:min-h-[640px] transition-all duration-200`}
                         >
                             {/* Map Container */}
-                            <div ref={mapContainerRef} className="w-full h-full flex-1 relative bg-slate-950">
+                            <div ref={mapContainerRef} className="w-full h-full flex-1 relative bg-slate-100 dark:bg-slate-950">
                                 {import.meta.env.VITE_MAPBOX_TOKEN ? (
                                     <Map
                                         ref={mapRef}
+                                        key={getMapStyleUrl()}
                                         style={{ width: '100%', height: '100%' }}
                                         mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
                                         {...viewState}
                                         onMove={(evt) => setViewState(evt.viewState)}
                                         onLoad={() => mapRef.current?.resize()}
-                                        mapStyle={
-                                            mapStyle === 'dark'
-                                                ? 'mapbox://styles/mapbox/dark-v11'
-                                                : 'mapbox://styles/mapbox/satellite-streets-v12'
-                                        }
+                                        mapStyle={getMapStyleUrl()}
                                         attributionControl={false}
                                         interactiveLayerIds={
                                             showRiskZones
@@ -2485,10 +2807,34 @@ export default function AccidentHeatmapView({
                                                     id="opol-boundary-lines"
                                                     type="line"
                                                     paint={{
-                                                        'line-color': '#64748b',
+                                                        'line-color': isDark ? '#64748b' : '#475569',
                                                         'line-width': 1.5,
-                                                        'line-opacity': 0.65,
+                                                        'line-opacity': isDark ? 0.65 : 0.75,
                                                         'line-dasharray': [3, 2],
+                                                    }}
+                                                />
+                                            </Source>
+                                        )}
+
+                                        {/* 1.2 ZERO INCIDENT BARANGAYS (FULL GREEN POLYGON #22C55E, 35-45% OPACITY) */}
+                                        {showRiskZones && zeroIncidentBarangaysGeojson && (
+                                            <Source id="zero-incident-barangays-source" type="geojson" data={zeroIncidentBarangaysGeojson}>
+                                                <Layer
+                                                    id="zero-incident-barangay-fill"
+                                                    type="fill"
+                                                    paint={{
+                                                        'fill-color': '#22C55E',
+                                                        'fill-opacity': mapStyleType === 'satellite' ? 0.42 : isDark ? 0.38 : 0.30,
+                                                        'fill-antialias': true,
+                                                    }}
+                                                />
+                                                <Layer
+                                                    id="zero-incident-barangay-stroke"
+                                                    type="line"
+                                                    paint={{
+                                                        'line-color': '#22C55E',
+                                                        'line-width': 2.0,
+                                                        'line-opacity': 0.90,
                                                     }}
                                                 />
                                             </Source>
@@ -2517,7 +2863,7 @@ export default function AccidentHeatmapView({
                                                     type="fill"
                                                     paint={{
                                                         'fill-color': ['get', 'color'],
-                                                        'fill-opacity': mapStyle === 'satellite' ? 0.48 : 0.42,
+                                                        'fill-opacity': mapStyleType === 'satellite' ? 0.45 : isDark ? 0.38 : 0.34,
                                                         'fill-antialias': true,
                                                     }}
                                                 />
@@ -2526,8 +2872,8 @@ export default function AccidentHeatmapView({
                                                     type="line"
                                                     paint={{
                                                         'line-color': ['get', 'color'],
-                                                        'line-width': 1.8,
-                                                        'line-opacity': 0.85,
+                                                        'line-width': 2.2,
+                                                        'line-opacity': 0.9,
                                                     }}
                                                 />
                                             </Source>
@@ -2541,7 +2887,7 @@ export default function AccidentHeatmapView({
                                                     type="fill"
                                                     paint={{
                                                         'fill-color': ['get', 'color'],
-                                                        'fill-opacity': mapStyle === 'satellite' ? 0.45 : 0.38,
+                                                        'fill-opacity': mapStyleType === 'satellite' ? 0.45 : isDark ? 0.38 : 0.34,
                                                         'fill-antialias': true,
                                                     }}
                                                 />
@@ -2557,154 +2903,6 @@ export default function AccidentHeatmapView({
                                             </Source>
                                         )}
 
-                                        {/* 3. Pulsing Red Radar Beat Ring at Center of High (4+) Clusters */}
-                                        {activeHotspots.map((spot, idx) => {
-                                            const risk = (spot as any).risk_record || classifyClusterRisk(spot.incident_count, isSpecificEmergencyType, (spot as any).highest_manual_risk);
-                                            if (!risk.isRed || absorbedHotspotClusterKeys.has(spot.cluster_key)) return null;
-
-                                            return (
-                                                <Marker
-                                                    key={`red-pulse-${spot.cluster_key}-${idx}`}
-                                                    longitude={spot.longitude}
-                                                    latitude={spot.latitude}
-                                                    anchor="center"
-                                                >
-                                                    <div className="relative flex items-center justify-center pointer-events-none">
-                                                        {/* Concentric radar wave ripples */}
-                                                        <span className="w-20 h-20 rounded-full bg-red-500/20 animate-ping absolute" />
-                                                        <span className="w-12 h-12 rounded-full bg-red-600/35 animate-ping absolute" />
-                                                        {/* Glowing heartbeat beacon core dot */}
-                                                        <span className="w-4 h-4 rounded-full bg-red-500 animate-pulse shadow-[0_0_14px_rgba(239,68,68,0.95)] absolute" />
-                                                        <span className="w-2 h-2 rounded-full bg-white absolute" />
-                                                    </div>
-                                                </Marker>
-                                            );
-                                        })}
-
-                                        {/* 3.1 Pulsing Red Radar Beat Ring at Center of High-Risk Manual Prone Areas (Polygons & Pins) */}
-                                        {manualHighProneAreas.map((pin, idx) => (
-                                            <Marker
-                                                key={`manual-high-pulse-${pin.manual_pin_id || pin.id}-${idx}`}
-                                                longitude={pin.longitude!}
-                                                latitude={pin.latitude!}
-                                                anchor="center"
-                                            >
-                                                <div className="relative flex items-center justify-center pointer-events-none">
-                                                    {/* Concentric expanding sonar ripple rings matching High Risk Beacon */}
-                                                    <span className="w-24 h-24 rounded-full bg-red-500/20 animate-ping absolute" />
-                                                    <span className="w-14 h-14 rounded-full bg-red-600/35 animate-ping absolute" />
-                                                    {/* Pulsing beacon heart center dot */}
-                                                    <span className="w-5 h-5 rounded-full bg-[#E53935] animate-pulse shadow-[0_0_16px_rgba(229,57,53,0.95)] absolute" />
-                                                    <span className="w-2.5 h-2.5 rounded-full bg-white absolute" />
-                                                </div>
-                                            </Marker>
-                                        ))}
-
-                                        {/* 4. Combined Center Pins (1 Pin at Exact Centroid per Same-Type 20m Cluster) */}
-                                        {showMarkers &&
-                                            activeHotspots.map((spot, idx) => {
-                                                const clusterType = spot.incident_type || spot.most_common_type || 'Emergency';
-                                                const badge = getTypeBadgeColor(clusterType);
-                                                const isCombined = spot.incident_count > 1;
-                                                const singleIncident = spot.incidents && spot.incidents.length === 1 ? spot.incidents[0] : null;
-                                                const pinOffset = clusterPinOffsets[spot.cluster_key] || [0, 0];
-                                                const isAbsorbed = absorbedHotspotClusterKeys.has(spot.cluster_key);
-
-                                                return (
-                                                    <Marker
-                                                        key={`combined-pin-${spot.cluster_key}-${idx}`}
-                                                        longitude={spot.longitude}
-                                                        latitude={spot.latitude}
-                                                        anchor="bottom"
-                                                        offset={pinOffset}
-                                                        onClick={(e) => {
-                                                            e.originalEvent.stopPropagation();
-                                                            focusHotspotOnMap(spot);
-                                                        }}
-                                                    >
-                                                        <div
-                                                            className="cursor-pointer group relative flex flex-col items-center"
-                                                            title={
-                                                                isAbsorbed
-                                                                    ? `${clusterType} • ${spot.incident_count} incidents [Absorbed in Prone Area] (Brgy. ${spot.barangay})`
-                                                                    : isCombined
-                                                                        ? `${clusterType} • ${spot.incident_count} combined incidents within 20m (Brgy. ${spot.barangay})`
-                                                                        : `#INC-${singleIncident?.id ?? ''}: ${clusterType} (${spot.location_name || spot.barangay})`
-                                                            }
-                                                        >
-                                                            {/* Teardrop Emergency Pin (Single or Combined Center Pin with Count) */}
-                                                            <div className="relative transition-transform duration-200 group-hover:scale-125 group-hover:-translate-y-1">
-                                                                <svg
-                                                                    width={isCombined ? 30 : 24}
-                                                                    height={isCombined ? 40 : 32}
-                                                                    viewBox="0 0 24 32"
-                                                                    fill="none"
-                                                                    xmlns="http://www.w3.org/2000/svg"
-                                                                    className="filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.65)]"
-                                                                >
-                                                                    {/* Teardrop Pin Body pointing down to exact center coordinates */}
-                                                                    <path
-                                                                        d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
-                                                                        fill={badge.hex}
-                                                                        stroke="#FFFFFF"
-                                                                        strokeWidth="2"
-                                                                        strokeLinejoin="round"
-                                                                    />
-                                                                    {isCombined ? (
-                                                                        <>
-                                                                            {/* Combined Cluster Center Circle with Incident Count */}
-                                                                            <circle cx="12" cy="11.5" r="7.2" fill="#0f172a" />
-                                                                            <text
-                                                                                x="12"
-                                                                                y="14.7"
-                                                                                textAnchor="middle"
-                                                                                fill="#FFFFFF"
-                                                                                fontSize={spot.incident_count >= 10 ? '8' : '9.5'}
-                                                                                fontWeight="800"
-                                                                                fontFamily="system-ui, -apple-system, sans-serif"
-                                                                            >
-                                                                                {spot.incident_count}
-                                                                            </text>
-                                                                        </>
-                                                                    ) : (
-                                                                        <>
-                                                                            {/* Single Incident Inner Target */}
-                                                                            <circle cx="12" cy="11.5" r="4.8" fill="#FFFFFF" />
-                                                                            <circle cx="12" cy="11.5" r="2.6" fill={badge.hex} />
-                                                                        </>
-                                                                    )}
-                                                                </svg>
-                                                                {/* Ground shadow beneath the pin point */}
-                                                                <div className="w-2.5 h-1 rounded-full bg-black/60 blur-[1px] mx-auto -mt-0.5" />
-                                                            </div>
-
-                                                            {/* Floating Tooltip on Hover */}
-                                                            <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center pointer-events-none z-50">
-                                                                <div className="px-2.5 py-1.5 rounded-lg bg-slate-950/95 border border-white/20 shadow-2xl text-[11px] text-white whitespace-nowrap flex items-center gap-2">
-                                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: badge.hex }} />
-                                                                    <span className="font-bold">
-                                                                        {spot.unique_types && spot.unique_types.length > 1
-                                                                            ? `${clusterType} +${spot.unique_types.length - 1} more`
-                                                                            : clusterType}
-                                                                    </span>
-                                                                    {isCombined ? (
-                                                                        <span className="text-amber-300 font-bold text-[10px]">
-                                                                            {spot.incident_count} combined (20m)
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-slate-400 font-mono text-[10px]">
-                                                                            #INC-{singleIncident?.id}
-                                                                        </span>
-                                                                    )}
-                                                                    <span className="text-slate-400 text-[10px]">Brgy. {spot.barangay}</span>
-                                                                </div>
-                                                                <div className="w-2 h-2 bg-slate-950 rotate-45 -mt-1 border-r border-b border-white/20" />
-                                                            </div>
-                                                        </div>
-                                                    </Marker>
-                                                );
-                                            })}
-
                                     </Map>
                                 ) : (
                                     <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center bg-slate-950">
@@ -2716,10 +2914,10 @@ export default function AccidentHeatmapView({
                                     </div>
                                 )}
 
-                                {/* INTERACTIVE HOVER / TAP STATISTICS HUD (Top Left, Responsive) */}
+                                {/* INTERACTIVE HOVER / TAP STATISTICS HUD (Top Left, Compact & Sleek) */}
                                 {hoveredBarangay && (
                                     <div
-                                        className="absolute top-3 left-3 z-20 w-84 max-w-[calc(100%-2rem)] max-h-[85vh] flex flex-col bg-[#0b1329]/95 backdrop-blur-md border border-white/20 rounded-2xl p-3.5 shadow-2xl transition-all duration-150 text-xs text-slate-200 pointer-events-auto overflow-hidden"
+                                        className="absolute top-3 left-3 z-20 w-72 max-w-[calc(100%-2rem)] bg-[#0b1329]/95 backdrop-blur-md border border-white/15 rounded-xl p-3 shadow-2xl transition-all duration-150 text-xs text-slate-200 pointer-events-auto"
                                         style={{
                                             borderLeftColor:
                                                 hoveredBarangay.riskColor !== 'transparent'
@@ -2727,18 +2925,18 @@ export default function AccidentHeatmapView({
                                                     : undefined,
                                             borderLeftWidth:
                                                 hoveredBarangay.riskColor !== 'transparent' ? '4px' : undefined,
-                                            boxShadow: `0 20px 35px -10px rgba(0,0,0,0.8), 0 0 25px -4px ${hoveredBarangay.riskColor !== 'transparent'
+                                            boxShadow: `0 16px 30px -8px rgba(0,0,0,0.8), 0 0 20px -4px ${hoveredBarangay.riskColor !== 'transparent'
                                                 ? hoveredBarangay.riskColor
                                                 : 'rgba(255,255,255,0.1)'
-                                                }40`,
+                                                }30`,
                                         }}
                                     >
                                         {/* Header: Barangay Name + Close Button */}
-                                        <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-white/10 shrink-0">
-                                            <div className="min-w-0">
-                                                <div className="flex items-center gap-2">
+                                        <div className="flex items-start justify-between gap-1.5 pb-2 border-b border-white/10">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-1.5">
                                                     <span
-                                                        className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
+                                                        className="w-2 h-2 rounded-full shrink-0 shadow-sm"
                                                         style={{
                                                             backgroundColor:
                                                                 hoveredBarangay.riskColor !== 'transparent'
@@ -2746,18 +2944,20 @@ export default function AccidentHeatmapView({
                                                                     : '#64748B',
                                                         }}
                                                     />
-                                                    <h4 className="font-bold text-sm text-white leading-tight truncate">
+                                                    <h4 className="font-bold text-xs text-white leading-tight break-words">
                                                         {hoveredBarangay.barangayName}
                                                     </h4>
                                                     {hoveredBarangay.isPinned && (
-                                                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30 shrink-0">
-                                                            Selected
+                                                        <span className="text-[8.5px] px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30 shrink-0">
+                                                            Pinned
                                                         </span>
                                                     )}
                                                 </div>
-                                                <p className="text-[10px] text-cyan-400 font-medium mt-0.5 truncate">
-                                                    {hoveredBarangay.locationName || 'Localized Incident Area'} • {hoveredBarangay.incidentCount > 1 ? 'Merged 20m Buffer Union Zone' : '20m Incident Hazard Zone'}
-                                                </p>
+                                                {hoveredBarangay.locationName && (
+                                                    <p className="text-[10px] text-cyan-400 font-medium mt-0.5 leading-snug break-words" title={hoveredBarangay.locationName}>
+                                                        {hoveredBarangay.locationName}
+                                                    </p>
+                                                )}
                                             </div>
                                             <button
                                                 type="button"
@@ -2765,280 +2965,264 @@ export default function AccidentHeatmapView({
                                                     hoveredBarangayRef.current = null;
                                                     setHoveredBarangay(null);
                                                 }}
-                                                className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
-                                                title="Dismiss Statistics"
+                                                className="p-1 -mr-1 -mt-1 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                                                title="Close"
                                             >
                                                 <X className="w-3.5 h-3.5" />
                                             </button>
                                         </div>
 
-                                        {/* Risk Level Badge & Incident Count */}
-                                        <div className="grid grid-cols-2 gap-2 my-2 shrink-0">
-                                            <div className="p-2 rounded-xl bg-white/[0.04] border border-white/10 flex flex-col justify-center">
-                                                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">
-                                                    Risk Level
-                                                </span>
-                                                <span
-                                                    className="font-bold text-[11px] mt-0.5 truncate"
-                                                    style={{
-                                                        color:
-                                                            hoveredBarangay.riskColor !== 'transparent'
-                                                                ? hoveredBarangay.riskColor
-                                                                : '#94A3B8',
-                                                    }}
-                                                >
-                                                    {hoveredBarangay.riskLevel}
-                                                </span>
-                                            </div>
-                                            <div className="p-2 rounded-xl bg-white/[0.04] border border-white/10 flex flex-col justify-center">
-                                                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">
-                                                    Total Incidents
-                                                </span>
-                                                <div className="flex items-baseline gap-1 mt-0.5">
-                                                    <span className="font-extrabold text-base text-white">
-                                                        {hoveredBarangay.incidentCount}
+                                        {/* 2-Column Stats: Risk Level & Total Incidents */}
+                                        {Boolean(
+                                            hoveredBarangay.isManual ||
+                                            hoveredBarangay.incidents?.some((i) => i.is_manual_pin) ||
+                                            hoveredBarangay.normName?.startsWith('poly_')
+                                        ) ? (
+                                            <div className="p-2 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-between my-2">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[8.5px] uppercase tracking-wider text-slate-400 font-semibold">
+                                                        Risk Level
                                                     </span>
-                                                    <span className="text-[10px] text-slate-400">
-                                                        in risk area
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Dominant Incident Type Banner */}
-                                        {hoveredBarangay.incidentCount > 0 && (
-                                            <div className="p-2 rounded-xl bg-white/[0.03] border border-white/10 mb-2 shrink-0">
-                                                <div className="flex items-center justify-between text-[10px] mb-1">
-                                                    <span className="text-slate-400 font-medium">Dominant Type:</span>
-                                                    <span className="font-bold text-white truncate max-w-[160px]">
-                                                        {hoveredBarangay.dominantType}
-                                                    </span>
-                                                </div>
-                                                <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                                                    <div
-                                                        className="h-full rounded-full transition-all duration-300"
+                                                    <span
+                                                        className="font-bold text-[11px] mt-0.5"
                                                         style={{
-                                                            width: `${hoveredBarangay.dominantPercentage}%`,
-                                                            backgroundColor:
-                                                                hoveredBarangay.typeBreakdown[0]?.color || '#3B82F6',
+                                                            color:
+                                                                hoveredBarangay.riskColor !== 'transparent'
+                                                                    ? hoveredBarangay.riskColor
+                                                                    : '#94A3B8',
                                                         }}
-                                                    />
+                                                    >
+                                                        {hoveredBarangay.riskLevel}
+                                                    </span>
                                                 </div>
-                                                <div className="text-right text-[9px] text-slate-400 mt-0.5 font-mono font-bold">
-                                                    {hoveredBarangay.dominantPercentage}% of cluster records
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Emergency Type Distribution Breakdown */}
-                                        {hoveredBarangay.typeBreakdown.length > 0 ? (
-                                            <div className="space-y-1.5 pt-1 border-t border-white/10 max-h-28 overflow-y-auto pr-1 shrink-0">
-                                                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block mb-1">
-                                                    Incident Distribution
+                                                <span className="text-[9px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider bg-violet-500/15 text-violet-300 border border-violet-500/30">
+                                                    Prone Area
                                                 </span>
-                                                {hoveredBarangay.typeBreakdown.map((item, bIdx) => (
-                                                    <div key={`type-dist-${bIdx}`} className="space-y-0.5">
-                                                        <div className="flex items-center justify-between text-[10px]">
-                                                            <span className="text-slate-300 truncate max-w-[140px] flex items-center gap-1.5">
-                                                                <span
-                                                                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                                                                    style={{ backgroundColor: item.color }}
-                                                                />
-                                                                {item.type}
-                                                            </span>
-                                                            <span className="font-mono text-[10px] text-slate-300 shrink-0">
-                                                                <strong className="text-white">{item.count}</strong> ({item.percentage}%)
-                                                            </span>
-                                                        </div>
-                                                        <div className="w-full h-1 rounded-full bg-slate-800/80 overflow-hidden">
-                                                            <div
-                                                                className="h-full rounded-full"
-                                                                style={{
-                                                                    width: `${item.percentage}%`,
-                                                                    backgroundColor: item.color,
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                ))}
                                             </div>
                                         ) : (
-                                            <p className="text-[11px] text-slate-400 italic text-center py-2 shrink-0">
-                                                No qualifying incidents in this risk area under current filters.
-                                            </p>
-                                        )}
-
-                                        {/* INCIDENTS IN THIS AREA (LIST OF OCCURRED INCIDENTS) */}
-                                        {hoveredBarangay.incidents && hoveredBarangay.incidents.length > 0 && (
-                                            <div className="mt-2 pt-2 border-t border-white/10 flex-1 flex flex-col min-h-0">
-                                                <div className="flex items-center justify-between mb-1.5 shrink-0">
-                                                    <span className="text-[10px] uppercase tracking-wider text-rose-400 font-bold flex items-center gap-1.5">
-                                                        <AlertCircle className="w-3 h-3 shrink-0" />
-                                                        Incidents ({hoveredBarangay.incidents.length})
+                                            <div className="grid grid-cols-2 gap-1.5 my-2">
+                                                <div className="p-1.5 rounded-lg bg-white/[0.04] border border-white/10 flex flex-col justify-center">
+                                                    <span className="text-[8.5px] uppercase tracking-wider text-slate-400 font-semibold">
+                                                        Risk Level
                                                     </span>
-                                                    <span className="text-[9px] text-slate-400">Click to inspect</span>
+                                                    <span
+                                                        className="font-bold text-[10.5px] mt-0.5 leading-snug break-words"
+                                                        style={{
+                                                            color:
+                                                                hoveredBarangay.riskColor !== 'transparent'
+                                                                    ? hoveredBarangay.riskColor
+                                                                    : '#94A3B8',
+                                                        }}
+                                                    >
+                                                        {hoveredBarangay.riskLevel}
+                                                    </span>
                                                 </div>
-
-                                                <div className="space-y-1.5 overflow-y-auto max-h-48 pr-1">
-                                                    {hoveredBarangay.incidents.map((inc, iIdx) => {
-                                                        const badge = getTypeBadgeColor(inc.incident_type);
-                                                        const isResolved = (inc.status || '').toLowerCase() === 'resolved';
-                                                        const isResponding = (inc.status || '').toLowerCase() === 'responding' || (inc.status || '').toLowerCase() === 'assigned';
-
-                                                        return (
-                                                            <div
-                                                                key={`popup-inc-${inc.id}-${iIdx}`}
-                                                                onClick={() => {
-                                                                    const matched = activeHotspots.find((s) => s.cluster_key === hoveredBarangay.normName);
-                                                                    if (matched) {
-                                                                        focusHotspotOnMap(matched);
-                                                                        setActiveIncidentIdx(iIdx);
-                                                                    }
-                                                                }}
-                                                                className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.09] border border-white/10 hover:border-cyan-500/50 transition-all cursor-pointer space-y-1 group"
-                                                                title="Click to inspect this incident in full detail"
-                                                            >
-                                                                <div className="flex items-center justify-between gap-1.5">
-                                                                    <span className="font-mono text-[10px] font-bold text-white flex items-center gap-1.5">
-                                                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: badge.hex }} />
-                                                                        {inc.incident_number || `#INC-${String(inc.id).padStart(4, '0')}`}
-                                                                    </span>
-                                                                    <span
-                                                                        className={`text-[8.5px] px-1.5 py-0.2 rounded font-black uppercase tracking-wider ${
-                                                                            isResolved
-                                                                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                                                                : isResponding
-                                                                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                                                                : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                                                                        }`}
-                                                                    >
-                                                                        {inc.status || 'Active'}
-                                                                    </span>
-                                                                </div>
-
-                                                                <div className="flex items-center justify-between text-[10px]">
-                                                                    <span className="font-semibold text-slate-200 truncate">
-                                                                        {inc.incident_type}
-                                                                    </span>
-                                                                    <span className="text-[9px] text-slate-400 shrink-0">
-                                                                        {inc.formatted_date || inc.incident_date || 'Recent'}
-                                                                    </span>
-                                                                </div>
-
-                                                                {(inc.chief_complaint || inc.description) && (
-                                                                    <p className="text-[9.5px] text-slate-400 line-clamp-2 leading-relaxed italic bg-black/25 p-1 rounded-md border border-white/5">
-                                                                        "{inc.chief_complaint || inc.description}"
-                                                                    </p>
-                                                                )}
-
-                                                                <div className="flex items-center justify-between text-[9px] text-slate-500 pt-0.5">
-                                                                    <span>
-                                                                        {inc.incident_time ? `Time: ${inc.incident_time}` : (inc.time_ago || '')}
-                                                                    </span>
-                                                                    <span className="text-cyan-400 group-hover:text-cyan-300 font-bold flex items-center gap-0.5">
-                                                                        Inspect <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
+                                                <div className="p-1.5 rounded-lg bg-white/[0.04] border border-white/10 flex flex-col justify-center">
+                                                    <span className="text-[8.5px] uppercase tracking-wider text-slate-400 font-semibold">
+                                                        Total Incidents
+                                                    </span>
+                                                    <div className="flex items-baseline gap-1 mt-0.5">
+                                                        <span className="font-extrabold text-sm text-white">
+                                                            {hoveredBarangay.incidentCount}
+                                                        </span>
+                                                        <span className="text-[9.5px] text-slate-400">
+                                                            {hoveredBarangay.incidentCount === 1 ? 'incident' : 'incidents'}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
 
-                                        {/* Footer Area Notice */}
-                                        <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] text-slate-400 shrink-0">
-                                            <span>Incident Risk Zone</span>
-                                            <span className="text-slate-500 font-mono">20m Localized</span>
-                                        </div>
+                                        {/* Dominant Type or Zero Incident Badge */}
+                                        {hoveredBarangay.incidentCount === 0 &&
+                                        !hoveredBarangay.isManual &&
+                                        !hoveredBarangay.incidents?.some((i) => i.is_manual_pin) &&
+                                        !hoveredBarangay.normName?.startsWith('poly_') ? (
+                                            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
+                                                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                                                <div className="min-w-0">
+                                                    <span className="text-[10px] font-bold text-emerald-300 block leading-tight">
+                                                        Zero Incidents
+                                                    </span>
+                                                    <span className="text-[8.5px] text-slate-400 block truncate">
+                                                        Monitored Safe Zone
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ) : hoveredBarangay.dominantType && hoveredBarangay.dominantType !== 'None' ? (
+                                            <div className="p-2 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <span
+                                                        className="w-2 h-2 rounded-full shrink-0"
+                                                        style={{
+                                                            backgroundColor:
+                                                                hoveredBarangay.typeBreakdown[0]?.color ||
+                                                                hoveredBarangay.riskColor ||
+                                                                '#3B82F6',
+                                                        }}
+                                                    />
+                                                    <div className="min-w-0">
+                                                        <span className="text-[9px] text-slate-400 block leading-none font-medium">
+                                                            {hoveredBarangay.isManual ||
+                                                            hoveredBarangay.incidents?.some((i) => i.is_manual_pin) ||
+                                                            hoveredBarangay.normName?.startsWith('poly_')
+                                                                ? 'Hazard Type'
+                                                                : 'Dominant Type'}
+                                                        </span>
+                                                        <span className="text-[11px] font-bold text-white leading-snug break-words block mt-0.5">
+                                                            {hoveredBarangay.dominantType}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {!hoveredBarangay.isManual &&
+                                                !hoveredBarangay.incidents?.some((i) => i.is_manual_pin) &&
+                                                !hoveredBarangay.normName?.startsWith('poly_') &&
+                                                hoveredBarangay.dominantPercentage > 0 && (
+                                                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/10 text-slate-200 shrink-0">
+                                                        {hoveredBarangay.dominantPercentage}%
+                                                    </span>
+                                                )}
+                                            </div>
+                                        ) : null}
                                     </div>
                                 )}
 
                                 {/* ON-MAP FLOATING LEGEND (Bottom Left) */}
                                 {showRiskZones && (
-                                    <div className="absolute bottom-3 left-3 bg-[#0b1329]/90 border border-white/10 backdrop-blur-md rounded-xl px-3.5 py-2.5 shadow-2xl z-10 w-[236px] select-none pointer-events-auto transition-all">
-                                        <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-white/10">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                                    <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-[#0b1329]/90 border border-slate-200/90 dark:border-white/10 backdrop-blur-md rounded-xl px-3.5 py-2.5 shadow-2xl z-10 w-[236px] select-none pointer-events-auto transition-all">
+                                        <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-200 dark:border-white/10">
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-800 dark:text-slate-300">
                                                 Risk Classification
                                             </span>
-                                            <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">
+                                            <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                                 Incidents
                                             </span>
                                         </div>
                                         <div className="grid grid-cols-2 gap-x-3.5 gap-y-1.5 text-[10px]">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-1.5">
-                                                    <span className="w-2 h-2 rounded-full bg-[#E53935] shadow-[0_0_6px_#E53935] shrink-0" />
-                                                    <span className="text-slate-200 font-medium">High</span>
+                                                    <span className="w-2 h-2 rounded-full bg-[#EF4444] shadow-[0_0_6px_#EF4444] shrink-0" />
+                                                    <span className="text-slate-700 dark:text-slate-200 font-medium">High</span>
                                                 </div>
-                                                <span className="text-red-400 font-mono font-bold text-[10px]">
+                                                <span className="text-red-500 dark:text-red-400 font-mono font-bold text-[10px]">
                                                     {isSpecificEmergencyType ? '4+' : '9+'}
                                                 </span>
                                             </div>
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-1.5">
-                                                    <span className="w-2 h-2 rounded-full bg-[#FB8C00] shadow-[0_0_6px_#FB8C00] shrink-0" />
-                                                    <span className="text-slate-200 font-medium">Mod-High</span>
+                                                    <span className="w-2 h-2 rounded-full bg-[#F97316] shadow-[0_0_6px_#F97316] shrink-0" />
+                                                    <span className="text-slate-700 dark:text-slate-200 font-medium">Mod-High</span>
                                                 </div>
-                                                <span className="text-orange-400 font-mono font-bold text-[10px]">
+                                                <span className="text-orange-500 dark:text-orange-400 font-mono font-bold text-[10px]">
                                                     {isSpecificEmergencyType ? '3' : '5–8'}
                                                 </span>
                                             </div>
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-1.5">
-                                                    <span className="w-2 h-2 rounded-full bg-[#FDD835] shadow-[0_0_6px_#FDD835] shrink-0" />
-                                                    <span className="text-slate-200 font-medium">Moderate</span>
+                                                    <span className="w-2 h-2 rounded-full bg-[#FACC15] shadow-[0_0_6px_#FACC15] shrink-0" />
+                                                    <span className="text-slate-700 dark:text-slate-200 font-medium">Moderate</span>
                                                 </div>
-                                                <span className="text-yellow-300 font-mono font-bold text-[10px]">
+                                                <span className="text-yellow-600 dark:text-yellow-300 font-mono font-bold text-[10px]">
                                                     {isSpecificEmergencyType ? '2' : '3–4'}
                                                 </span>
                                             </div>
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-1.5">
-                                                    <span className="w-2 h-2 rounded-full bg-[#43A047] shadow-[0_0_6px_#43A047] shrink-0" />
-                                                    <span className="text-slate-200 font-medium">Low</span>
+                                                    <span className="w-2 h-2 rounded-full bg-[#3B82F6] shadow-[0_0_6px_#3B82F6] shrink-0" />
+                                                    <span className="text-slate-700 dark:text-slate-200 font-medium">Low</span>
                                                 </div>
-                                                <span className="text-emerald-400 font-mono font-bold text-[10px]">
+                                                <span className="text-blue-500 dark:text-blue-400 font-mono font-bold text-[10px]">
                                                     {isSpecificEmergencyType ? '1' : '1–2'}
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/10 text-[9.5px] text-slate-400">
+                                        <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200 dark:border-white/10 text-[9.5px] text-slate-500 dark:text-slate-400">
                                             <span className="flex items-center gap-1.5">
-                                                <span className="w-1.5 h-1.5 rounded-full border border-slate-500/80 shrink-0" />
-                                                <span>No incidents</span>
+                                                <span className="w-2 h-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_#22C55E] shrink-0" />
+                                                <span className="text-slate-700 dark:text-slate-200 font-medium">No incidents</span>
                                             </span>
-                                            <span className="text-slate-500 font-mono text-[9px]">No color</span>
+                                            <span className="text-emerald-500 dark:text-emerald-400 font-mono font-bold text-[10px]">0</span>
                                         </div>
                                     </div>
                                 )}
 
                                 {/* ON-MAP CONTROLS (Top Right) */}
-                                <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-10">
-                                    <button
-                                        type="button"
-                                        onClick={() => mapRef.current?.zoomIn()}
-                                        className="w-8 h-8 rounded-lg bg-[#0b1329]/90 hover:bg-slate-800 border border-white/15 text-slate-200 hover:text-white flex items-center justify-center font-bold text-sm shadow-md transition-colors"
-                                        title="Zoom In"
-                                    >
-                                        +
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => mapRef.current?.zoomOut()}
-                                        className="w-8 h-8 rounded-lg bg-[#0b1329]/90 hover:bg-slate-800 border border-white/15 text-slate-200 hover:text-white flex items-center justify-center font-bold text-sm shadow-md transition-colors"
-                                        title="Zoom Out"
-                                    >
-                                        −
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={resetMapView}
-                                        className="w-8 h-8 rounded-lg bg-[#0b1329]/90 hover:bg-slate-800 border border-white/15 text-cyan-300 hover:text-cyan-200 flex items-center justify-center shadow-md transition-colors"
-                                        title="Reset to Opol Extent"
-                                    >
-                                        <Compass className="w-4 h-4" />
-                                    </button>
+                                <div className="absolute top-3 right-3 z-10 flex items-start gap-2 pointer-events-auto">
+                                    {/* Map Style Switcher Segmented Control */}
+                                    <div className="bg-white/95 dark:bg-[#090e1a]/95 backdrop-blur-xl p-1 rounded-full border border-slate-200/90 dark:border-white/10 shadow-xl flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setMapStyleType('tactical')}
+                                            className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
+                                                mapStyleType === 'tactical'
+                                                    ? 'bg-red-600 text-white shadow-sm'
+                                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10'
+                                            }`}
+                                            title="Tactical Mode (adapts to Light / Dark mode)"
+                                        >
+                                            Tactical
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setMapStyleType('satellite')}
+                                            className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
+                                                mapStyleType === 'satellite'
+                                                    ? 'bg-red-600 text-white shadow-sm'
+                                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10'
+                                            }`}
+                                            title="Satellite Imagery"
+                                        >
+                                            Satellite
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setMapStyleType('streets')}
+                                            className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
+                                                mapStyleType === 'streets'
+                                                    ? 'bg-red-600 text-white shadow-sm'
+                                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10'
+                                            }`}
+                                            title="Daytime Streets Map"
+                                        >
+                                            Streets
+                                        </button>
+                                    </div>
+
+                                    {/* Zoom & Reset Controls */}
+                                    <div className="flex flex-col gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => mapRef.current?.zoomIn()}
+                                            className="w-8 h-8 rounded-lg bg-white/90 dark:bg-[#0b1329]/90 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-white/15 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white flex items-center justify-center font-bold text-sm shadow-md transition-colors cursor-pointer"
+                                            title="Zoom In"
+                                        >
+                                            +
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => mapRef.current?.zoomOut()}
+                                            className="w-8 h-8 rounded-lg bg-white/90 dark:bg-[#0b1329]/90 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-white/15 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white flex items-center justify-center font-bold text-sm shadow-md transition-colors cursor-pointer"
+                                            title="Zoom Out"
+                                        >
+                                            −
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={resetMapView}
+                                            className="w-8 h-8 rounded-lg bg-white/90 dark:bg-[#0b1329]/90 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-white/15 text-cyan-600 dark:text-cyan-300 hover:text-cyan-700 dark:hover:text-cyan-200 flex items-center justify-center shadow-md transition-colors cursor-pointer"
+                                            title="Reset to Opol Extent"
+                                        >
+                                            <Compass className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={toggleMapFullscreen}
+                                            className="w-8 h-8 rounded-lg bg-white/90 dark:bg-[#0b1329]/90 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-white/15 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white flex items-center justify-center shadow-md transition-colors cursor-pointer"
+                                            title={isMapFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen Map'}
+                                        >
+                                            {isMapFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -3086,10 +3270,10 @@ export default function AccidentHeatmapView({
                                                                 : `${inspectedIncidents.length} in 20m`)}
                                                     </span>
                                                 </div>
-                                                <h2 className="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate">
+                                                <h2 className="text-sm font-bold text-slate-900 dark:text-white leading-snug break-words" title={currentInspectedIncident.area_name || currentInspectedIncident.incident_type}>
                                                     {currentInspectedIncident.area_name || currentInspectedIncident.incident_type}
                                                 </h2>
-                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug break-words mt-0.5">
                                                     Brgy. {currentInspectedIncident.barangay || activeSelectedHotspot.barangay}
                                                 </p>
                                             </div>
@@ -3736,7 +3920,19 @@ export default function AccidentHeatmapView({
                                             </span>
                                         </div>
                                         <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                                            High-frequency incident areas ({minThreshold === 1 ? 'Showing all risk levels' : `Showing ${minThreshold}+ incidents`})
+                                            High-frequency incident areas ({
+                                                String(minThreshold) === '1' || String(minThreshold) === 'all'
+                                                    ? 'Showing all risk levels'
+                                                    : String(minThreshold) === 'low'
+                                                        ? `Showing Low Risk only (${isSpecificEmergencyType ? '1 incident' : '1–2 incidents'})`
+                                                        : String(minThreshold) === 'moderate_only'
+                                                            ? `Showing Moderate Risk only (${isSpecificEmergencyType ? '2 incidents' : '3–4 incidents'})`
+                                                            : String(minThreshold) === 'mod_high_only'
+                                                                ? `Showing Mod-High Risk only (${isSpecificEmergencyType ? '3 incidents' : '5–8 incidents'})`
+                                                                : String(minThreshold) === '4' || String(minThreshold) === '9' || String(minThreshold) === 'high'
+                                                                    ? `Showing High Risk only (${isSpecificEmergencyType ? '4+' : '9+'} incidents)`
+                                                                    : `Showing ${minThreshold}+ incidents`
+                                            })
                                         </p>
                                     </div>
 
@@ -3745,24 +3941,9 @@ export default function AccidentHeatmapView({
                                         {activeHotspots.length === 0 ? (
                                             <div className="py-14 px-4 text-center">
                                                 <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                                                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                                    No Hotspots at Threshold ≥{minThreshold}
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                    No incident hotspots recorded for this period.
                                                 </p>
-                                                <p className="text-[11px] text-slate-500 mt-1 mb-3">
-                                                    No geographical area has reached the selected recurring volume in this period.
-                                                </p>
-                                                {minThreshold > 1 && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setMinThreshold(1);
-                                                            applyFilters({ min_threshold: 1 });
-                                                        }}
-                                                        className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 dark:hover:bg-rose-500/25 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold transition-colors cursor-pointer"
-                                                    >
-                                                        Show Single Occurrences (≥1)
-                                                    </button>
-                                                )}
                                             </div>
                                         ) : (
                                             activeHotspots.map((spot, idx) => {
@@ -3777,18 +3958,18 @@ export default function AccidentHeatmapView({
                                                             }`}
                                                     >
                                                         <div className="flex items-start justify-between gap-2 mb-2">
-                                                            <div className="flex items-center gap-2 min-w-0">
+                                                            <div className="flex items-start gap-2 min-w-0 flex-1">
                                                                 <span
-                                                                    className="w-6 h-6 rounded-lg font-black text-xs flex items-center justify-center text-white shadow-sm shrink-0"
+                                                                    className="w-6 h-6 rounded-lg font-black text-xs flex items-center justify-center text-white shadow-sm shrink-0 mt-0.5"
                                                                     style={{ backgroundColor: spot.color }}
                                                                 >
                                                                     #{spot.rank ?? idx + 1}
                                                                 </span>
-                                                                <div className="min-w-0">
-                                                                    <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-tight truncate">
+                                                                <div className="min-w-0 flex-1">
+                                                                    <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-snug break-words" title={spot.location_name}>
                                                                         {spot.location_name}
                                                                     </h3>
-                                                                    <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">
+                                                                    <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium mt-0.5">
                                                                         Brgy. {spot.barangay}
                                                                     </p>
                                                                 </div>
@@ -3811,24 +3992,33 @@ export default function AccidentHeatmapView({
                                                             </span>
                                                         </div>
 
-                                                        <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-white dark:bg-slate-950/60 text-[10px] border border-slate-200/70 dark:border-white/5 mb-2">
-                                                            <div>
-                                                                <span className="text-slate-500 dark:text-slate-400 block text-[9px]">
-                                                                    Incident Count
-                                                                </span>
-                                                                <span className="font-extrabold text-amber-600 dark:text-amber-300 text-xs">
-                                                                    {spot.incident_count} Incidents
-                                                                </span>
-                                                            </div>
-                                                            <div>
-                                                                <span className="text-slate-500 dark:text-slate-400 block text-[9px]">
-                                                                    Dominant Type
-                                                                </span>
-                                                                <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">
-                                                                    {spot.most_common_type}
-                                                                </span>
-                                                            </div>
-                                                        </div>
+                                                        {(() => {
+                                                            const isManualSpot = Boolean(
+                                                                spot.incidents?.some((i) => i.is_manual_pin) ||
+                                                                spot.cluster_key?.startsWith('poly_') ||
+                                                                (spot as any).is_manual
+                                                            );
+                                                            return (
+                                                                <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-white dark:bg-slate-950/60 text-[10px] border border-slate-200/70 dark:border-white/5 mb-2">
+                                                                    <div>
+                                                                        <span className="text-slate-500 dark:text-slate-400 block text-[9px]">
+                                                                            {isManualSpot ? 'Area Type' : 'Incident Count'}
+                                                                        </span>
+                                                                        <span className={`font-extrabold text-xs ${isManualSpot ? 'text-violet-600 dark:text-violet-300' : 'text-amber-600 dark:text-amber-300'}`}>
+                                                                            {isManualSpot ? 'Prone Area' : `${spot.incident_count} Incidents`}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="text-slate-500 dark:text-slate-400 block text-[9px]">
+                                                                            {isManualSpot ? 'Hazard Type' : 'Dominant Type'}
+                                                                        </span>
+                                                                        <span className="font-bold text-slate-800 dark:text-slate-200 break-words leading-tight block" title={spot.most_common_type}>
+                                                                            {spot.most_common_type}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })()}
 
                                                         <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
                                                             <span>Click to zoom &amp; inspect</span>
@@ -3838,14 +4028,6 @@ export default function AccidentHeatmapView({
                                                 );
                                             })
                                         )}
-                                    </div>
-
-                                    {/* Right Panel Disclaimer Note */}
-                                    <div className="p-3 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed flex items-start gap-1.5">
-                                        <Info className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
-                                        <p>
-                                            Hotspots reflect historical incident density. Click any pin or hotspot to inspect complete details.
-                                        </p>
                                     </div>
                                 </>
                             )}

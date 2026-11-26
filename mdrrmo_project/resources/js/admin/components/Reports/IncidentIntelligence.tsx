@@ -12,10 +12,12 @@ import {
     ShieldAlert,
     CheckCircle2,
     XCircle,
-    ArrowUpRight
+    ArrowUpRight,
+    RotateCcw,
+    X
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 
 const PALETTE = [
     '#F61509', // MDRRMO Crimson
@@ -28,9 +30,23 @@ const PALETTE = [
     '#14b8a6', // Teal
 ];
 
-export default function IncidentIntelligence({ incidents = [] }: { incidents?: any[] }) {
+export default function IncidentIntelligence({ 
+    incidents = [],
+    filters = {}
+}: { 
+    incidents?: any[];
+    filters?: any;
+}) {
     const { theme } = useAppearance();
     const isDark = theme === 'dark';
+    const { props } = usePage<any>();
+
+    // Current active barangay filter
+    const activeBarangay: string =
+        filters?.barangay ||
+        props?.filters?.barangay ||
+        (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('barangay') || '' : '') ||
+        '';
 
     const [trendStyle, setTrendStyle] = useState<'area' | 'bar'>('area');
     const [pieStyle, setPieStyle] = useState<'donut' | 'polarArea'>('donut');
@@ -102,10 +118,32 @@ export default function IncidentIntelligence({ incidents = [] }: { incidents?: a
 
     const clearanceRate = totalReported > 0 ? Math.round((totalResolved / totalReported) * 100) : 0;
 
-    // Filter by clicking on a barangay
+    // Filter or toggle a barangay constraint
     const handleFilterBarangay = (brgyName: string) => {
         if (brgyName === 'Unknown / Unassigned') return;
-        router.get('/admin/reports', { barangay: brgyName }, { preserveState: true, replace: true });
+
+        // If clicking the already-filtered barangay, toggle it off to view all
+        if (activeBarangay && activeBarangay.toLowerCase() === brgyName.toLowerCase()) {
+            handleClearBarangayFilter();
+            return;
+        }
+
+        const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+        const currentQuery = Object.fromEntries(urlParams.entries());
+        currentQuery.barangay = brgyName;
+
+        const pathname = typeof window !== 'undefined' && window.location.pathname ? window.location.pathname : '/admin/reports';
+        router.get(pathname, currentQuery, { preserveState: true, replace: true });
+    };
+
+    // Clear the active barangay constraint and show all barangays
+    const handleClearBarangayFilter = () => {
+        const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+        urlParams.delete('barangay');
+        const query = Object.fromEntries(urlParams.entries());
+
+        const pathname = typeof window !== 'undefined' && window.location.pathname ? window.location.pathname : '/admin/reports';
+        router.get(pathname, query, { preserveState: true, replace: true });
     };
 
     // Trend chart options
@@ -417,10 +455,41 @@ export default function IncidentIntelligence({ incidents = [] }: { incidents?: a
                                 </p>
                             </div>
                         </div>
-                        <span className="text-xs font-semibold text-slate-400">
-                            {sortedBarangays.length} Areas
-                        </span>
+                        <div className="flex items-center gap-2">
+                            {activeBarangay ? (
+                                <button
+                                    type="button"
+                                    onClick={handleClearBarangayFilter}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 text-white shadow-sm shadow-red-600/30 transition-all cursor-pointer active:scale-95"
+                                    title="Clear barangay filter to see all areas"
+                                >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    <span>Show All Barangays</span>
+                                </button>
+                            ) : (
+                                <span className="text-xs font-semibold text-slate-400">
+                                    {sortedBarangays.length} Areas
+                                </span>
+                            )}
+                        </div>
                     </div>
+
+                    {activeBarangay && (
+                        <div className="mt-3 px-3 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-medium">
+                                <span className="flex h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                                <span>Currently showing only: <strong className="font-bold text-slate-900 dark:text-white capitalize">{activeBarangay}</strong></span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleClearBarangayFilter}
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline cursor-pointer"
+                            >
+                                <X className="w-3 h-3" />
+                                <span>Reset Filter</span>
+                            </button>
+                        </div>
+                    )}
 
                     <div className="pt-3 flex-1 overflow-x-auto">
                         <table className="w-full text-left border-collapse">
@@ -444,17 +513,28 @@ export default function IncidentIntelligence({ incidents = [] }: { incidents?: a
                                         stat.total > 0
                                             ? Math.round((stat.resolved / stat.total) * 100)
                                             : 0;
+                                    const isFiltered = !!(activeBarangay && activeBarangay.toLowerCase() === brgy.toLowerCase());
 
                                     return (
                                         <tr
                                             key={brgy}
-                                            className="hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors group text-xs"
+                                            className={clsx(
+                                                "transition-colors group text-xs",
+                                                isFiltered
+                                                    ? "bg-red-500/[0.06] dark:bg-red-500/[0.08]"
+                                                    : "hover:bg-slate-50/80 dark:hover:bg-white/[0.03]"
+                                            )}
                                         >
                                             <td className="py-2 px-3 font-mono font-bold text-slate-400">
                                                 {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
                                             </td>
                                             <td className="py-2 px-3 font-bold text-slate-900 dark:text-white">
                                                 {brgy}
+                                                {isFiltered && (
+                                                    <span className="ml-1.5 inline-block text-[10px] px-1.5 py-0.2 rounded font-normal bg-red-600/10 text-red-600 dark:text-red-400 border border-red-500/20">
+                                                        Active
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="py-2 px-3 text-center font-mono font-black text-slate-900 dark:text-white">
                                                 {stat.total}
@@ -481,15 +561,27 @@ export default function IncidentIntelligence({ incidents = [] }: { incidents?: a
                                                 </div>
                                             </td>
                                             <td className="py-2 px-3 text-right">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleFilterBarangay(brgy)}
-                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                                                    title="Filter by this Barangay"
-                                                >
-                                                    <span>Filter</span>
-                                                    <ArrowUpRight className="w-3 h-3" />
-                                                </button>
+                                                {isFiltered ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleClearBarangayFilter}
+                                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 transition-colors cursor-pointer"
+                                                        title="Click to remove filter and see all barangays"
+                                                    >
+                                                        <X className="w-3 h-3" />
+                                                        <span>Clear</span>
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleFilterBarangay(brgy)}
+                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors cursor-pointer"
+                                                        title="Filter by this Barangay"
+                                                    >
+                                                        <span>Filter</span>
+                                                        <ArrowUpRight className="w-3 h-3" />
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     );
@@ -498,7 +590,17 @@ export default function IncidentIntelligence({ incidents = [] }: { incidents?: a
                                 {sortedBarangays.length === 0 && (
                                     <tr>
                                         <td colSpan={6} className="py-8 text-center text-xs text-slate-400 italic">
-                                            No barangay activity records match the selected filters.
+                                            <p>No barangay activity records match the selected filters.</p>
+                                            {activeBarangay && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleClearBarangayFilter}
+                                                    className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-white/10 dark:hover:bg-white/15 dark:text-white transition-colors cursor-pointer"
+                                                >
+                                                    <RotateCcw className="w-3 h-3" />
+                                                    <span>View All Barangays</span>
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 )}

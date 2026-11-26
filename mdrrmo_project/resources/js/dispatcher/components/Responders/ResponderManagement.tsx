@@ -497,75 +497,7 @@ export default function ResponderManagement({
                 subtitle="Track permanent team assignments, standby relievers, and live emergency mission deployments."
             />
 
-            {/* 1. KPI Metric Summary Cards (Executive Overview) */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {/* Total Roster */}
-                <div className="p-3.5 rounded-2xl bg-white dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 shadow-xs">
-                    <span className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block">
-                        Total Personnel
-                    </span>
-                    <div className="flex items-baseline justify-between mt-1">
-                        <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                            {summary.total}
-                        </span>
-                        <span className="text-[10px] text-slate-400">Roster total</span>
-                    </div>
-                </div>
-
-                {/* Ready / Available */}
-                <div className="p-3.5 rounded-2xl bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06] border border-emerald-500/20 shadow-xs">
-                    <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                        <span className="text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-400 font-semibold">
-                            Available / Standby
-                        </span>
-                    </div>
-                    <div className="flex items-baseline justify-between mt-1">
-                        <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 tracking-tight">
-                            {summary.available}
-                        </span>
-                        <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 font-medium">
-                            Ready to deploy
-                        </span>
-                    </div>
-                </div>
-
-                {/* Deployed on Mission */}
-                <div className="p-3.5 rounded-2xl bg-cyan-500/[0.04] dark:bg-cyan-500/[0.06] border border-cyan-500/20 shadow-xs">
-                    <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse shrink-0" />
-                        <span className="text-[11px] uppercase tracking-wider text-cyan-700 dark:text-cyan-400 font-semibold">
-                            Active Mission
-                        </span>
-                    </div>
-                    <div className="flex items-baseline justify-between mt-1">
-                        <span className="text-2xl font-black text-cyan-700 dark:text-cyan-300 tracking-tight">
-                            {summary.assigned}
-                        </span>
-                        <span className="text-[10px] text-cyan-600/70 dark:text-cyan-400/60 font-medium">
-                            Dispatched crew
-                        </span>
-                    </div>
-                </div>
-
-                {/* Offline Personnel */}
-                <div className="p-3.5 rounded-2xl bg-white dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 shadow-xs">
-                    <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
-                        <span className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
-                            Offline
-                        </span>
-                    </div>
-                    <div className="flex items-baseline justify-between mt-1">
-                        <span className="text-2xl font-black text-slate-700 dark:text-slate-300 tracking-tight">
-                            {summary.offline ?? 0}
-                        </span>
-                        <span className="text-[10px] text-slate-400">Off duty / Standby</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* 2. Main Card with Search & Multi-Filter Toolbar */}
+            {/* Main Card with Search & Multi-Filter Toolbar */}
             <Card padding={false}>
                 <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] flex flex-col gap-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">

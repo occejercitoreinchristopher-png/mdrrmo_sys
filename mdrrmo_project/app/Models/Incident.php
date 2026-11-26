@@ -29,7 +29,23 @@ class Incident extends Model
 
     public function getDescriptionAttribute(): ?string
     {
-        return $this->attributes['incident_description'] ?? null;
+        $desc = $this->attributes['incident_description'] ?? null;
+        if (! $desc) {
+            return null;
+        }
+
+        // If it starts with "[Chief Complaint]", strip the bracketed chief complaint so only the actual narrative description remains:
+        if (preg_match('/^\[(.*?)\]\s*(.*)$/s', $desc, $matches)) {
+            $pureDesc = trim($matches[2]);
+            return $pureDesc !== '' ? $pureDesc : null;
+        }
+
+        // If it is the legacy auto-generated phone boilerplate, don't return it as user-entered description:
+        if (str_starts_with($desc, 'Reported via Phone/SIM Call') || str_starts_with($desc, 'Reported via Phone')) {
+            return null;
+        }
+
+        return $desc;
     }
 
     public function getChiefComplaintAttribute(): ?string
@@ -38,12 +54,16 @@ class Incident extends Model
             return $this->pcr_chief_complaint;
         }
 
-        $desc = $this->attributes['incident_description'] ?? null;
-        if ($desc && preg_match('/^\[(.*?)\]/', $desc, $matches)) {
-            return $matches[1];
+        if (! empty($this->attributes['reported_chief_complaint'])) {
+            return $this->attributes['reported_chief_complaint'];
         }
 
-        return $desc ?? $this->incidentType?->incident_type_name ?? null;
+        $desc = $this->attributes['incident_description'] ?? null;
+        if ($desc && preg_match('/^\[(.*?)\]/', $desc, $matches) && ! empty(trim($matches[1]))) {
+            return trim($matches[1]);
+        }
+
+        return null;
     }
 
     public function getPlaceOfIncidentAttribute(): ?string

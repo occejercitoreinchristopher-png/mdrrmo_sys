@@ -10,6 +10,8 @@ import {
     Check,
     Search,
     X,
+    AlertTriangle,
+    Eye,
 } from 'lucide-react';
 import DispatcherLayout from '@/dispatcher/layouts/DispatcherLayout';
 import PageHeader from '@/shared/components/PageHeader';
@@ -18,6 +20,7 @@ import Button from '@/shared/components/Button';
 import Pagination from '@/shared/components/Pagination';
 import Select from '@/shared/components/Select';
 import { toPascalCase } from '@/shared/utils/utils';
+import CallerHistoryModal from '@/dispatcher/components/Residents/CallerHistoryModal';
 
 interface Barangay {
     id: number;
@@ -62,6 +65,7 @@ interface SimCallerIncident {
     reported_at?: string | null;
     last_called_at?: string | null;
     total_calls?: number;
+    prank_count?: number;
     place_of_incident?: string | null;
     incident_address?: string | null;
     incident_type?: { incident_type_name?: string; name?: string } | null;
@@ -114,6 +118,7 @@ export default function ResidentsPage({
     const [simSearch, setSimSearch] = useState(filters.sim_search || '');
     const [debouncedSimSearch, setDebouncedSimSearch] = useState(simSearch);
     const [copiedId, setCopiedId] = useState<number | string | null>(null);
+    const [selectedHistoryCaller, setSelectedHistoryCaller] = useState<{ phone: string; name: string } | null>(null);
     const [isPending, startTransition] = useTransition();
 
     const residentList = residents?.data || [];
@@ -582,21 +587,15 @@ export default function ResidentsPage({
 
                                                     {/* Status Badge */}
                                                     <td className="px-5 py-3.5">
-                                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25">
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-white/10">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500" />
                                                             <span className="capitalize">{status}</span>
                                                         </div>
                                                     </td>
 
                                                     {/* Reported Incidents */}
                                                     <td className="px-5 py-3.5 text-center">
-                                                        <span
-                                                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                                                res.reported_incidents_count > 0
-                                                                    ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'
-                                                                    : 'bg-slate-100 dark:bg-white/5 text-slate-500 border border-slate-200/60 dark:border-white/5'
-                                                            }`}
-                                                        >
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/10">
                                                             {res.reported_incidents_count}{' '}
                                                             {res.reported_incidents_count === 1 ? 'report' : 'reports'}
                                                         </span>
@@ -715,30 +714,36 @@ export default function ResidentsPage({
                             <table className="w-full text-left text-sm">
                                 <thead>
                                     <tr className="border-b border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
-                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                             Caller
                                         </th>
-                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                             Phone Number
                                         </th>
-                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 text-center">
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 text-center whitespace-nowrap">
                                             Total Calls
                                         </th>
-                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 text-center whitespace-nowrap">
+                                            Prank Calls
+                                        </th>
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                             Last Incident Type
                                         </th>
-                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                             Location
                                         </th>
-                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                             Last Called
+                                        </th>
+                                        <th className="px-5 py-3.5 text-[11px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">
+                                            Action
                                         </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200/80 dark:divide-white/5">
                                     {simCallerList.length === 0 ? (
                                         <tr>
-                                            <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400">
+                                            <td colSpan={8} className="py-12 text-center text-slate-500 dark:text-slate-400">
                                                 <div className="flex flex-col items-center justify-center gap-1.5">
                                                     <p className="text-sm font-semibold text-slate-900 dark:text-white">
                                                         No Anonymous Callers Found
@@ -775,6 +780,7 @@ export default function ResidentsPage({
                                                       })
                                                     : '—';
                                             const callCount = inc.total_calls ?? 1;
+                                            const prankCount = Number(inc.prank_count ?? 0);
 
                                             return (
                                                 <tr
@@ -830,9 +836,9 @@ export default function ResidentsPage({
                                                     </td>
 
                                                     {/* Total Calls */}
-                                                    <td className="px-5 py-3.5 text-center">
+                                                    <td className="px-5 py-3.5 text-center whitespace-nowrap">
                                                         <span
-                                                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${
                                                                 callCount >= 5
                                                                     ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/25'
                                                                     : callCount >= 3
@@ -844,19 +850,56 @@ export default function ResidentsPage({
                                                         </span>
                                                     </td>
 
+                                                    {/* Prank Calls */}
+                                                    <td className="px-5 py-3.5 text-center whitespace-nowrap">
+                                                        {prankCount > 0 ? (
+                                                            <span
+                                                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30 whitespace-nowrap"
+                                                                title={`${prankCount} confirmed prank ${prankCount === 1 ? 'call' : 'calls'}`}
+                                                            >
+                                                                <AlertTriangle className="w-3 h-3 text-rose-600 dark:text-rose-400 shrink-0" />
+                                                                {prankCount}x {prankCount === 1 ? 'Prank' : 'Pranks'}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/10 whitespace-nowrap">
+                                                                0
+                                                            </span>
+                                                        )}
+                                                    </td>
+
                                                     {/* Incident Type */}
-                                                    <td className="px-5 py-3.5 text-xs text-slate-700 dark:text-slate-300">
-                                                        <span className="font-medium">{incidentTypeName}</span>
+                                                    <td className="px-5 py-3.5 text-xs text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                                        <span className="font-medium whitespace-nowrap">{incidentTypeName}</span>
                                                     </td>
 
                                                     {/* Location */}
-                                                    <td className="px-5 py-3.5 text-xs text-slate-600 dark:text-slate-400 max-w-[220px]">
-                                                        <span className="truncate block">{location}</span>
+                                                    <td className="px-5 py-3.5 text-xs text-slate-600 dark:text-slate-400 min-w-[200px] max-w-[280px]">
+                                                        <span className="line-clamp-2 break-words leading-snug block" title={location}>
+                                                            {location}
+                                                        </span>
                                                     </td>
 
                                                     {/* Last Called */}
-                                                    <td className="px-5 py-3.5 text-xs text-slate-600 dark:text-slate-400 font-mono">
+                                                    <td className="px-5 py-3.5 text-xs text-slate-600 dark:text-slate-400 font-mono whitespace-nowrap">
                                                         {lastCalled}
+                                                    </td>
+
+                                                    {/* Action */}
+                                                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setSelectedHistoryCaller({
+                                                                    phone: inc.caller_phone_number || '',
+                                                                    name: callerName,
+                                                                });
+                                                            }}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/20 transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap shrink-0"
+                                                            title="View all past reports and call history"
+                                                        >
+                                                            <Eye className="w-3.5 h-3.5 shrink-0" />
+                                                            <span className="whitespace-nowrap">View History</span>
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             );
@@ -892,6 +935,14 @@ export default function ResidentsPage({
                     </Card>
                 )}
             </div>
+
+            {/* Caller Incident History Modal */}
+            <CallerHistoryModal
+                open={Boolean(selectedHistoryCaller)}
+                onClose={() => setSelectedHistoryCaller(null)}
+                phone={selectedHistoryCaller?.phone || null}
+                callerName={selectedHistoryCaller?.name || null}
+            />
         </DispatcherLayout>
     );
 }

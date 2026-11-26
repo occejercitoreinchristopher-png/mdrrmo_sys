@@ -29,14 +29,94 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
     const callerPhone = incident.caller_phone_number || resident?.phone_number || 'N/A';
     const reportSource = (incident.report_source === 'dispatcher' || incident.report_source === 'phone_sim' ? 'Hotline Call-In (Dispatcher)' : (incident.report_source === 'resident_app' ? 'MDRRMO Resident Mobile App' : (incident.report_source || 'Citizen Report')));
 
-    // Location
-    const placeOfIncident = incident.place_of_incident || incident.location || 'N/A';
-    const address = incident.incident_address || incident.location || 'Opol, Misamis Oriental';
-    const barangay = incident.barangay || resident?.residentProfile?.barangay?.barangay_name || 'Opol';
-    const coordinates = incident.incident_latitude && incident.incident_longitude 
-        ? `${Number(incident.incident_latitude).toFixed(6)}, ${Number(incident.incident_longitude).toFixed(6)}`
-        : 'N/A';
-    const locationCode = incident.location_code || incident.location_code_id || 'N/A';
+    // Location & Complete Address Resolution (Guaranteed Full Human-Readable Address)
+    let rawBarangay = '';
+    if (typeof incident.barangay === 'string') {
+        rawBarangay = incident.barangay.trim();
+    } else if (incident.barangay && typeof incident.barangay === 'object') {
+        rawBarangay = (incident.barangay.barangay_name || incident.barangay.name || '').trim();
+    }
+    if (!rawBarangay) {
+        rawBarangay = (resident?.residentProfile?.barangay?.barangay_name
+            || resident?.resident_profile?.barangay?.barangay_name
+            || resident?.barangay?.barangay_name
+            || (typeof incident.location_code === 'object' ? incident.location_code?.barangay?.barangay_name : '')
+            || '').trim();
+    }
+    const cleanBName = rawBarangay.replace(/^(barangay|brgy\.?)\s+/i, '').trim();
+    const barangay = cleanBName || 'Opol';
+
+    const locationCode = typeof incident.location_code === 'object' && incident.location_code !== null
+        ? (incident.location_code.location_code || incident.location_code.code || 'N/A')
+        : (incident.location_code || incident.location_code_id || 'N/A');
+
+    const rawPlace = (typeof incident.place_of_incident === 'string' ? incident.place_of_incident : (typeof incident.location === 'string' ? incident.location : '')).trim();
+    const rawAddress = (typeof incident.incident_address === 'string' ? incident.incident_address : '').trim();
+
+    const resProfile = resident?.residentProfile || resident?.resident_profile;
+    const residentPurok = (resProfile?.purok || resProfile?.zone || '').trim();
+    const residentStreet = (resProfile?.street || '').trim();
+    const residentFullAddr = (resProfile?.address || resident?.address || '').trim();
+
+    // Determine specific landmark or place (filter out generic "Opol, Misamis Oriental" or coordinate strings)
+    let specificLandmark = rawPlace;
+    if (
+        !specificLandmark ||
+        specificLandmark.toLowerCase().includes('pinpointed location') ||
+        specificLandmark.toLowerCase() === 'opol, misamis oriental' ||
+        specificLandmark.toLowerCase() === 'opol' ||
+        specificLandmark.toLowerCase() === 'n/a'
+    ) {
+        specificLandmark = '';
+    }
+
+    // Determine base complete address
+    let completeAddress = '';
+    if (
+        rawAddress &&
+        rawAddress.toLowerCase() !== 'opol, misamis oriental' &&
+        rawAddress.toLowerCase() !== 'opol' &&
+        !rawAddress.toLowerCase().includes('pinpointed location')
+    ) {
+        completeAddress = rawAddress;
+    } else if (specificLandmark) {
+        completeAddress = specificLandmark;
+    } else if (
+        residentFullAddr &&
+        residentFullAddr.toLowerCase() !== 'opol, misamis oriental' &&
+        residentFullAddr.toLowerCase() !== 'opol'
+    ) {
+        completeAddress = residentFullAddr;
+    }
+
+    // Ensure Barangay is part of the complete address
+    if (cleanBName) {
+        const hasBarangay = completeAddress.toLowerCase().includes(cleanBName.toLowerCase());
+        if (!hasBarangay) {
+            const prefixParts: string[] = [];
+            if (completeAddress && completeAddress.toLowerCase() !== 'opol, misamis oriental' && completeAddress.toLowerCase() !== 'opol') {
+                prefixParts.push(completeAddress);
+            } else {
+                if (residentPurok) prefixParts.push(residentPurok.toLowerCase().startsWith('zone') || residentPurok.toLowerCase().startsWith('purok') ? residentPurok : `Zone ${residentPurok}`);
+                if (residentStreet) prefixParts.push(residentStreet);
+            }
+            if (prefixParts.length > 0) {
+                completeAddress = `${prefixParts.join(', ')}, Barangay ${cleanBName}`;
+            } else {
+                completeAddress = `Barangay ${cleanBName}`;
+            }
+        }
+    }
+
+    // Ensure Municipality and Province are included
+    if (!completeAddress.toLowerCase().includes('opol')) {
+        completeAddress = completeAddress ? `${completeAddress}, Opol, Misamis Oriental` : 'Opol, Misamis Oriental';
+    } else if (!completeAddress.toLowerCase().includes('misamis oriental')) {
+        completeAddress = `${completeAddress}, Misamis Oriental`;
+    }
+
+    const address = completeAddress;
+    const placeOfIncident = specificLandmark || completeAddress;
 
     // Dispatcher / Handler
     const logs = incident.dispatch_logs || [];
@@ -221,6 +301,101 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
             isGrayscale: Boolean(img.is_grayscale),
         });
     });
+
+    // Collect Patients & Casualties attached to this incident (from PCRs and direct patient record)
+    const patients: Array<{
+        name: string;
+        ageGender: string;
+        address: string;
+        chiefComplaint: string;
+        triage: string;
+        hospital: string;
+        pcrRef: string;
+    }> = [];
+    const seenPatientKeys = new Set<string>();
+
+    const recordPatient = (pcr: any) => {
+        if (!pcr || typeof pcr !== 'object') return;
+        const patient = pcr.patient || {};
+
+        const firstName = patient.first_name || patient.patient_first_name || pcr.patient_first_name || '';
+        const lastName = patient.last_name || patient.patient_last_name || pcr.patient_last_name || '';
+        const fullName = [firstName, lastName].filter(Boolean).join(' ')
+            || patient.full_name
+            || patient.name
+            || pcr.patient_name
+            || 'Unidentified Patient';
+
+        const age = patient.age ?? pcr.patient_age ?? pcr.age ?? '';
+        const gender = patient.gender ?? patient.patient_gender ?? pcr.patient_gender ?? pcr.gender ?? '';
+        const ageGender = [age !== '' && age !== null && age !== undefined ? `${age} yrs old` : '', gender ? String(gender).toUpperCase() : ''].filter(Boolean).join(' / ') || '—';
+
+        const address = patient.address
+            || patient.home_address
+            || (typeof patient.barangay === 'object' ? patient.barangay?.barangay_name : patient.barangay)
+            || pcr.patient_address
+            || '—';
+
+        const chiefComplaint = pcr.clinical_chief_complaint
+            || pcr.chief_complaint
+            || pcr.nature_of_injury_illness
+            || incident.chief_complaint
+            || '—';
+
+        const triage = pcr.triage_tag
+            || pcr.triage_category
+            || pcr.priority
+            || '—';
+
+        const hospital = pcr.hospital_destination
+            || pcr.destination_facility
+            || pcr.destination_hospital
+            || pcr.transport_disposition
+            || '—';
+
+        const pcrRef = pcr.pcr_number ? `PCR #${pcr.pcr_number}` : (pcr.id ? `PCR #${pcr.id}` : 'Field PCR');
+
+        const key = `${fullName}_${age}_${gender}_${chiefComplaint}`.toLowerCase();
+        if (seenPatientKeys.has(key)) return;
+        seenPatientKeys.add(key);
+
+        patients.push({
+            name: fullName,
+            ageGender,
+            address,
+            chiefComplaint,
+            triage,
+            hospital,
+            pcrRef,
+        });
+    };
+
+    dispatches.forEach((d: any) => {
+        if (d.patient_care_record) recordPatient(d.patient_care_record);
+        if (d.patientCareRecord) recordPatient(d.patientCareRecord);
+        if (Array.isArray(d.patient_care_records)) d.patient_care_records.forEach((p: any) => recordPatient(p));
+        if (Array.isArray(d.patientCareRecords)) d.patientCareRecords.forEach((p: any) => recordPatient(p));
+    });
+
+    if (Array.isArray(incident.patient_care_records)) incident.patient_care_records.forEach((p: any) => recordPatient(p));
+    if (Array.isArray(incident.patientCareRecords)) incident.patientCareRecords.forEach((p: any) => recordPatient(p));
+    if (incident.patient_care_record) recordPatient(incident.patient_care_record);
+    if (incident.patientCareRecord) recordPatient(incident.patientCareRecord);
+    if (incident.patient && typeof incident.patient === 'object') recordPatient({ patient: incident.patient });
+    if (Array.isArray(incident.patients)) incident.patients.forEach((pt: any) => recordPatient({ patient: pt }));
+    if (incident.patient_name) {
+        recordPatient({
+            patient_name: incident.patient_name,
+            patient_age: incident.patient_age,
+            patient_gender: incident.patient_gender,
+            patient_address: incident.patient_address,
+            chief_complaint: incident.chief_complaint,
+        });
+    }
+
+    const secPatientNum = incident.incident_status === 'rejected' ? 5 : 4;
+    const secUnitsNum = incident.incident_status === 'rejected' ? 6 : 5;
+    const secTimelineNum = incident.incident_status === 'rejected' ? 7 : 6;
 
     const hasPhotos = evidencePhotos.length > 0;
     const totalPagesInitial = hasPhotos ? 2 : 1;
@@ -779,25 +954,26 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
             <div class="data-card">
                 <div class="field-label">Caller / Reporting Resident</div>
                 <div class="field-value">${callerName}</div>
-                <div style="font-size:8.5px; color:#475569;">Contact: ${callerPhone}</div>
+                <div style="font-size:8.5px; color:#475569;">Report Channel: ${reportSource}</div>
             </div>
             <div class="data-card">
-                <div class="field-label">Barangay Jurisdiction</div>
-                <div class="field-value">${barangay}</div>
-                <div style="font-size:8.5px; color:#475569;">Location Code / Marker: ${locationCode}</div>
+                <div class="field-label">Phone Number</div>
+                <div class="field-value">${callerPhone}</div>
+                <div style="font-size:8.5px; color:#475569;">Barangay Jurisdiction: ${barangay}${locationCode !== 'N/A' ? ` &bull; Marker: ${locationCode}` : ''}</div>
             </div>
         </div>
 
-        <div class="grid-2" style="margin-top: 4px;">
+        <div style="margin-top: 4px;">
             <div class="data-card">
-                <div class="field-label">Exact Place / Landmark of Incident</div>
-                <div class="field-value">${placeOfIncident}</div>
-                <div style="font-size:8.5px; color:#475569;">Full Address: ${address}</div>
-            </div>
-            <div class="data-card">
-                <div class="field-label">GPS Coordinates</div>
-                <div class="field-value">${coordinates}</div>
-                <div style="font-size:8.5px; color:#475569;">Source: ${incident.location_source || 'Resident GPS'}</div>
+                <div class="field-label">Incident Location</div>
+                <div class="field-value" style="font-size: 10px; font-weight: 700; color: #0f172a;">
+                    ${escapeHtml(completeAddress)}
+                </div>
+                ${specificLandmark && specificLandmark !== completeAddress ? `
+                    <div style="font-size: 8.5px; color: #475569; margin-top: 2px;">
+                        Exact Place / Landmark: <strong>${escapeHtml(specificLandmark)}</strong>
+                    </div>
+                ` : ''}
             </div>
         </div>
 
@@ -821,8 +997,60 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
         </div>
         ` : ''}
 
+        <!-- Section: Patient & Casualty Information -->
+        <div class="section-title">${secPatientNum}. Patient &amp; Casualty Information</div>
+        ${patients.length === 0 ? `
+            <div class="data-card" style="text-align: center; color: #64748b; font-style: italic; padding: 4px; font-size: 8.5px;">
+                No patient care records (PCR) or casualty details recorded for this incident.
+            </div>
+        ` : `
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">Patient Full Name</th>
+                        <th style="width: 14%;">Age / Sex</th>
+                        <th style="width: 29%;">Chief Complaint / Clinical Notes</th>
+                        <th style="width: 14%;">Triage Tag</th>
+                        <th style="width: 18%;">Transport Destination</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${patients.map((p: any) => {
+                        const trgLower = (p.triage || '').toLowerCase();
+                        let badgeBg = '#f1f5f9';
+                        let badgeColor = '#475569';
+                        if (trgLower.includes('red') || trgLower.includes('immediate') || trgLower.includes('critical')) {
+                            badgeBg = '#fee2e2'; badgeColor = '#b91c1c';
+                        } else if (trgLower.includes('yellow') || trgLower.includes('delayed') || trgLower.includes('urgent')) {
+                            badgeBg = '#fef3c7'; badgeColor = '#b45309';
+                        } else if (trgLower.includes('green') || trgLower.includes('minor') || trgLower.includes('non-urgent')) {
+                            badgeBg = '#dcfce7'; badgeColor = '#15803d';
+                        } else if (trgLower.includes('black') || trgLower.includes('expectant') || trgLower.includes('deceased')) {
+                            badgeBg = '#1e293b'; badgeColor = '#ffffff';
+                        }
+                        return `
+                            <tr>
+                                <td style="font-weight: bold;">
+                                    ${escapeHtml(p.name)}
+                                    <div style="font-size: 7.5px; color: #64748b; font-weight: normal;">${escapeHtml(p.pcrRef)}${p.address !== '—' ? ` &bull; ${escapeHtml(p.address)}` : ''}</div>
+                                </td>
+                                <td>${escapeHtml(p.ageGender)}</td>
+                                <td>${escapeHtml(p.chiefComplaint)}</td>
+                                <td>
+                                    <span class="status-badge" style="background: ${badgeBg}; color: ${badgeColor};">
+                                        ${escapeHtml(p.triage)}
+                                    </span>
+                                </td>
+                                <td>${escapeHtml(p.hospital)}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `}
+
         <!-- Section: Dispatched Units -->
-        <div class="section-title">4. Emergency Units &amp; Personnel Dispatched</div>
+        <div class="section-title">${secUnitsNum}. Emergency Units &amp; Personnel Dispatched</div>
         ${dispatches.length === 0 ? `
             <div class="data-card" style="text-align: center; color: #64748b; font-style: italic; padding: 4px; font-size: 8.5px;">
                 ${incident.incident_status === 'rejected' ? 'No emergency units dispatched (Incident was rejected/cancelled prior to deployment).' : 'No ambulance units currently assigned to this incident.'}
@@ -863,7 +1091,7 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
         `}
 
         <!-- Section: Chronological Audit Log -->
-        <div class="section-title">5. Chronological Incident Audit Trail &amp; Timeline</div>
+        <div class="section-title">${secTimelineNum}. Chronological Incident Audit Trail &amp; Timeline</div>
         <table class="report-table">
             <thead>
                 <tr>
@@ -923,7 +1151,7 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
 
         <!-- Title Bar -->
         <div class="doc-title-bar">
-            <span>INCIDENT PHOTO EVIDENCE ATTACHMENT (${evidencePhotos.length} PHOTO${evidencePhotos.length > 1 ? 'S' : ''})</span>
+            <span>INCIDENT PHOTO EVIDENCE ATTACHMENT</span>
             <span>REF: ${escapeHtml(refNumber)}</span>
         </div>
 
@@ -934,8 +1162,8 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
                 <div class="field-value">${escapeHtml(incidentType)}</div>
             </div>
             <div class="data-card">
-                <div class="field-label">Location / Barangay</div>
-                <div class="field-value">${escapeHtml(address)} (Brgy. ${escapeHtml(barangay)})</div>
+                <div class="field-label">Incident Location</div>
+                <div class="field-value">${escapeHtml(completeAddress)}</div>
             </div>
             <div class="data-card">
                 <div class="field-label">Date &amp; Time Reported</div>

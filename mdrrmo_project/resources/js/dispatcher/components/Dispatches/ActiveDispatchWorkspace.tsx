@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useContext, useRef, useMemo } from 'r
 import { router } from '@inertiajs/react';
 import { 
     AlertCircle, MapPin, Truck, User as UserIcon, Users, Clock, Search, ShieldAlert, 
-    Activity, Stethoscope, FileText, ChevronDown, Maximize2, X, CheckCircle, 
-    XCircle, Compass, Navigation, AlertTriangle, ExternalLink, Radio, Shield, 
+    Activity, Stethoscope, FileText, ChevronDown, ChevronUp, Maximize2, X, CheckCircle, 
+    XCircle, AlertTriangle, ExternalLink, Radio, Shield, 
     Flame, Car, Phone, Eye, Sparkles, Filter, Check, HeartPulse, Send, Building2,
     CheckCircle2
 } from 'lucide-react';
@@ -64,11 +64,19 @@ export default function ActiveDispatchWorkspace({
         return initial;
     });
 
-    // 5-second ticker to increment 'Last updated X seconds ago' and 10-second background sync fallback
+    // 5-second ticker to increment 'Last updated X seconds ago' and 8-second background sync fallback with overlap guard
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(Date.now()), 5000);
+        let isPolling = false;
         const pollTimer = setInterval(() => {
-            router.reload({ only: ['dispatches', 'verifiedIncidents', 'ambulances', 'responders'] });
+            if (isPolling) return; // Prevent request pile-up during slow network latency
+            isPolling = true;
+            router.reload({
+                only: ['dispatches', 'verifiedIncidents', 'ambulances', 'responders'],
+                onFinish: () => {
+                    isPolling = false;
+                }
+            });
         }, 8000);
         return () => {
             clearInterval(timer);
@@ -106,21 +114,39 @@ export default function ActiveDispatchWorkspace({
                 const lat = parseFloat(e.latitude ?? e.ambulance?.latitude);
                 const lng = parseFloat(e.longitude ?? e.ambulance?.longitude);
                 if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                    const incomingMs = typeof e.sequence === 'number' && e.sequence > 0
+                        ? e.sequence
+                        : (e.timestamp ? new Date(e.timestamp).getTime() : Date.now());
+
                     const locData = {
                         latitude: lat,
                         longitude: lng,
                         heading: e.heading ? parseFloat(e.heading) : null,
                         accuracy: e.accuracy ? parseFloat(e.accuracy) : null,
                         timestamp: e.timestamp || new Date().toISOString(),
-                        updatedAt: Date.now(),
+                        sequence: incomingMs,
+                        updatedAt: incomingMs,
                         responder_name: e.responder_name,
                     };
-                    setLiveLocations(prev => ({
-                        ...prev,
-                        ...(e.dispatch_id ? { [e.dispatch_id]: locData } : {}),
-                        ...(e.ambulance_id ? { [e.ambulance_id]: locData } : {}),
-                        ...(e.ambulance?.id ? { [e.ambulance.id]: locData } : {}),
-                    }));
+
+                    setLiveLocations(prev => {
+                        // Monotonic Guard: check existing location for this dispatch or ambulance
+                        const targetKey = e.dispatch_id || e.ambulance_id || e.ambulance?.id;
+                        const existing = targetKey ? prev[targetKey] : null;
+                        const existingMs = existing?.sequence || existing?.updatedAt || (existing?.timestamp ? new Date(existing.timestamp).getTime() : 0);
+
+                        // If an out-of-order or delayed packet arrives that is older than what is currently rendered, ignore it
+                        if (existing && existingMs > 0 && incomingMs < existingMs) {
+                            return prev;
+                        }
+
+                        return {
+                            ...prev,
+                            ...(e.dispatch_id ? { [e.dispatch_id]: locData } : {}),
+                            ...(e.ambulance_id ? { [e.ambulance_id]: locData } : {}),
+                            ...(e.ambulance?.id ? { [e.ambulance.id]: locData } : {}),
+                        };
+                    });
                 }
             };
 
@@ -149,29 +175,38 @@ export default function ActiveDispatchWorkspace({
     }, []);
 
     // Keep liveLocations synchronized whenever dispatches prop updates with coordinates
+    // Guard against overwriting live WebSocket tracking with older HTTP polling database snapshots
     useEffect(() => {
         dispatches.forEach(d => {
             const lat = parseFloat(d.last_latitude);
             const lng = parseFloat(d.last_longitude);
             if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                const dbTimeMs = d.last_location_updated_at ? new Date(d.last_location_updated_at).getTime() : 0;
                 const loc = {
                     latitude: lat,
                     longitude: lng,
                     heading: d.last_heading ? parseFloat(d.last_heading) : null,
                     accuracy: d.last_accuracy ? parseFloat(d.last_accuracy) : null,
                     timestamp: d.last_location_updated_at,
-                    updatedAt: d.last_location_updated_at ? new Date(d.last_location_updated_at).getTime() : Date.now(),
+                    sequence: dbTimeMs,
+                    updatedAt: dbTimeMs,
                 };
+
                 setLiveLocations(prev => {
-                    const existing = prev[d.id];
-                    if (!existing || !existing.updatedAt || loc.updatedAt >= existing.updatedAt) {
-                        return {
-                            ...prev,
-                            [d.id]: loc,
-                            ...(d.ambulance_id ? { [d.ambulance_id]: loc } : {})
-                        };
+                    const existing = prev[d.id] || (d.ambulance_id ? prev[d.ambulance_id] : null);
+                    const existingMs = existing?.sequence || existing?.updatedAt || (existing?.timestamp ? new Date(existing.timestamp).getTime() : 0);
+
+                    // POLLING CONFLICT GUARD: If the existing coordinate was set by a live WebSocket update
+                    // and its timestamp is newer than or equal to this polling snapshot, DO NOT overwrite!
+                    if (existing && existingMs > 0 && dbTimeMs <= existingMs) {
+                        return prev;
                     }
-                    return prev;
+
+                    return {
+                        ...prev,
+                        [d.id]: loc,
+                        ...(d.ambulance_id ? { [d.ambulance_id]: loc } : {})
+                    };
                 });
             }
         });
@@ -407,109 +442,13 @@ export default function ActiveDispatchWorkspace({
 
     return (
         <div className="h-full flex-1 flex flex-col min-h-0 max-w-[1850px] mx-auto w-full overflow-hidden">
-            {/* EXECUTIVE COMMAND TELEMETRY RIBBON */}
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 shrink-0 mb-3.5">
-                {/* 1. Active Responses */}
-                <div 
-                    onClick={() => setViewFilter('dispatched')}
-                    className={`p-3 rounded-2xl border backdrop-blur-xl shadow-xs flex items-center gap-3 transition-all cursor-pointer ${
-                        viewFilter === 'dispatched'
-                            ? 'bg-red-500/10 border-red-500/40 ring-1 ring-red-500/30'
-                            : 'bg-white/90 dark:bg-[#090e1a]/90 hover:bg-slate-50 dark:hover:bg-white/[0.04] border-slate-200/80 dark:border-white/10'
-                    }`}
-                >
-                    <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-600 dark:text-red-400 shrink-0">
-                        <Radio className="w-5 h-5 animate-pulse" />
-                    </div>
-                    <div className="min-w-0">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Active Runs</div>
-                        <div className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {dispatches.length} <span className="text-xs font-normal text-slate-400">Missions</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 2. Pending Assignment */}
-                <div 
-                    onClick={() => setViewFilter('pending')}
-                    className={`p-3 rounded-2xl border backdrop-blur-xl shadow-xs flex items-center gap-3 transition-all cursor-pointer ${
-                        viewFilter === 'pending'
-                            ? 'bg-amber-500/15 border-amber-500/40 ring-1 ring-amber-500/30'
-                            : (filteredVerified.length > 0 
-                                ? 'bg-amber-50/90 dark:bg-amber-950/20 border-amber-300 dark:border-amber-500/40' 
-                                : 'bg-white/90 dark:bg-[#090e1a]/90 hover:bg-slate-50 dark:hover:bg-white/[0.04] border-slate-200/80 dark:border-white/10')
-                    }`}
-                >
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        filteredVerified.length > 0 
-                            ? 'bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 animate-pulse' 
-                            : 'bg-slate-100 dark:bg-white/5 text-slate-400'
-                    }`}>
-                        <AlertCircle className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pending Triage</div>
-                        <div className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {filteredVerified.length} <span className="text-xs font-normal text-slate-400">Calls</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 3. Ready Fleet */}
-                <div 
-                    onClick={() => setViewFilter('fleet')}
-                    className={`p-3 rounded-2xl border backdrop-blur-xl shadow-xs flex items-center gap-3 transition-all cursor-pointer ${
-                        viewFilter === 'fleet'
-                            ? 'bg-emerald-500/10 border-emerald-500/40 ring-1 ring-emerald-500/30'
-                            : 'bg-white/90 dark:bg-[#090e1a]/90 hover:bg-slate-50 dark:hover:bg-white/[0.04] border-slate-200/80 dark:border-white/10'
-                    }`}
-                >
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-                        <Truck className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ambulance Fleet</div>
-                        <div className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {readyAmbulances.length} <span className="text-xs font-normal text-slate-400">/ {activeAmbulances.length} Ready</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 4. Active Crew */}
-                <div className="bg-white/90 dark:bg-[#090e1a]/90 backdrop-blur-xl p-3 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-xs flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-                        <UserIcon className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Crew Roster</div>
-                        <div className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
-                            {responders.length} <span className="text-xs font-normal text-slate-400">Staff</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 5. CAD Telemetry Link */}
-                <div className="bg-white/90 dark:bg-[#090e1a]/90 backdrop-blur-xl p-3 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-xs flex items-center gap-3 col-span-2 md:col-span-1">
-                    <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-600 dark:text-cyan-400 shrink-0">
-                        <Building2 className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Command Base</div>
-                        <div className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5 mt-0.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                            <span>Opol Station HQ</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {/* Main Workspace Area */}
             <div className="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-4 min-h-0 h-full">
                 
                 {/* LEFT COLUMN: Queue & Dispatch List (4/12 width on xl) */}
                 <div className="xl:col-span-4 flex flex-col h-full bg-white/90 dark:bg-[#090e1a]/90 rounded-2xl border border-slate-200/80 dark:border-white/10 backdrop-blur-2xl shadow-sm dark:shadow-2xl overflow-hidden relative z-10 transition-colors duration-300">
                     
-                    {/* Header, Search & Filter Tabs */}
+                    {/* Header & Filter Tabs */}
                     <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.02] shrink-0 space-y-3">
                         <div className="flex items-center justify-between">
                             <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -522,26 +461,6 @@ export default function ActiveDispatchWorkspace({
                             <span className="bg-red-600 text-white text-[11px] font-bold py-0.5 px-2.5 rounded-full shadow-xs">
                                 {dispatches.length + filteredVerified.length} Total Active
                             </span>
-                        </div>
-
-                        {/* Search Bar */}
-                        <div className="relative">
-                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
-                            <input 
-                                type="text"
-                                placeholder="Search callsign, plate, barangay, complaint..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="w-full bg-white dark:bg-[#070b14]/70 border border-slate-200/80 dark:border-white/10 shadow-xs rounded-xl pl-9 pr-8 py-2 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F61509]/30 focus:border-[#F61509] transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                            />
-                            {search && (
-                                <button
-                                    onClick={() => setSearch('')}
-                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white p-0.5 rounded cursor-pointer"
-                                >
-                                    <X className="w-3.5 h-3.5" />
-                                </button>
-                            )}
                         </div>
 
                         {/* Filter Segmented Control */}
@@ -665,13 +584,13 @@ export default function ActiveDispatchWorkspace({
                                             {/* Location Badge */}
                                             <div className="text-xs text-slate-600 dark:text-slate-300 flex items-start gap-1.5 mb-2 bg-slate-50 dark:bg-white/[0.03] p-2 rounded-xl border border-slate-200/60 dark:border-white/5">
                                                 <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
-                                                <div className="min-w-0">
+                                                <div className="min-w-0 flex-1">
                                                     {barangayName && (
-                                                        <span className="font-bold text-slate-900 dark:text-white block truncate">
+                                                        <span className="font-bold text-slate-900 dark:text-white block">
                                                             Brgy. {barangayName}
                                                         </span>
                                                     )}
-                                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 break-words block leading-relaxed">
                                                         {incident.place_of_incident || incident.incident_address || 'Opol, Misamis Oriental'}
                                                     </span>
                                                 </div>
@@ -736,12 +655,6 @@ export default function ActiveDispatchWorkspace({
                                         {filtered.length} active
                                     </span>
                                 </div>
-
-                                {!selectedDispatch && filtered.length > 0 && (
-                                    <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-snug">
-                                        Select any responder below or on the map to display their live route, incident pin, and ETA.
-                                    </p>
-                                )}
 
                                 {/* Selected Dispatch Live Mission Tracker in Sidebar */}
                                 {selectedDispatch && (
@@ -816,7 +729,7 @@ export default function ActiveDispatchWorkspace({
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="text-xs text-slate-900 dark:text-slate-200 font-semibold line-clamp-2">
+                                            <div className="text-xs text-slate-900 dark:text-slate-200 font-semibold break-words leading-relaxed">
                                                 {(typeof selectedDispatch.incident?.barangay === 'object' ? selectedDispatch.incident?.barangay?.barangay_name || selectedDispatch.incident?.barangay?.name : selectedDispatch.incident?.barangay) || selectedDispatch.incident?.place_of_incident || 'Reported Location'}
                                             </div>
                                             <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
@@ -864,56 +777,6 @@ export default function ActiveDispatchWorkspace({
                                                 );
                                             })()}
                                         </div>
-
-                                        {/* Q3 & Q4: Route & How close are they (Distance & ETA)? */}
-                                        {selectedDispatch.dispatch_status === 'arrived_on_scene' ? (
-                                            <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 rounded-xl p-3 space-y-1.5">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                                                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> Mission Status
-                                                    </span>
-                                                    <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10">
-                                                        Arrived
-                                                    </span>
-                                                </div>
-                                                <div className="text-xs text-emerald-900 dark:text-slate-200 font-medium">
-                                                    Responder is currently on scene at the incident.
-                                                </div>
-                                                <div className="text-[10px] text-emerald-600 dark:text-emerald-400/80 flex items-center gap-1 pt-0.5 font-medium">
-                                                    <CheckCircle className="w-3 h-3" /> Navigation completed
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="bg-slate-50/80 dark:bg-white/[0.03] rounded-xl p-3 border border-slate-200/80 dark:border-white/10 space-y-2">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                                                        <Navigation className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Route & Proximity
-                                                    </span>
-                                                    {routeTelemetry[selectedDispatch.id]?.isOffRoute && (
-                                                        <span className="text-[9px] text-amber-700 dark:text-amber-300 font-bold bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-0.5">
-                                                            <AlertTriangle className="w-2.5 h-2.5" /> Off-Route
-                                                        </span>
-                                                    )}
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-2 pt-1">
-                                                    <div className="bg-white dark:bg-white/[0.04] p-2.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-xs">
-                                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Est. Arrival</div>
-                                                        <div className="text-sm font-bold font-mono text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5 truncate">
-                                                            <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                                                            <span>{routeTelemetry[selectedDispatch.id]?.formattedEta || 'Calculating...'}</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="bg-white dark:bg-white/[0.04] p-2.5 rounded-xl border border-slate-200/80 dark:border-white/10 shadow-xs">
-                                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Road Distance</div>
-                                                        <div className="text-sm font-bold font-mono text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5 truncate">
-                                                            <Compass className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                                                            <span>{routeTelemetry[selectedDispatch.id]?.formattedDistance || '--'}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
                                 )}
 
@@ -1208,9 +1071,9 @@ export default function ActiveDispatchWorkspace({
                                             <AlertCircle className="w-3.5 h-3.5 text-[#F61509] shrink-0" />
                                             <span className="truncate">{selectedDispatch.incident?.incident_type?.name || 'Emergency Incident'}</span>
                                         </h3>
-                                        <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                                            <span className="truncate">
+                                        <div className="flex items-start gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                            <MapPin className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
+                                            <span className="break-words leading-snug">
                                                 {(typeof selectedDispatch.incident?.barangay === 'object' 
                                                     ? selectedDispatch.incident?.barangay?.barangay_name || selectedDispatch.incident?.barangay?.name 
                                                     : selectedDispatch.incident?.barangay) 

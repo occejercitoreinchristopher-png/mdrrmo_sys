@@ -316,10 +316,7 @@ class IncidentController extends Controller
                         if (strtolower(trim($cKey)) === $selCatLower) {
                             foreach ($cList as $ci) {
                                 $normCi = strtolower(trim($ci));
-                                if (
-                                    ($incComplaint !== '' && str_contains(strtolower($incComplaint), $normCi)) ||
-                                    ($incTypeName !== '' && str_contains(strtolower($incTypeName), $normCi))
-                                ) {
+                                if ($normCi !== '' && $incComplaint !== '' && str_contains(strtolower($incComplaint), $normCi)) {
                                     $customMatches = true;
                                     break 2;
                                 }
@@ -329,7 +326,6 @@ class IncidentController extends Controller
 
                     if (
                         strtolower(trim($authoritativeCat)) === $selCatLower ||
-                        strtolower(trim($incTypeName)) === $selCatLower ||
                         $customMatches
                     ) {
                         $matchesAnyCategory = true;
@@ -514,6 +510,32 @@ class IncidentController extends Controller
 
     private function resolveCategoryForIncident(string $complaint, string $rawTypeName, array $customMap): string
     {
+        $normType = strtolower(trim($rawTypeName));
+        $normComplaint = strtolower(trim($complaint));
+
+        // 1. If rawTypeName is a known category and complaint is valid under rawTypeName, preserve rawTypeName!
+        // E.g. rawTypeName = "Fire Emergency", complaint = "Burns" -> stays "Fire Emergency"!
+        if ($normType !== '' && $normComplaint !== '') {
+            foreach ($customMap as $cat => $items) {
+                if (strtolower(trim($cat)) === $normType) {
+                    foreach ($items as $item) {
+                        if (strtolower(trim($item)) === $normComplaint) {
+                            return $cat;
+                        }
+                    }
+                }
+            }
+            foreach (EmergencyComplaints::CATEGORIES as $cat => $items) {
+                if (strtolower(trim($cat)) === $normType) {
+                    foreach ($items as $item) {
+                        if (strtolower(trim($item)) === $normComplaint) {
+                            return $cat;
+                        }
+                    }
+                }
+            }
+        }
+
         $lookup = function (string $val) use ($customMap): ?string {
             $norm = strtolower(trim($val));
             if ($norm === '') {
@@ -1370,11 +1392,18 @@ class IncidentController extends Controller
             }
         }
 
-        $incidentDescription = ($request->chief_complaint || $request->reported_chief_complaint)
-            ? (($request->description || $request->incident_description)
-                ? "[".($request->chief_complaint ?? $request->reported_chief_complaint)."] ".($request->description ?? $request->incident_description)
-                : "[".($request->chief_complaint ?? $request->reported_chief_complaint)."]")
-            : ($request->incident_description ?? $request->description ?: "Reported via Phone/SIM Call from ".($callerName ? "{$callerName} ({$normalizedPhone})" : $normalizedPhone)." at {$placeOfIncident}");
+        $rawComplaint = trim((string) ($request->chief_complaint ?? $request->reported_chief_complaint ?? ''));
+        $rawDescription = trim((string) ($request->description ?? $request->incident_description ?? ''));
+
+        if (! empty($rawComplaint) && ! empty($rawDescription)) {
+            $incidentDescription = "[{$rawComplaint}] {$rawDescription}";
+        } elseif (! empty($rawComplaint)) {
+            $incidentDescription = "[{$rawComplaint}]";
+        } elseif (! empty($rawDescription)) {
+            $incidentDescription = $rawDescription;
+        } else {
+            $incidentDescription = '';
+        }
 
         $finalIncidentAddress = ($placeOfIncident && $incidentAddress && $placeOfIncident !== $incidentAddress)
             ? "{$placeOfIncident}, {$incidentAddress}"

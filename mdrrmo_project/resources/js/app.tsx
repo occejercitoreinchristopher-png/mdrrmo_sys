@@ -2,6 +2,7 @@ import './echo';
 import { createInertiaApp } from '@inertiajs/react';
 import { Toaster } from '@/shared/components/ui/sonner';
 import { TooltipProvider } from '@/shared/components/ui/tooltip';
+import { ThemeProvider } from '@/shared/contexts/ThemeContext';
 import { initializeTheme } from '@/shared/hooks/use-appearance';
 import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
@@ -61,10 +62,12 @@ createInertiaApp({
     withApp(app) {
         return (
             <QueryClientProvider client={queryClient}>
-                <TooltipProvider delayDuration={0}>
-                    {app}
-                    <Toaster />
-                </TooltipProvider>
+                <ThemeProvider>
+                    <TooltipProvider delayDuration={0}>
+                        {app}
+                        <Toaster />
+                    </TooltipProvider>
+                </ThemeProvider>
             </QueryClientProvider>
         );
     },

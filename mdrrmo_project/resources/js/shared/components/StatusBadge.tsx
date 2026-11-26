@@ -6,6 +6,7 @@ interface StatusBadgeProps {
     className?: string;
     size?: 'xs' | 'sm' | 'md' | 'lg';
     showDot?: boolean;
+    variant?: 'colored' | 'neutral';
 }
 
 export default function StatusBadge({
@@ -13,6 +14,7 @@ export default function StatusBadge({
     className,
     size = 'md',
     showDot = false,
+    variant = 'colored',
 }: StatusBadgeProps) {
     const s = (status || '').toLowerCase();
 
@@ -131,6 +133,11 @@ export default function StatusBadge({
             label = status 
                 ? status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) 
                 : 'Unknown';
+    }
+
+    if (variant === 'neutral') {
+        colorClass = 'bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300 border-slate-200/80 dark:border-white/10';
+        dotColorClass = 'bg-slate-400 dark:bg-slate-500';
     }
 
     const sizeClasses = {

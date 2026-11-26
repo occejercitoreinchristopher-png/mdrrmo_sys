@@ -1,9 +1,9 @@
-import { MapPin, Clock, CheckCircle, XCircle, AlertTriangle, Truck, Send, CheckCircle2, PhoneCall, Smartphone, UserCheck, Image as ImageIcon, ExternalLink, X, Camera, Activity, Edit2 } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, XCircle, AlertTriangle, Truck, Send, CheckCircle2, PhoneCall, Smartphone, UserCheck, Image as ImageIcon, ExternalLink, X, Camera, Activity, Edit2, User, HeartPulse } from 'lucide-react';
 import Drawer from '@/shared/components/Drawer';
 import StatusBadge from '@/shared/components/StatusBadge';
 import Button from '@/shared/components/Button';
 import { router } from '@inertiajs/react';
-import { useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect, useMemo, ReactNode } from 'react';
 import RejectModal from './RejectModal';
 
 // Haversine distance calculation in meters
@@ -87,6 +87,104 @@ export default function IncidentDetails({
             setSelectedTypeId(Number(incident.incident_type_id || incident.incident_type?.id || 1));
             setIsEditingType(false);
         }
+    }, [incident]);
+
+    const patients = useMemo(() => {
+        if (!incident) return [];
+        const list: Array<{
+            name: string;
+            ageGender: string;
+            address: string;
+            chiefComplaint: string;
+            triage: string;
+            hospital: string;
+            pcrRef: string;
+            pcrId?: any;
+        }> = [];
+        const seen = new Set<string>();
+
+        const recordPatient = (pcr: any) => {
+            if (!pcr || typeof pcr !== 'object') return;
+            const patient = pcr.patient || {};
+
+            const firstName = patient.first_name || patient.patient_first_name || pcr.patient_first_name || '';
+            const lastName = patient.last_name || patient.patient_last_name || pcr.patient_last_name || '';
+            const fullName = [firstName, lastName].filter(Boolean).join(' ')
+                || patient.full_name
+                || patient.name
+                || pcr.patient_name
+                || 'Unidentified Patient';
+
+            const age = patient.age ?? pcr.patient_age ?? pcr.age ?? '';
+            const gender = patient.gender ?? patient.patient_gender ?? pcr.patient_gender ?? pcr.gender ?? '';
+            const ageGender = [age !== '' && age !== null && age !== undefined ? `${age} yrs old` : '', gender ? String(gender).toUpperCase() : ''].filter(Boolean).join(' / ') || '—';
+
+            const addr = patient.address
+                || patient.home_address
+                || (typeof patient.barangay === 'object' ? patient.barangay?.barangay_name : patient.barangay)
+                || pcr.patient_address
+                || '—';
+
+            const complaint = pcr.clinical_chief_complaint
+                || pcr.chief_complaint
+                || pcr.nature_of_injury_illness
+                || incident.chief_complaint
+                || '—';
+
+            const triage = pcr.triage_tag
+                || pcr.triage_category
+                || pcr.priority
+                || '—';
+
+            const hospital = pcr.hospital_destination
+                || pcr.destination_facility
+                || pcr.destination_hospital
+                || pcr.transport_disposition
+                || '—';
+
+            const pcrRef = pcr.pcr_number ? `PCR #${pcr.pcr_number}` : (pcr.id ? `PCR #${pcr.id}` : 'Field PCR');
+
+            const key = `${fullName}_${age}_${gender}_${complaint}`.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+
+            list.push({
+                name: fullName,
+                ageGender,
+                address: addr,
+                chiefComplaint: complaint,
+                triage,
+                hospital,
+                pcrRef,
+                pcrId: pcr.id,
+            });
+        };
+
+        const dispatches = incident.dispatches || [];
+        dispatches.forEach((d: any) => {
+            if (d.patient_care_record) recordPatient(d.patient_care_record);
+            if (d.patientCareRecord) recordPatient(d.patientCareRecord);
+            if (Array.isArray(d.patient_care_records)) d.patient_care_records.forEach((p: any) => recordPatient(p));
+            if (Array.isArray(d.patientCareRecords)) d.patientCareRecords.forEach((p: any) => recordPatient(p));
+        });
+
+        if (Array.isArray(incident.patient_care_records)) incident.patient_care_records.forEach((p: any) => recordPatient(p));
+        if (Array.isArray(incident.patientCareRecords)) incident.patientCareRecords.forEach((p: any) => recordPatient(p));
+        if (incident.patient_care_record) recordPatient(incident.patient_care_record);
+        if (incident.patientCareRecord) recordPatient(incident.patientCareRecord);
+        if (incident.patient && typeof incident.patient === 'object') recordPatient({ patient: incident.patient });
+        if (Array.isArray(incident.patients)) incident.patients.forEach((pt: any) => recordPatient({ patient: pt }));
+        if (incident.patient_name) {
+            recordPatient({
+                patient_name: incident.patient_name,
+                patient_age: incident.patient_age,
+                patient_gender: incident.patient_gender,
+                patient_address: incident.patient_address,
+                chief_complaint: incident.chief_complaint,
+            });
+        }
+
+        return list;
     }, [incident]);
 
     const handleSaveTypeChange = () => {
@@ -379,6 +477,227 @@ export default function IncidentDetails({
                         </div>
                     </div>
 
+                    {/* Assigned Emergency Units & Field Crew */}
+                    {incident.dispatches && incident.dispatches.length > 0 && (
+                        <div className="bg-white dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none space-y-3">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-white/5">
+                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                                    <Truck className="w-3.5 h-3.5 text-indigo-500" />
+                                    Assigned Emergency Unit{incident.dispatches.length > 1 ? 's' : ''}
+                                </h4>
+                                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                                    {incident.dispatches.length} Unit{incident.dispatches.length > 1 ? 's' : ''}
+                                </span>
+                            </div>
+
+                            <div className="space-y-3">
+                                {incident.dispatches.map((d: any, idx: number) => {
+                                    const isCancelled = d.dispatch_status === 'cancelled';
+                                    const isCompleted = d.dispatch_status === 'completed';
+                                    const statusText = d.dispatch_status?.replace(/_/g, ' ') || 'ASSIGNED';
+
+                                    return (
+                                        <div
+                                            key={d.id || idx}
+                                            className="p-3.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-slate-800/40 space-y-2.5"
+                                        >
+                                            {/* Unit & Status Header */}
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-sm text-slate-900 dark:text-white">
+                                                        {d.team ? `Unit ${d.team}` : (d.ambulance?.call_sign ? `Unit ${d.ambulance.call_sign}` : 'Response Unit')}
+                                                    </span>
+                                                    {d.id && (
+                                                        <span className="text-[10px] font-mono text-slate-400">
+                                                            #{d.id}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span
+                                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border shrink-0 ${
+                                                        isCancelled
+                                                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                                                            : isCompleted
+                                                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                                            : 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30'
+                                                    }`}
+                                                >
+                                                    {statusText}
+                                                </span>
+                                            </div>
+
+                                            {/* Ambulance info */}
+                                            {(d.ambulance?.vehicle_name || d.ambulance?.plate_number || d.ambulance?.model) && (
+                                                <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
+                                                    <Truck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                                    <span className="font-semibold break-words">
+                                                        {d.ambulance?.vehicle_name || d.ambulance?.model || 'Ambulance Unit'}
+                                                    </span>
+                                                    {d.ambulance?.plate_number && (
+                                                        <span className="text-[11px] font-mono text-slate-400">
+                                                            ({d.ambulance.plate_number})
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Crew Members */}
+                                            <div className="pt-2 border-t border-slate-200/60 dark:border-white/5 grid grid-cols-2 gap-2 text-xs">
+                                                <div>
+                                                    <span className="text-[10px] font-semibold text-slate-400 uppercase block">
+                                                        Driver
+                                                    </span>
+                                                    <span className="font-medium text-slate-800 dark:text-slate-200 break-words">
+                                                        {d.driver ? `${d.driver.first_name} ${d.driver.last_name}` : '—'}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[10px] font-semibold text-slate-400 uppercase block">
+                                                        EMT / Team Leader
+                                                    </span>
+                                                    <span className="font-medium text-slate-800 dark:text-slate-200 break-words">
+                                                        {d.emt || d.teamLeader
+                                                            ? `${(d.emt || d.teamLeader).first_name} ${(d.emt || d.teamLeader).last_name}`
+                                                            : '—'}
+                                                    </span>
+                                                </div>
+                                                {Array.isArray(d.crew) && d.crew.length > 0 && (
+                                                    <div className="col-span-2 mt-1">
+                                                        <span className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">
+                                                            Field Crew
+                                                        </span>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {d.crew.map((member: any, mIdx: number) => (
+                                                                <span
+                                                                    key={mIdx}
+                                                                    className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300"
+                                                                >
+                                                                    {member.first_name} {member.last_name}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Timestamps */}
+                                            {d.assigned_at && (
+                                                <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-200/40 dark:border-white/5 flex items-center justify-between">
+                                                    <span>Assigned: {new Date(d.assigned_at).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                                                    {d.en_route_at && (
+                                                        <span>En Route: {new Date(d.en_route_at).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Patient & Casualty Care Information */}
+                    <div className="bg-white dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none space-y-3">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-white/5">
+                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                                <User className="w-3.5 h-3.5 text-rose-500" />
+                                Patient Information {patients.length > 0 && `(${patients.length})`}
+                            </h4>
+                            {patients.length > 0 ? (
+                                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                                    {patients.length} Patient{patients.length > 1 ? 's' : ''} Logged
+                                </span>
+                            ) : (
+                                <span className="text-[10px] text-slate-400 italic">
+                                    No PCR logged yet
+                                </span>
+                            )}
+                        </div>
+
+                        {patients.length === 0 ? (
+                            <div className="p-3.5 rounded-xl border border-dashed border-slate-200 dark:border-white/10 text-center text-xs text-slate-400 dark:text-slate-500">
+                                No patient or casualty records logged yet for this incident. Responding crew will file PCR upon patient contact.
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {patients.map((pt, idx) => {
+                                    const trgLower = (pt.triage || '').toLowerCase();
+                                    const isImmediate = trgLower.includes('red') || trgLower.includes('immediate') || trgLower.includes('critical');
+                                    const isDelayed = trgLower.includes('yellow') || trgLower.includes('delayed') || trgLower.includes('urgent');
+                                    const isMinor = trgLower.includes('green') || trgLower.includes('minor');
+
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className="p-3.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-slate-800/40 space-y-2.5"
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-sm text-slate-900 dark:text-white">
+                                                        {pt.name}
+                                                    </span>
+                                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                                        {pt.pcrRef}
+                                                    </span>
+                                                </div>
+                                                {pt.triage !== '—' && (
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border shrink-0 ${
+                                                        isImmediate
+                                                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                                                            : isDelayed
+                                                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                                            : isMinor
+                                                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                                            : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600'
+                                                    }`}>
+                                                        {pt.triage}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-200/60 dark:border-white/5">
+                                                <div>
+                                                    <span className="text-[10px] font-semibold text-slate-400 uppercase block">
+                                                        Age / Sex
+                                                    </span>
+                                                    <span className="font-medium text-slate-800 dark:text-slate-200">
+                                                        {pt.ageGender}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[10px] font-semibold text-slate-400 uppercase block">
+                                                        Destination Hospital
+                                                    </span>
+                                                    <span className="font-medium text-slate-800 dark:text-slate-200 truncate block" title={pt.hospital}>
+                                                        {pt.hospital}
+                                                    </span>
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <span className="text-[10px] font-semibold text-slate-400 uppercase block">
+                                                        Chief Complaint / Assessment
+                                                    </span>
+                                                    <span className="font-medium text-slate-800 dark:text-slate-200 break-words">
+                                                        {pt.chiefComplaint}
+                                                    </span>
+                                                </div>
+                                                {pt.address !== '—' && (
+                                                    <div className="col-span-2">
+                                                        <span className="text-[10px] font-semibold text-slate-400 uppercase block">
+                                                            Patient Address
+                                                        </span>
+                                                        <span className="text-slate-600 dark:text-slate-400 text-[11px]">
+                                                            {pt.address}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
                     {/* Incident Information */}
                     <div className="space-y-4">
                         {incident.chief_complaint && (
@@ -454,7 +773,9 @@ export default function IncidentDetails({
                                                     || (incident.incident_address && incident.incident_address !== 'Opol, Misamis Oriental' ? incident.incident_address : null) 
                                                     || (incident.location_code ? `Location Marker: ${typeof incident.location_code === 'object' ? incident.location_code?.location_code || incident.location_code?.code : incident.location_code}` : null) 
                                                     || (loadingAddress ? 'Fetching location name...' : address) 
-                                                    || (incident.resident?.resident_profile?.barangay?.barangay_name ? `Brgy. ${incident.resident.resident_profile.barangay.barangay_name}, Opol` : null)
+                                                    || (typeof incident.barangay === 'string' ? `Brgy. ${incident.barangay}, Opol, Misamis Oriental` : incident.barangay?.barangay_name ? `Brgy. ${incident.barangay.barangay_name}, Opol, Misamis Oriental` : null)
+                                                    || (incident.resident?.resident_profile?.barangay?.barangay_name ? `Brgy. ${incident.resident.resident_profile.barangay.barangay_name}, Opol, Misamis Oriental` : null)
+                                                    || (incident.resident?.residentProfile?.barangay?.barangay_name ? `Brgy. ${incident.resident.residentProfile.barangay.barangay_name}, Opol, Misamis Oriental` : null)
                                                     || 'Opol, Misamis Oriental')}
                                         </span>
                                         {incident.incident_latitude && incident.incident_longitude && (
@@ -505,7 +826,7 @@ export default function IncidentDetails({
 
                                             <div className="flex items-start gap-1.5 text-slate-600 dark:text-slate-300">
                                                 <span className="font-bold text-slate-500 shrink-0">Location:</span>
-                                                <span className="line-clamp-2">{incident.images[0].location_name || incident.place_of_incident || 'Poblacion, Opol, Misamis Oriental, Philippines'}</span>
+                                                <span className="break-words leading-relaxed">{incident.images[0].location_name || incident.place_of_incident || 'Poblacion, Opol, Misamis Oriental, Philippines'}</span>
                                             </div>
 
                                             <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-mono text-[11px]">

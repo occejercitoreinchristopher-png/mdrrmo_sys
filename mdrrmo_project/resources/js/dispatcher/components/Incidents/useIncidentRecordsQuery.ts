@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { getCategoryForIncident } from '@/dispatcher/data/incidentCategories';
 
 export interface IncidentRecordsResponse {
     data: any[];
@@ -173,9 +174,15 @@ export function useIncidentRecordsQuery({
                 const y = d.getFullYear().toString();
                 if (!years.includes(y)) return false;
             }
+            if (categories.length > 0) {
+                const complaint = row.pcr_chief_complaint || row.chief_complaint || '';
+                const rawType = row.incident_type?.name || row.incident_type?.incident_type_name || '';
+                const rowCat = (complaint ? getCategoryForIncident(complaint) : null) || (rawType ? getCategoryForIncident(rawType) : null) || rawType || 'Medical Emergency';
+                if (!categories.includes(rowCat)) return false;
+            }
             return true;
         });
-    }, [isDefaultUnfilteredPage1, initialIncidents, yearsKey]);
+    }, [isDefaultUnfilteredPage1, initialIncidents, yearsKey, categoriesKey]);
 
     // Immediate zero-flash fallback while initial query loads on unfiltered page 1
     const effectiveRecords =

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import Map, { Marker, Source, Layer, type MapRef } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { 
@@ -134,7 +134,7 @@ export function snapToPolyline(
     coordinates: [number, number][], 
     maxDistanceMeters = 35
 ): { lng: number; lat: number; bearing: number; segmentIndex: number; isSnapped: boolean } {
-    if (!coordinates || coordinates.length < 2) {
+    if (!Number.isFinite(lon) || !Number.isFinite(lat) || !coordinates || coordinates.length < 2) {
         return { lng: lon, lat, bearing: 0, segmentIndex: 0, isSnapped: false };
     }
 
@@ -568,7 +568,7 @@ export default function LiveMonitoringMap({
                 calculateRoute(responderLoc.longitude, responderLoc.latitude, incLon, incLat, dispatchId, true);
             }
         }
-    }, [activeDispatch, liveLocations, getResponderLocation, calculateRoute, onRouteTelemetryChange, routeGeojson]);
+    }, [activeDispatch, liveLocations, getResponderLocation, calculateRoute, onRouteTelemetryChange]);
 
     // Smooth cinematic camera animation (zooms smoothly without snapping or teleporting)
     const animateToDispatch = useCallback((dispatch: any) => {
@@ -843,10 +843,11 @@ export default function LiveMonitoringMap({
                         const responderLoc = getResponderLocation(dispatch);
 
                         return (
-                            <div key={`dispatch-group-${dispatch.id}`}>
+                            <Fragment key={`dispatch-group-${dispatch.id}`}>
                                 {/* 🔴 FIXED INCIDENT LOCATION MARKER (Visible ONLY when this mission is selected) */}
                                 {isSelected && incLon && incLat && (
                                     <Marker 
+                                        key={`incident-marker-${dispatch.id}`}
                                         longitude={incLon} 
                                         latitude={incLat}
                                         anchor="bottom"
@@ -924,11 +925,16 @@ export default function LiveMonitoringMap({
 
                                     const displayLng = snapped?.isSnapped ? snapped.lng : responderLoc.longitude;
                                     const displayLat = snapped?.isSnapped ? snapped.lat : responderLoc.latitude;
+
+                                    if (!Number.isFinite(displayLng) || !Number.isFinite(displayLat) || displayLng === 0 || displayLat === 0) {
+                                        return null;
+                                    }
+
                                     const displayHeading = (responderLoc.heading && responderLoc.heading !== 0)
                                         ? responderLoc.heading
                                         : (snapped?.bearing ?? 0);
 
-                                    const locTime = responderLoc.updatedAt || (responderLoc.timestamp ? new Date(responderLoc.timestamp).getTime() : 0);
+                                    const locTime = (typeof responderLoc.sequence === 'number' && responderLoc.sequence > 0 ? responderLoc.sequence : 0) || responderLoc.updatedAt || (responderLoc.timestamp ? new Date(responderLoc.timestamp).getTime() : 0);
                                     const elapsedSeconds = locTime > 0 ? Math.max(0, Math.floor((Date.now() - locTime) / 1000)) : 9999;
                                     const isOnline = elapsedSeconds <= 35;
                                     const isStale = elapsedSeconds > 35 && elapsedSeconds <= 180;
@@ -936,6 +942,7 @@ export default function LiveMonitoringMap({
 
                                     return (
                                         <Marker 
+                                            key={`responder-marker-${dispatch.id}`}
                                             longitude={displayLng} 
                                             latitude={displayLat}
                                             anchor="center"
@@ -1025,7 +1032,7 @@ export default function LiveMonitoringMap({
                                         </Marker>
                                     );
                                 })()}
-                            </div>
+                            </Fragment>
                         );
                     })}
                 </Map>
@@ -1049,7 +1056,7 @@ export default function LiveMonitoringMap({
                         }`}
                         title="Dark Tactical Mode"
                     >
-                        🌙 Tactical
+                        Tactical
                     </button>
                     <button
                         type="button"
@@ -1061,7 +1068,7 @@ export default function LiveMonitoringMap({
                         }`}
                         title="Satellite Imagery with Terrain & Roads"
                     >
-                        🛰️ Satellite
+                        Satellite
                     </button>
                     <button
                         type="button"
@@ -1073,7 +1080,7 @@ export default function LiveMonitoringMap({
                         }`}
                         title="Road Streets Map"
                     >
-                        🗺️ Streets
+                        Streets
                     </button>
                 </div>
 

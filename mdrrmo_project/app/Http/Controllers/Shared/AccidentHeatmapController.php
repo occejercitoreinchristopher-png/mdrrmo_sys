@@ -71,7 +71,8 @@ class AccidentHeatmapController extends Controller
         }
 
         $status = $request->input('status', 'all');
-        $minThreshold = max(1, (int) $request->input('min_threshold', 1));
+        $rawThreshold = $request->input('min_threshold', 1);
+        $minThreshold = is_numeric($rawThreshold) ? max(1, (int) $rawThreshold) : (string) $rawThreshold;
 
         // Split emergency_types into DB incident_type_ids and custom manual pin type names
         $selectedTypeIds = [];
@@ -584,9 +585,11 @@ class AccidentHeatmapController extends Controller
         // 2. Calculate Analytics Data
         $analytics = $this->calculateAnalytics($combinedRecords, $filteredIncidents);
 
-        // 3. Load Opol Barangays GeoJSON boundary
+        // 3. Load Opol Barangays GeoJSON boundary & Official Municipal Boundary
         $geojsonPath = resource_path('data/opol_barangays.json');
         $barangayGeojson = file_exists($geojsonPath) ? json_decode(file_get_contents($geojsonPath), true) : null;
+        $municipalGeojsonPath = resource_path('data/opol_municipal_boundary.json');
+        $municipalBoundaryGeojson = file_exists($municipalGeojsonPath) ? json_decode(file_get_contents($municipalGeojsonPath), true) : null;
 
         // 4. Lookups for Filters (including distinct years & custom hazard pin types)
         $incidentTypes = IncidentType::all(['id', 'incident_type_name']);
@@ -621,11 +624,33 @@ class AccidentHeatmapController extends Controller
 
         $userRole = auth()->user()?->role ?? 'dispatcher';
 
+        // Authoritative Database Incident Counts per Barangay (from actual incidents table, excluding manual pins)
+        $barangayIncidentCounts = [];
+        foreach (Incident::OPOL_BARANGAYS as $bName) {
+            $barangayIncidentCounts[$bName] = 0;
+        }
+        foreach ($filteredIncidents as $inc) {
+            $b = $inc->barangay;
+            if ($b && isset($barangayIncidentCounts[$b])) {
+                $barangayIncidentCounts[$b]++;
+            } elseif ($b) {
+                $norm = preg_replace('/[^a-z0-9]/', '', strtolower($b));
+                foreach (Incident::OPOL_BARANGAYS as $canonical) {
+                    if (preg_replace('/[^a-z0-9]/', '', strtolower($canonical)) === $norm) {
+                        $barangayIncidentCounts[$canonical]++;
+                        break;
+                    }
+                }
+            }
+        }
+
         return Inertia::render('shared/AccidentHeatmapView', [
             'incidents' => $combinedRecords,
             'hotspots' => $hotspots,
             'analytics' => $analytics,
             'barangayGeojson' => $barangayGeojson,
+            'municipalBoundaryGeojson' => $municipalBoundaryGeojson,
+            'barangayIncidentCounts' => $barangayIncidentCounts,
             'incidentTypes' => $incidentTypes,
             'customPinTypes' => $customPinTypes,
             'availableYears' => $availableYears,
@@ -908,7 +933,7 @@ class AccidentHeatmapController extends Controller
      *     - ORANGE (Moderate): 3 incidents
      *     - RED (High): 4+ incidents
      */
-    protected function calculateClusters20m($incidents, int $minThreshold = 1, bool $isSpecificType = false): array
+    protected function calculateClusters20m($incidents, $minThreshold = 1, bool $isSpecificType = false): array
     {
         $circleRadiusMeters = 20.0;
         $nonOverlapMeters = $circleRadiusMeters * 2.0; // 40m: prevents two 20m-radius circles from overlapping
@@ -1053,25 +1078,25 @@ class AccidentHeatmapController extends Controller
             $effectiveRank = max($countRank, $manualRiskRank);
 
             if ($effectiveRank >= 4) {
-                $color = '#E53935'; // Red
+                $color = '#EF4444'; // Red
                 $classification = 'High Incident Concentration';
                 $intensity = 'Critical';
                 $intensityClass = 'critical';
                 $badgeText = $count >= $highMin ? ($isSpecificType ? 'High (4+)' : 'High (9+)') : 'High Risk';
             } elseif ($effectiveRank === 3) {
-                $color = '#FB8C00'; // Orange
-                $classification = 'Moderate Incident Concentration';
+                $color = '#F97316'; // Orange
+                $classification = 'Moderate-High Incident Concentration';
                 $intensity = 'High';
                 $intensityClass = 'high';
-                $badgeText = $count >= $modMin ? ($isSpecificType ? 'Moderate (3)' : 'Moderate (5-8)') : 'Mod-High Risk';
+                $badgeText = $count >= $modMin ? ($isSpecificType ? 'Mod-High (3)' : 'Mod-High (5-8)') : 'Mod-High Risk';
             } elseif ($effectiveRank === 2) {
-                $color = '#FDD835'; // Yellow
+                $color = '#FACC15'; // Yellow
                 $classification = 'Moderate Incident Concentration';
                 $intensity = 'Moderate';
                 $intensityClass = 'moderate';
-                $badgeText = 'Moderate Risk';
+                $badgeText = $isSpecificType ? 'Moderate (2)' : 'Moderate (3-4)';
             } else {
-                $color = '#43A047'; // Green
+                $color = '#3B82F6'; // Blue (Low 1-2)
                 $classification = 'Low Incident Concentration';
                 $intensity = 'Moderate';
                 $intensityClass = 'moderate';
@@ -1092,7 +1117,21 @@ class AccidentHeatmapController extends Controller
             $c['most_common_type'] = $mostCommonType;
             $c['unique_types'] = array_keys($typeCounts);
             $c['radius_meters'] = 20;
-            $c['meets_threshold'] = $count >= $minThreshold;
+
+            $meetsThreshold = true;
+            $fStr = strtolower(trim((string) $minThreshold));
+            if ($fStr === 'low') {
+                $meetsThreshold = $isSpecificType ? ($count === 1) : ($count >= 1 && $count <= 2);
+            } elseif ($fStr === 'moderate_only') {
+                $meetsThreshold = $isSpecificType ? ($count === 2) : ($count >= 3 && $count <= 4);
+            } elseif ($fStr === 'mod_high_only') {
+                $meetsThreshold = $isSpecificType ? ($count === 3) : ($count >= 5 && $count <= 8);
+            } elseif ($fStr === 'high' || $fStr === 'high_only') {
+                $meetsThreshold = $isSpecificType ? ($count >= 4) : ($count >= 9);
+            } elseif (is_numeric($minThreshold)) {
+                $meetsThreshold = $count >= (int) $minThreshold;
+            }
+            $c['meets_threshold'] = $meetsThreshold;
 
             // Formatted recent incidents for quick list preview
             $c['recent_incidents'] = array_slice(array_map(fn($item) => [
