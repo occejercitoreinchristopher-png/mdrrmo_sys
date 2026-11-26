@@ -11,10 +11,11 @@ use Inertia\Inertia;
 
 class DispatchLogController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         return Inertia::render('admin/DispatchLogs/Index', [
             'barangays' => \App\Models\Incident::OPOL_BARANGAYS,
+            'initialStatus' => $request->query('status', ''),
         ]);
     }
 
@@ -155,7 +156,7 @@ class DispatchLogController extends Controller
         return response()->json($incidents);
     }
 
-    public function show(\App\Models\Incident $incident)
+    public function show(\App\Models\Incident $incident, Request $request)
     {
         $incident->load([
             'resident.residentProfile.barangay',
@@ -174,7 +175,8 @@ class DispatchLogController extends Controller
         ]);
 
         return Inertia::render('admin/DispatchLogs/Show', [
-            'incident' => $incident
+            'incident' => $incident,
+            'fromStatus' => $request->query('status', $request->query('from_status', '')),
         ]);
     }
 }

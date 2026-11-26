@@ -23,16 +23,28 @@ import {
     FileText,
     Users,
     Activity,
-    Image as ImageIcon
+    Image as ImageIcon,
+    Smartphone,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { printIncidentDetailReport } from '@/shared/utils/printDispatchReports';
 
-export default function DispatchLogShow({ incident }: any) {
+export default function DispatchLogShow({ incident, fromStatus }: any) {
     const { auth } = usePage<any>().props;
     const isAdmin = auth?.user?.role === 'admin';
     const Layout = isAdmin ? AdminLayout : DispatcherLayout;
-    const backHref = isAdmin ? '/admin/dispatch-logs' : '/dispatcher/dispatch-logs';
+
+    // Preserve filter parameters when navigating back
+    const backHref = useMemo(() => {
+        const base = isAdmin ? '/admin/dispatch-logs' : '/dispatcher/dispatch-logs';
+        if (typeof window !== 'undefined' && window.location.search) {
+            return `${base}${window.location.search}`;
+        }
+        if (fromStatus) {
+            return `${base}?status=${encodeURIComponent(fromStatus)}`;
+        }
+        return base;
+    }, [isAdmin, fromStatus]);
 
     // Dispatches & crew
     const dispatches = incident.dispatches || [];
@@ -50,8 +62,44 @@ export default function DispatchLogShow({ incident }: any) {
     const resident = incident.resident;
     const callerName = incident.caller_name || (resident ? `${resident.first_name} ${resident.last_name}` : 'Public / Unspecified Caller');
     const callerPhone = incident.caller_phone_number || resident?.phone_number || 'N/A';
-    const isPhoneSim = incident.report_source === 'phone_sim' || incident.report_source === 'dispatcher';
-    const reportChannel = isPhoneSim ? 'Phone/SIM Call-in' : (incident.report_source === 'resident_app' ? 'Mobile App' : (incident.report_source || 'Citizen Report'));
+
+    // Channel metadata with specific branding, icons, and remarks
+    const channelMeta = useMemo(() => {
+        const src = String(incident.report_source || '').toLowerCase();
+        if (src === 'walk_in' || src.includes('walk')) {
+            return {
+                label: 'Walk-In',
+                fullLabel: 'Walk-In / Station Clinic',
+                color: 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30',
+                timelineBadge: 'bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800/30',
+                icon: Users,
+                eventTitle: 'Walk-In Incident Reported',
+                remarksFallback: 'Walk-in emergency reported directly at MDRRMO station / clinic.',
+            };
+        }
+        if (src === 'phone_sim' || src === 'dispatcher' || src.includes('phone') || src.includes('call') || src.includes('hotline')) {
+            return {
+                label: 'Phone/SIM Call',
+                fullLabel: 'Phone / SIM Call-in',
+                color: 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/30',
+                timelineBadge: 'bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-800/30',
+                icon: Phone,
+                eventTitle: 'Phone/SIM Call Intake',
+                remarksFallback: 'Emergency call received via Phone/SIM hotline and verified upon creation.',
+            };
+        }
+        return {
+            label: 'Mobile App',
+            fullLabel: 'OpolResq Mobile App',
+            color: 'bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/30',
+            timelineBadge: 'bg-sky-500/10 text-sky-600 border-sky-200 dark:border-sky-800/30',
+            icon: Smartphone,
+            eventTitle: 'Mobile App Incident Reported',
+            remarksFallback: 'Emergency incident reported directly via OpolResq Resident Mobile App.',
+        };
+    }, [incident.report_source]);
+
+    const isPhoneSim = channelMeta.label === 'Phone/SIM Call';
 
     // Status & Priority
     const status = incident.incident_status || 'pending';
@@ -62,16 +110,17 @@ export default function DispatchLogShow({ incident }: any) {
         const events: any[] = [];
 
         // 1. Initial Report
+        const ChannelIcon = channelMeta.icon;
         events.push({
             id: 'evt-reported',
             time: incident.reported_at || incident.created_at,
-            title: isPhoneSim ? 'Phone/SIM Call Intake' : 'Incident Reported',
+            title: channelMeta.eventTitle,
             actor: callerName + (callerPhone !== 'N/A' ? ` (${callerPhone})` : ''),
             isSystem: false,
-            badgeColor: isPhoneSim ? 'bg-sky-500/10 text-sky-600 border-sky-200 dark:border-sky-800/30' : 'bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-800/30',
-            statusChange: { from: null, to: isPhoneSim ? 'verified' : 'pending' },
-            remarks: incident.incident_description || incident.chief_complaint || (isPhoneSim ? 'Emergency call received via Phone/SIM hotline and verified upon creation.' : 'Emergency call received at MDRRMO operations.'),
-            icon: Phone
+            badgeColor: channelMeta.timelineBadge,
+            statusChange: { from: null, to: channelMeta.label === 'Phone/SIM Call' ? 'verified' : 'pending' },
+            remarks: incident.incident_description || incident.chief_complaint || channelMeta.remarksFallback,
+            icon: ChannelIcon
         });
 
         // 2. Verification (for Resident submissions that underwent separate review)
@@ -230,6 +279,13 @@ export default function DispatchLogShow({ incident }: any) {
                             )}>
                                 {priority} Priority
                             </span>
+                            <span className={clsx(
+                                "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border uppercase tracking-wide",
+                                channelMeta.color
+                            )}>
+                                <channelMeta.icon className="w-3.5 h-3.5" />
+                                <span>{channelMeta.label}</span>
+                            </span>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                             Comprehensive timeline, responder dispatch audit, and chronological event ledger.
@@ -284,9 +340,13 @@ export default function DispatchLogShow({ incident }: any) {
                                     </span>
                                 </div>
                                 <div>
-                                    <span className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Channel</span>
-                                    <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                        {reportChannel}
+                                    <span className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Report Channel</span>
+                                    <span className={clsx(
+                                        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-bold border",
+                                        channelMeta.color
+                                    )}>
+                                        <channelMeta.icon className="w-3.5 h-3.5" />
+                                        <span>{channelMeta.fullLabel}</span>
                                     </span>
                                 </div>
                             </div>

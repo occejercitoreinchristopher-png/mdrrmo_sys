@@ -41,19 +41,12 @@ export default function Navbar() {
                 <div className="flex items-center justify-between h-20">
                     {/* Brand */}
                     <a href="#hero" className="flex items-center gap-3.5 group">
-                        <div className="flex items-center gap-2 flex-shrink-0 group-hover:scale-105 transition-transform duration-200">
+                        <div className="flex items-center flex-shrink-0 group-hover:scale-105 transition-transform duration-200">
                             <div className="w-10 h-10 flex items-center justify-center">
                                 <img
                                     src="/images/opol-logo.png"
                                     alt="MDRRMO Opol Seal"
                                     className="w-full h-full object-contain drop-shadow-md"
-                                />
-                            </div>
-                            <div className="w-9 h-9 hidden xs:flex items-center justify-center">
-                                <img
-                                    src="/images/opol-seal.png"
-                                    alt="Municipality of Opol Official Seal"
-                                    className="w-full h-full object-contain drop-shadow-md opacity-90"
                                 />
                             </div>
                         </div>

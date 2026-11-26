@@ -24,7 +24,9 @@ import {
     Radio,
     ChevronDown,
     ChevronUp,
-    FileSpreadsheet
+    FileSpreadsheet,
+    Smartphone,
+    Users
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { printDispatchLogsSummaryReport, printIncidentDetailReport } from '@/shared/utils/printDispatchReports';
@@ -44,6 +46,7 @@ function useDebounce<T>(value: T, delay: number): T {
 
 interface DispatchLogsIndexProps {
     barangays?: string[];
+    initialStatus?: string;
 }
 
 const OPOL_BARANGAYS_LIST = [
@@ -63,25 +66,107 @@ const STATUS_TABS = [
     { value: 'rejected', label: 'Rejected', dotColor: 'bg-rose-500' },
 ];
 
-export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST }: DispatchLogsIndexProps) {
+function getChannelMeta(reportSource?: string) {
+    const src = String(reportSource || '').toLowerCase();
+    if (src === 'walk_in' || src.includes('walk')) {
+        return {
+            label: 'Walk-In',
+            color: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20',
+            icon: Users,
+        };
+    }
+    if (src === 'phone_sim' || src === 'dispatcher' || src.includes('phone') || src.includes('call') || src.includes('hotline')) {
+        return {
+            label: 'Phone/SIM',
+            color: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20',
+            icon: PhoneCall,
+        };
+    }
+    return {
+        label: 'Mobile App',
+        color: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20',
+        icon: Smartphone,
+    };
+}
+
+export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST, initialStatus = '' }: DispatchLogsIndexProps) {
     const { auth } = usePage<any>().props;
     const isAdmin = auth?.user?.role === 'admin';
     const Layout = isAdmin ? AdminLayout : DispatcherLayout;
     const baseUrl = isAdmin ? '/admin/dispatch-logs' : '/dispatcher/dispatch-logs';
     const apiEndpoint = isAdmin ? '/admin/dispatch-logs/api/fetch' : '/dispatcher/dispatch-logs/api/fetch';
 
+    // Helper to get initial param from props or URL
+    const getInitialParam = (key: string, fallback: string = '') => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const val = params.get(key);
+            if (val !== null && val !== undefined) return val;
+        }
+        return fallback;
+    };
+
     // Filter states
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState(() => getInitialParam('search', ''));
     const debouncedSearch = useDebounce(searchTerm, 250);
-    const [status, setStatus] = useState('');
-    const [priority, setPriority] = useState('');
-    const [dateFilter, setDateFilter] = useState('');
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [barangay, setBarangay] = useState('');
-    const [reportSource, setReportSource] = useState('');
-    const [hasDispatches, setHasDispatches] = useState('');
-    const [page, setPage] = useState(1);
+    const [status, setStatus] = useState(() => initialStatus || getInitialParam('status', ''));
+    const [priority, setPriority] = useState(() => getInitialParam('priority', ''));
+    const [dateFilter, setDateFilter] = useState(() => getInitialParam('date', ''));
+    const [startDate, setStartDate] = useState(() => getInitialParam('start_date', ''));
+    const [endDate, setEndDate] = useState(() => getInitialParam('end_date', ''));
+    const [barangay, setBarangay] = useState(() => getInitialParam('barangay', ''));
+    const [reportSource, setReportSource] = useState(() => getInitialParam('report_source', ''));
+    const [hasDispatches, setHasDispatches] = useState(() => getInitialParam('has_dispatches', ''));
+    const [page, setPage] = useState(() => {
+        const p = getInitialParam('page', '1');
+        return parseInt(p, 10) || 1;
+    });
+
+    useEffect(() => {
+        if (initialStatus) {
+            setStatus(initialStatus);
+        }
+    }, [initialStatus]);
+
+    // Keep browser URL synchronized with active filters without page reload
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            if (status) url.searchParams.set('status', status); else url.searchParams.delete('status');
+            if (priority) url.searchParams.set('priority', priority); else url.searchParams.delete('priority');
+            if (barangay) url.searchParams.set('barangay', barangay); else url.searchParams.delete('barangay');
+            if (dateFilter) url.searchParams.set('date', dateFilter); else url.searchParams.delete('date');
+            if (startDate) url.searchParams.set('start_date', startDate); else url.searchParams.delete('start_date');
+            if (endDate) url.searchParams.set('end_date', endDate); else url.searchParams.delete('end_date');
+            if (reportSource) url.searchParams.set('report_source', reportSource); else url.searchParams.delete('report_source');
+            if (hasDispatches) url.searchParams.set('has_dispatches', hasDispatches); else url.searchParams.delete('has_dispatches');
+            if (debouncedSearch) url.searchParams.set('search', debouncedSearch); else url.searchParams.delete('search');
+            if (page > 1) url.searchParams.set('page', String(page)); else url.searchParams.delete('page');
+
+            window.history.replaceState({}, '', url.toString());
+        }
+    }, [status, priority, barangay, dateFilter, startDate, endDate, reportSource, hasDispatches, debouncedSearch, page]);
+
+    // Handle browser back/forward buttons (popstate)
+    useEffect(() => {
+        const onPopState = () => {
+            if (typeof window !== 'undefined') {
+                const params = new URLSearchParams(window.location.search);
+                setStatus(params.get('status') || '');
+                setPriority(params.get('priority') || '');
+                setBarangay(params.get('barangay') || '');
+                setDateFilter(params.get('date') || '');
+                setStartDate(params.get('start_date') || '');
+                setEndDate(params.get('end_date') || '');
+                setReportSource(params.get('report_source') || '');
+                setHasDispatches(params.get('has_dispatches') || '');
+                setSearchTerm(params.get('search') || '');
+                setPage(parseInt(params.get('page') || '1', 10) || 1);
+            }
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, []);
 
     // Advanced secondary filter collapse toggle
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -666,8 +751,23 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST }: D
                                             <tr key={incident.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group">
                                                 {/* 1. Incident & Type */}
                                                 <td className="px-5 py-4 align-top">
-                                                    <div className="font-semibold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                                        {incident.reference_number || `#${incident.id}`}
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <div className="font-semibold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                                            {incident.reference_number || `#${incident.id}`}
+                                                        </div>
+                                                        {(() => {
+                                                            const channel = getChannelMeta(incident.report_source);
+                                                            const ChannelIcon = channel.icon;
+                                                            return (
+                                                                <span className={clsx(
+                                                                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold border tracking-wider uppercase",
+                                                                    channel.color
+                                                                )}>
+                                                                    <ChannelIcon className="w-2.5 h-2.5" />
+                                                                    <span>{channel.label}</span>
+                                                                </span>
+                                                            );
+                                                        })()}
                                                     </div>
                                                     <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 font-medium">
                                                         {incident.incident_type?.incident_type_name || incident.incident_type?.name || 'Emergency'}
@@ -786,7 +886,7 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST }: D
                                                         </button>
 
                                                         <Link
-                                                            href={`${baseUrl}/${incident.id}`}
+                                                            href={typeof window !== 'undefined' && window.location.search ? `${baseUrl}/${incident.id}${window.location.search}` : (status ? `${baseUrl}/${incident.id}?status=${encodeURIComponent(status)}` : `${baseUrl}/${incident.id}`)}
                                                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 shadow-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl text-xs font-semibold transition-all group-hover:border-blue-300 dark:group-hover:border-blue-500/50 group-hover:text-blue-600 dark:group-hover:text-blue-400 active:scale-95"
                                                         >
                                                             <span>View History</span>

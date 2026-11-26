@@ -29,13 +29,6 @@ export default function Footer() {
                                     className="w-full h-full object-contain drop-shadow-md"
                                 />
                             </div>
-                            <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
-                                <img
-                                    src="/images/drrm_logo.png"
-                                    alt="DRRM Logo"
-                                    className="w-full h-full object-contain drop-shadow-md"
-                                />
-                            </div>
                             <div>
                                 <span className="font-black text-base tracking-tight text-white block leading-tight">
                                     MDRRMO OPOL
