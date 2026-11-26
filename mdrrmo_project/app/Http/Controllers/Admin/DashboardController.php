@@ -30,6 +30,8 @@ class DashboardController extends Controller
         $verifiedCount = Incident::where('incident_status', 'verified')->count();
         $assignedCount = Incident::where('incident_status', 'assigned')->count();
         $respondingCount = Incident::where('incident_status', 'responding')->count();
+        $cancelledCount = Incident::where('incident_status', 'cancelled')->count();
+        $rejectedCount = Incident::where('incident_status', 'rejected')->count();
         $activeIncidents = $pendingCount + $verifiedCount + $assignedCount + $respondingCount;
         $pendingDispatch = $pendingCount + $verifiedCount;
         $resolvedIncidents = Incident::where('incident_status', 'resolved')->count();
@@ -139,6 +141,8 @@ class DashboardController extends Controller
             'verified_incidents' => $verifiedCount,
             'assigned_incidents' => $assignedCount,
             'responding_incidents' => $respondingCount,
+            'cancelled_incidents' => $cancelledCount,
+            'rejected_incidents' => $rejectedCount,
             'pending_dispatch' => $pendingDispatch,
             'resolved_incidents' => $resolvedIncidents,
             'resolved_today' => $resolvedToday,
@@ -197,11 +201,12 @@ class DashboardController extends Controller
                 ->count();
         }
 
-        // Real Incident Types Distribution
-        $incidentTypes = IncidentType::withCount('incidents')
+        // Real Incident Types Distribution (Resolved Cases Only)
+        $incidentTypes = IncidentType::withCount([
+            'incidents' => fn ($q) => $q->where('incident_status', 'resolved'),
+        ])
             ->orderByDesc('incidents_count')
             ->get()
-            ->filter(fn ($type) => (int) $type->incidents_count > 0)
             ->map(fn ($type) => [
                 'id' => $type->id,
                 'name' => $type->incident_type_name ?? $type->name ?? 'Unknown',
@@ -389,7 +394,8 @@ class DashboardController extends Controller
      */
     public function operationalAiSummary(Request $request)
     {
-        $forceRefresh = $request->boolean('refresh', false);
+        // Default to live fresh summary so dashboard auto-sync never serves stale metrics
+        $forceRefresh = $request->has('refresh') ? $request->boolean('refresh') : true;
         $service = new \App\Services\OperationalSummaryService();
         $summary = $service->getSummary($forceRefresh);
 

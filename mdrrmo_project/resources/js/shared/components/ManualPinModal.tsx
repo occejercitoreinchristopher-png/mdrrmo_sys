@@ -183,7 +183,7 @@ export default function ManualPinModal({
     // Common fields
     const [areaName, setAreaName] = useState<string>('');
     const [riskLevel, setRiskLevel] = useState<string>('Moderate');
-    const [typeMode, setTypeMode] = useState<string>('custom');
+    const [typeMode, setTypeMode] = useState<string>('');
     const [customType, setCustomType] = useState<string>('');
     const [detectedBarangay, setDetectedBarangay] = useState<string>('');
     const [description, setDescription] = useState<string>('');
@@ -222,7 +222,7 @@ export default function ManualPinModal({
         setInputMode('POINT');
         setAreaName('');
         setRiskLevel('Moderate');
-        setTypeMode(incidentTypes.length > 0 ? String(incidentTypes[0].id) : 'custom');
+        setTypeMode('');
         setCustomType('');
         setLatitude('');
         setLongitude('');
@@ -593,6 +593,11 @@ export default function ManualPinModal({
         e.preventDefault();
         setErrorMsg(null);
 
+        if (!typeMode) {
+            setErrorMsg('Please select an Incident / Hazard Type.');
+            return;
+        }
+
         const isCustom = typeMode === 'custom';
         if (isCustom && !customType.trim()) {
             setErrorMsg('Please enter an Incident / Hazard Type (e.g., Landslide Area).');
@@ -898,6 +903,7 @@ export default function ManualPinModal({
                                 onChange={(e) => setTypeMode(e.target.value)}
                                 className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
                             >
+                                <option value="" disabled>-- Select Incident / Hazard Type --</option>
                                 {incidentTypes.map((t) => (
                                     <option key={t.id} value={String(t.id)}>
                                         {t.incident_type_name}
@@ -1126,7 +1132,7 @@ export default function ManualPinModal({
                             </button>
                             <button
                                 type="submit"
-                                disabled={isSaving || (inputMode === 'POLYGON' && polygonVertices.length < 3)}
+                                disabled={isSaving || !typeMode || (typeMode === 'custom' && !customType.trim()) || (inputMode === 'POLYGON' && polygonVertices.length < 3)}
                                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-bold shadow-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 style={{ backgroundColor: currentRiskColor }}
                             >

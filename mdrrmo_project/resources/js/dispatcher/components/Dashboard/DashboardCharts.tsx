@@ -1,24 +1,18 @@
 import { useMemo } from 'react';
 import ReactApexChart from 'react-apexcharts';
-import {
-    PieChart,
-    TrendingUp,
-} from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import { useAppearance } from '@/shared/contexts/ThemeContext';
-import { toPascalCase } from '@/shared/utils/utils';
+import DashboardPieCard from '@/admin/components/Dashboard/DashboardPieCard';
 
-// Strict 2-3 Color Palette: Crimson (#F61509), Electric Blue (#3B82F6), Emerald (#10B981)
-const PIE_PALETTE = [
-    '#F61509', // MDRRMO Crimson
-    '#3B82F6', // Electric Blue
-    '#10B981', // Vivid Emerald
-    '#DC2626', // Deep Crimson
-    '#2563EB', // Sapphire Blue
-    '#059669', // Dark Emerald
-    '#991B1B', // Wine Crimson
-];
-
-export default function DashboardCharts({ charts = {} }: { charts?: any }) {
+export default function DashboardCharts({
+    charts = {},
+    stats = {},
+    extraData = {},
+}: {
+    charts?: any;
+    stats?: any;
+    extraData?: any;
+}) {
     const { theme } = useAppearance();
     const isDark = theme === 'dark';
 
@@ -127,121 +121,9 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
         [isDark, categories]
     );
 
-    // --- 2. Incidents by Type (Clean Animated Donut — 100% Real DB Data) ---
-    const rawIncidentTypes: Array<{ name: string; count: number }> = Array.isArray(charts.incident_types)
-        ? charts.incident_types
-        : [];
-    const totalTypedIncidents = rawIncidentTypes.reduce((sum, item) => sum + (item.count || 0), 0);
-    const typeLabels = rawIncidentTypes.map((t) => toPascalCase(t.name));
-    const typeSeries = rawIncidentTypes.map((t) => t.count);
-
-    const pieOptions: any = useMemo(
-        () => ({
-            chart: {
-                type: 'donut',
-                background: 'transparent',
-                fontFamily: 'inherit',
-                animations: {
-                    enabled: true,
-                    easing: 'easeinout',
-                    speed: 1200,
-                    animateGradually: {
-                        enabled: true,
-                        delay: 140,
-                    },
-                    dynamicAnimation: {
-                        enabled: true,
-                        speed: 550,
-                    },
-                },
-                dropShadow: {
-                    enabled: true,
-                    top: 3,
-                    left: 0,
-                    blur: 10,
-                    color: '#000000',
-                    opacity: isDark ? 0.35 : 0.1,
-                },
-            },
-            colors: PIE_PALETTE,
-            labels: typeLabels,
-            fill: {
-                type: 'gradient',
-                gradient: {
-                    shade: 'dark',
-                    type: 'diagonal1',
-                    shadeIntensity: 0.25,
-                    opacityFrom: 1,
-                    opacityTo: 0.85,
-                },
-            },
-            stroke: {
-                width: 3,
-                colors: [isDark ? '#0b1120' : '#ffffff'],
-            },
-            states: {
-                hover: {
-                    filter: { type: 'lighten', value: 0.08 },
-                },
-                active: {
-                    allowMultipleDataPointsSelection: false,
-                    filter: { type: 'darken', value: 0.1 },
-                },
-            },
-            plotOptions: {
-                pie: {
-                    expandOnClick: true,
-                    donut: {
-                        size: '68%',
-                        labels: {
-                            show: true,
-                            name: {
-                                show: true,
-                                fontSize: '12px',
-                                fontWeight: 600,
-                                color: isDark ? '#94a3b8' : '#64748b',
-                                offsetY: -4,
-                            },
-                            value: {
-                                show: true,
-                                fontSize: '28px',
-                                fontWeight: 800,
-                                color: isDark ? '#ffffff' : '#0f172a',
-                                offsetY: 4,
-                            },
-                            total: {
-                                show: true,
-                                showAlways: false,
-                                label: 'Total Incidents',
-                                fontSize: '11px',
-                                fontWeight: 600,
-                                color: isDark ? '#94a3b8' : '#64748b',
-                                formatter: (w: any) =>
-                                    w.globals.seriesTotals.reduce((a: number, b: number) => a + b, 0),
-                            },
-                        },
-                    },
-                },
-            },
-            yaxis: { show: false },
-            legend: { show: false },
-            dataLabels: { enabled: false },
-            tooltip: {
-                theme: isDark ? 'dark' : 'light',
-                y: {
-                    formatter: (val: number) => {
-                        const pct = totalTypedIncidents > 0 ? Math.round((val / totalTypedIncidents) * 100) : 0;
-                        return `${val} (${pct}%)`;
-                    },
-                },
-            },
-        }),
-        [isDark, typeLabels, totalTypedIncidents]
-    );
-
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch mb-6">
-            {/* Main Rising Bar Trend (8 cols) */}
+            {/* Main Rising Bar Trend (7-8 cols) */}
             <div className="lg:col-span-7 xl:col-span-8 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white dark:bg-[#0b1120]/90 shadow-xs overflow-hidden flex flex-col justify-between">
                 <div>
                     <div className="p-5 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-3">
@@ -272,43 +154,13 @@ export default function DashboardCharts({ charts = {} }: { charts?: any }) {
                 </div>
             </div>
 
-            {/* Clean Animated Incidents by Type Donut (4 cols) */}
-            <div className="lg:col-span-5 xl:col-span-4 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white dark:bg-[#0b1120]/90 shadow-xs overflow-hidden flex flex-col justify-between">
-                <div>
-                    <div className="p-5 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-[#F61509]">
-                                <PieChart className="w-4 h-4" />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-slate-900 dark:text-white text-[15px]">
-                                    Incidents by Type
-                                </h3>
-                                <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-0.5">
-                                    Live emergency distribution
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="p-4 flex items-center justify-center min-h-[340px]">
-                        {totalTypedIncidents === 0 ? (
-                            <div className="py-12 text-center text-xs text-slate-500 dark:text-slate-400">
-                                No categorized incidents recorded yet.
-                            </div>
-                        ) : (
-                            <div className="w-full">
-                                <ReactApexChart
-                                    key={`pie-donut-${isDark ? 'dark' : 'light'}`}
-                                    options={pieOptions}
-                                    series={typeSeries}
-                                    type="donut"
-                                    height={300}
-                                />
-                            </div>
-                        )}
-                    </div>
-                </div>
+            {/* Two-Tab Incident Analytics Card (4-5 cols) */}
+            <div className="lg:col-span-5 xl:col-span-4 flex flex-col">
+                <DashboardPieCard
+                    stats={stats}
+                    charts={charts}
+                    extraData={extraData}
+                />
             </div>
         </div>
     );

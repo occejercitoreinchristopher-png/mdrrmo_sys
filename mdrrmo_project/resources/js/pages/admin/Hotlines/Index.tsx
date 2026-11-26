@@ -289,7 +289,6 @@ export default function HotlinesIndex({
                                         <th className="px-6 py-4">Agency / Service</th>
                                         <th className="px-6 py-4">Phone Number</th>
                                         <th className="px-6 py-4">Emergency Scope</th>
-                                        <th className="px-6 py-4">Display Accent</th>
                                         <th className="px-6 py-4">Mobile Status</th>
                                         <th className="px-6 py-4 text-right">Actions</th>
                                     </tr>
@@ -297,7 +296,7 @@ export default function HotlinesIndex({
                                 <tbody className="divide-y divide-slate-800/70">
                                     {hotlines.length === 0 ? (
                                         <tr>
-                                            <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                                            <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
                                                 <Phone className="w-10 h-10 mx-auto text-slate-600 mb-2 opacity-50" />
                                                 <p className="font-semibold text-slate-400">No emergency hotlines found</p>
                                                 <p className="text-xs text-slate-600 mt-1">Click "Add Emergency Hotline" to create a new directory entry.</p>
@@ -330,23 +329,9 @@ export default function HotlinesIndex({
                                                                 <IconComp className="w-5 h-5" />
                                                             </div>
                                                             <div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="font-bold text-white text-sm">
-                                                                        {hotline.name}
-                                                                    </span>
-                                                                    {hotline.short_label && (
-                                                                        <span
-                                                                            className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border"
-                                                                            style={{
-                                                                                backgroundColor: `${hotline.accent_color}15`,
-                                                                                borderColor: `${hotline.accent_color}33`,
-                                                                                color: hotline.accent_color,
-                                                                            }}
-                                                                        >
-                                                                            {hotline.short_label}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
+                                                                <span className="font-bold text-white text-sm">
+                                                                    {hotline.name}
+                                                                </span>
                                                                 <p className="text-xs text-slate-500 mt-0.5">
                                                                     ID: {hotline.id} • Order: {hotline.sort_order}
                                                                 </p>
@@ -374,18 +359,6 @@ export default function HotlinesIndex({
 
                                                     <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">
                                                         {hotline.description || '—'}
-                                                    </td>
-
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <span
-                                                                className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0 shadow-sm"
-                                                                style={{ backgroundColor: hotline.accent_color }}
-                                                            />
-                                                            <span className="font-mono text-xs text-slate-400">
-                                                                {hotline.accent_color}
-                                                            </span>
-                                                        </div>
                                                     </td>
 
                                                     <td className="px-6 py-4">

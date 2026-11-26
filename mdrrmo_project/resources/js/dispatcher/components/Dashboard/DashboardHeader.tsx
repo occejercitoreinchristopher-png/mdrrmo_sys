@@ -2,8 +2,13 @@ import { useState, useEffect } from 'react';
 import { usePage } from '@inertiajs/react';
 import { Clock, Radio } from 'lucide-react';
 import { toPascalCase } from '@/shared/utils/utils';
+import OperationalSummaryModal from '@/admin/components/Dashboard/OperationalSummaryModal';
 
-export default function DashboardHeader() {
+interface DashboardHeaderProps {
+    initialAiSummary?: any;
+}
+
+export default function DashboardHeader({ initialAiSummary }: DashboardHeaderProps) {
     const { auth } = usePage().props as any;
     const user = auth?.user;
     const dispatcherName = user?.first_name ? toPascalCase(user.first_name) : 'Dispatcher';
@@ -53,12 +58,19 @@ export default function DashboardHeader() {
                         Live command center for MDRRMO emergency responses and dispatches.
                     </p>
                 </div>
-                <div className="flex flex-col sm:items-end bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 px-4 py-2.5 rounded-2xl shadow-sm">
-                    <div className="flex items-center gap-1.5 text-lg sm:text-xl font-bold text-slate-900 dark:text-white font-mono tabular-nums">
-                        <Clock className="w-4 h-4 text-[#F61509]" />
-                        <span suppressHydrationWarning>{timeStr}</span>
+                {/* AI Summary Button & Live Clock */}
+                <div className="flex flex-wrap items-center gap-3 sm:self-center">
+                    {/* AI Operational Summary Modal Button */}
+                    <OperationalSummaryModal initialSummary={initialAiSummary} />
+
+                    {/* Live Clock */}
+                    <div className="flex flex-col sm:items-end bg-white dark:bg-white/5 border border-slate-200/80 dark:border-white/10 px-4 py-2.5 rounded-2xl shadow-sm">
+                        <div className="flex items-center gap-1.5 text-lg sm:text-xl font-bold text-slate-900 dark:text-white font-mono tabular-nums">
+                            <Clock className="w-4 h-4 text-[#F61509]" />
+                            <span suppressHydrationWarning>{timeStr}</span>
+                        </div>
+                        <p suppressHydrationWarning className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">{dateStr}</p>
                     </div>
-                    <p suppressHydrationWarning className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">{dateStr}</p>
                 </div>
             </div>
         </div>

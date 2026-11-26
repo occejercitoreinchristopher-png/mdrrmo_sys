@@ -59,6 +59,7 @@ const STATUS_TABS = [
     { value: 'assigned', label: 'Assigned', dotColor: 'bg-indigo-500' },
     { value: 'responding', label: 'Responding', dotColor: 'bg-purple-500' },
     { value: 'resolved', label: 'Resolved', dotColor: 'bg-emerald-500' },
+    { value: 'cancelled', label: 'Cancelled', dotColor: 'bg-slate-400' },
     { value: 'rejected', label: 'Rejected', dotColor: 'bg-rose-500' },
 ];
 
@@ -703,7 +704,8 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST }: D
                                                                 incident.incident_status === 'verified' ? 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/10 dark:text-blue-400' :
                                                                     incident.incident_status === 'assigned' || incident.incident_status === 'responding' ? 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-500/10 dark:text-indigo-400' :
                                                                         incident.incident_status === 'resolved' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400' :
-                                                                            incident.incident_status === 'rejected' ? 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-400' :
+                                                                            incident.incident_status === 'cancelled' ? 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-500/10 dark:text-slate-400' :
+                                                                                incident.incident_status === 'rejected' ? 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-400' :
                                                                                 'bg-slate-50 text-slate-700 ring-slate-600/20 dark:bg-slate-500/10 dark:text-slate-400'
                                                         )}>
                                                             {incident.incident_status}
@@ -766,7 +768,7 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST }: D
                                                         </>
                                                     ) : (
                                                         <span className="text-xs text-slate-400 font-normal italic">
-                                                            {incident.incident_status === 'rejected' ? 'Rejected' : 'Reported'}
+                                                            {incident.incident_status === 'rejected' ? 'Rejected' : incident.incident_status === 'cancelled' ? 'Cancelled' : 'Reported'}
                                                         </span>
                                                     )}
                                                 </td>

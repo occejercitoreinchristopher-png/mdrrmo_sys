@@ -268,6 +268,7 @@ const OPOL_CENTER = {
  */
 export const DEFAULT_CLUSTER_CIRCLE_RADIUS_METERS = 20.0;
 export const DEFAULT_CLUSTER_MIN_OVERLAP_RATIO = 0.30;
+export const DEFAULT_POLYGON_CIRCLE_MERGE_THRESHOLD = 0.60;
 
 /**
  * Calculates the exact analytical intersection area (m²) and overlap ratio
@@ -412,6 +413,61 @@ function isPointInPolygon(point: [number, number], ring: number[][]): boolean {
         if (intersect) inside = !inside;
     }
     return inside;
+}
+
+/**
+ * Accurately compute metric area in square meters (m²) for a GeoJSON Polygon or MultiPolygon
+ * using local geodesic projection and the Shoelace formula.
+ * Prevents distortion and inaccuracies caused by directly treating degrees as meters.
+ */
+function computeGeometryAreaM2(
+    geometry: { type: string; coordinates: any } | null | undefined,
+    centerLng: number,
+    centerLat: number
+): number {
+    if (!geometry) return 0;
+    const earthRadius = 6371000;
+    const latRad = (centerLat * Math.PI) / 180;
+    const cosLat = Math.cos(latRad);
+    const mPerDegLat = (Math.PI / 180) * earthRadius;
+    const mPerDegLng = mPerDegLat * cosLat;
+
+    const ringArea = (ring: [number, number][]): number => {
+        if (!ring || ring.length < 3) return 0;
+        let area = 0;
+        const n = ring.length;
+        for (let i = 0; i < n - 1; i++) {
+            const x1 = (ring[i][0] - centerLng) * mPerDegLng;
+            const y1 = (ring[i][1] - centerLat) * mPerDegLat;
+            const x2 = (ring[i + 1][0] - centerLng) * mPerDegLng;
+            const y2 = (ring[i + 1][1] - centerLat) * mPerDegLat;
+            area += x1 * y2 - x2 * y1;
+        }
+        return Math.abs(area) / 2;
+    };
+
+    if (geometry.type === 'Polygon') {
+        const rings = geometry.coordinates as [number, number][][];
+        if (!rings || rings.length === 0) return 0;
+        let total = ringArea(rings[0]);
+        for (let i = 1; i < rings.length; i++) {
+            total -= ringArea(rings[i]);
+        }
+        return Math.max(0, total);
+    } else if (geometry.type === 'MultiPolygon') {
+        const polys = geometry.coordinates as [number, number][][][];
+        let total = 0;
+        for (const polyCoords of polys) {
+            if (!polyCoords || polyCoords.length === 0) continue;
+            let polyArea = ringArea(polyCoords[0]);
+            for (let i = 1; i < polyCoords.length; i++) {
+                polyArea -= ringArea(polyCoords[i]);
+            }
+            total += Math.max(0, polyArea);
+        }
+        return Math.max(0, total);
+    }
+    return 0;
 }
 
 /**
@@ -597,6 +653,8 @@ export default function AccidentHeatmapView({
     // Configurable Smart Cluster Parameters (Adjustable 20m radius & 30% overlap ratio)
     const [clusterRadiusMeters, setClusterRadiusMeters] = useState<number>(DEFAULT_CLUSTER_CIRCLE_RADIUS_METERS);
     const [clusterOverlapRatio, setClusterOverlapRatio] = useState<number>(DEFAULT_CLUSTER_MIN_OVERLAP_RATIO);
+    // Configurable Polygon-to-Circle Coverage Threshold (Default: 60% / 0.60 geographical coverage)
+    const [polygonCircleCoverageThreshold, setPolygonCircleCoverageThreshold] = useState<number>(DEFAULT_POLYGON_CIRCLE_MERGE_THRESHOLD);
     const [isManualModalOpen, setIsManualModalOpen] = useState(false);
     const [manualModalCenter, setManualModalCenter] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
 
@@ -962,13 +1020,18 @@ export default function AccidentHeatmapView({
     };
 
     const handleDeleteManualPin = async (pinRecord: IncidentRecord) => {
+        // STRICT SAFETY GUARD: Real system incidents from SIM or App can NEVER be deleted!
+        if (!pinRecord.is_manual_pin || !pinRecord.manual_pin_id) {
+            toast.error('Official emergency reports from SIM or Resident App cannot be deleted. Only manual prone areas/pins can be removed.');
+            return;
+        }
+
         const manualPinId = pinRecord.manual_pin_id;
-        if (!manualPinId) return;
 
         // 1. INSTANT OPTIMISTIC REMOVAL:
-        // Remove from local state immediately so the polygon/pin vanishes from the map in 0ms!
+        // Only remove the manual pin record from local state (system incidents are NEVER touched)
         setLocalIncidents((prev) =>
-            prev.filter((i) => i.manual_pin_id !== manualPinId && i.id !== pinRecord.id)
+            prev.filter((i) => !(i.is_manual_pin && (i.manual_pin_id === manualPinId || i.id === pinRecord.id)))
         );
         setConfirmDeletePin(null);
         setSelectedHotspot(null);
@@ -1825,9 +1888,20 @@ export default function AccidentHeatmapView({
         return absorbedIds;
     }, [activeIncidents]);
 
-    // GeoJSON Feature Collection for Saved Manual Incident-Prone Polygons (MODE B: USER-DRAWN ENCLOSED AREAS)
-    // NOTE: When an older manual polygon/pin is superseded/absorbed by a newer one, the old one is suppressed!
-    const savedPronePolygonsGeojson = useMemo(() => {
+    // =========================================================================
+    // 60% COVERAGE-BASED POLYGON-TO-CIRCLE MERGING ENGINE
+    // - Evaluates whether an active manually drawn polygon covers >= 60% of an incident circle.
+    // - Calculates actual geographical intersection area in square meters using geodesic projection.
+    // - Combines circle and polygon into one continuous visual shape via Turf union.
+    // - Excludes merged circles from standalone circle rendering (absorbedHotspotClusterKeys).
+    // - If coverage < 60%, keeps circle and polygon completely separate.
+    // - Preserves original incident GPS coordinates & manual polygon DB records without modification.
+    // =========================================================================
+    const {
+        savedPronePolygonsGeojson,
+        absorbedHotspotClusterKeys,
+        hotspotToParentPolygonMap,
+    } = useMemo(() => {
         const polyRecords = activeIncidents.filter(
             (inc) =>
                 inc.is_manual_pin &&
@@ -1837,69 +1911,161 @@ export default function AccidentHeatmapView({
                 inc.polygon_coordinates.length >= 3
         );
 
-        return {
-            type: 'FeatureCollection' as const,
-            features: polyRecords.map((rec) => {
-                let ring = [...rec.polygon_coordinates!];
-                if (
-                    ring[0][0] !== ring[ring.length - 1][0] ||
-                    ring[0][1] !== ring[ring.length - 1][1]
-                ) {
-                    ring.push(ring[0]);
-                }
-                const color = getRiskColorHex(rec.risk_level);
-                return {
-                    type: 'Feature' as const,
-                    properties: {
-                        id: rec.id,
-                        incident_id: rec.incident_id,
-                        manual_pin_id: rec.manual_pin_id,
-                        area_name: rec.area_name || rec.incident_type,
-                        incident_type: rec.incident_type,
-                        risk_level: rec.risk_level || 'Moderate',
-                        barangay: rec.barangay,
-                        description: rec.description,
-                        color: color,
-                    },
-                    geometry: {
-                        type: 'Polygon' as const,
-                        coordinates: [ring],
-                    },
-                };
-            }),
-        };
-    }, [activeIncidents, absorbedManualPinIds]);
+        if (polyRecords.length === 0) {
+            return {
+                savedPronePolygonsGeojson: { type: 'FeatureCollection' as const, features: [] },
+                absorbedHotspotClusterKeys: new Set<string>(),
+                hotspotToParentPolygonMap: {} as Record<string, IncidentRecord>,
+            };
+        }
 
-    // Cluster keys of hotspots that are absorbed by any active (non-superseded) manual polygon prone area
-    const absorbedHotspotClusterKeys = useMemo(() => {
-        const polyRecords = activeIncidents.filter(
-            (inc) =>
-                inc.is_manual_pin &&
-                inc.geometry_type === 'POLYGON' &&
-                !absorbedManualPinIds.has(inc.manual_pin_id || 0) &&
-                Array.isArray(inc.polygon_coordinates) &&
-                inc.polygon_coordinates.length >= 3
-        );
-        if (polyRecords.length === 0) return new Set<string>();
+        // Prepare Turf polygon features for each active manual prone area
+        const polyFeatures = polyRecords.map((rec) => {
+            let ring = [...rec.polygon_coordinates!];
+            if (
+                ring[0][0] !== ring[ring.length - 1][0] ||
+                ring[0][1] !== ring[ring.length - 1][1]
+            ) {
+                ring.push(ring[0]);
+            }
+            return {
+                record: rec,
+                turfFeature: polygon([ring]),
+                assignedSpots: [] as { spot: HotspotRecord; spotFeature: any }[],
+            };
+        });
 
-        const keys = new Set<string>();
+        const absorbedKeys = new Set<string>();
+        const parentMap: Record<string, IncidentRecord> = {};
+
+        // For each active hotspot circle/cluster, evaluate geographical coverage against manual polygons
         activeHotspots.forEach((spot) => {
-            const isAbsorbed = polyRecords.some((poly) => {
-                const matchesType = isHazardTypeMatch(
-                    poly.incident_type,
-                    spot.incident_type || spot.most_common_type
-                );
-                return (
-                    matchesType &&
-                    isPointInPolygon([spot.longitude, spot.latitude], poly.polygon_coordinates!)
-                );
+            const spotLng = spot.visual_longitude ?? spot.longitude;
+            const spotLat = spot.visual_latitude ?? spot.latitude;
+
+            let spotFeature: any = null;
+            if (spot.union_geometry) {
+                spotFeature = {
+                    type: 'Feature' as const,
+                    properties: {},
+                    geometry: spot.union_geometry,
+                };
+            } else {
+                spotFeature = create20mCirclePolygon(spotLng, spotLat, spot.radius_meters || 20, 36);
+            }
+
+            const spotArea = computeGeometryAreaM2(spotFeature.geometry, spotLng, spotLat);
+            if (spotArea <= 0) return;
+
+            // 1. Calculate individual coverage percentage for each polygon
+            let bestPolyIdx = -1;
+            let maxIndividualCoverage = 0;
+            const intersectingPolys: { idx: number; interGeom: any; area: number; coverage: number }[] = [];
+
+            polyFeatures.forEach((pf, pIdx) => {
+                try {
+                    const inter = intersect(featureCollection([pf.turfFeature, spotFeature]));
+                    if (inter && inter.geometry) {
+                        const interArea = computeGeometryAreaM2(inter.geometry, spotLng, spotLat);
+                        const coverage = interArea / spotArea;
+                        if (coverage > 0) {
+                            intersectingPolys.push({ idx: pIdx, interGeom: inter, area: interArea, coverage });
+                            if (coverage > maxIndividualCoverage) {
+                                maxIndividualCoverage = coverage;
+                                bestPolyIdx = pIdx;
+                            }
+                        }
+                    }
+                } catch {
+                    // Geometric degenerate fallback
+                }
             });
-            if (isAbsorbed) {
-                keys.add(spot.cluster_key);
+
+            let shouldMerge = false;
+            let targetPolyIdx = -1;
+
+            if (maxIndividualCoverage >= polygonCircleCoverageThreshold) {
+                // Scenario A: Individual polygon covers >= 60% of circle
+                shouldMerge = true;
+                targetPolyIdx = bestPolyIdx;
+            } else if (intersectingPolys.length > 1) {
+                // Scenario B: Multiple polygons intersect circle. Check combined coverage without double counting.
+                try {
+                    let combinedInter: any = intersectingPolys[0].interGeom;
+                    for (let k = 1; k < intersectingPolys.length; k++) {
+                        const u = union(featureCollection([combinedInter, intersectingPolys[k].interGeom]));
+                        if (u) combinedInter = u;
+                    }
+                    const combinedArea = combinedInter ? computeGeometryAreaM2(combinedInter.geometry, spotLng, spotLat) : 0;
+                    const combinedCoverage = combinedArea / spotArea;
+
+                    if (combinedCoverage >= polygonCircleCoverageThreshold) {
+                        shouldMerge = true;
+                        // Assign to polygon with largest intersection share
+                        targetPolyIdx = bestPolyIdx;
+                    }
+                } catch {
+                    // Fallback
+                }
+            }
+
+            if (shouldMerge && targetPolyIdx >= 0) {
+                absorbedKeys.add(spot.cluster_key);
+                parentMap[spot.cluster_key] = polyFeatures[targetPolyIdx].record;
+                polyFeatures[targetPolyIdx].assignedSpots.push({ spot, spotFeature });
             }
         });
-        return keys;
-    }, [activeIncidents, activeHotspots, absorbedManualPinIds]);
+
+        // Generate combined visualization geometry: Polygon unioned with all assigned >= 60% circles
+        const features = polyFeatures.map((pf) => {
+            const rec = pf.record;
+            let currentGeomFeature: any = pf.turfFeature;
+
+            // Sequentially union each >= 60% covered circle into derived visualization geometry
+            pf.assignedSpots.forEach(({ spotFeature }) => {
+                try {
+                    const u = union(featureCollection([currentGeomFeature, spotFeature]));
+                    if (u && u.geometry) {
+                        currentGeomFeature = u;
+                    }
+                } catch (err) {
+                    console.warn('Turf union error when merging circle into polygon:', err);
+                }
+            });
+
+            const color = getRiskColorHex(rec.risk_level);
+            return {
+                type: 'Feature' as const,
+                properties: {
+                    id: rec.id,
+                    incident_id: rec.incident_id,
+                    manual_pin_id: rec.manual_pin_id,
+                    area_name: rec.area_name || rec.incident_type,
+                    incident_type: rec.incident_type,
+                    risk_level: rec.risk_level || 'Moderate',
+                    barangay: rec.barangay,
+                    description: rec.description,
+                    color: color,
+                    merged_circle_count: pf.assignedSpots.length,
+                },
+                geometry: currentGeomFeature.geometry,
+            };
+        });
+
+        return {
+            savedPronePolygonsGeojson: {
+                type: 'FeatureCollection' as const,
+                features,
+            },
+            absorbedHotspotClusterKeys: absorbedKeys,
+            hotspotToParentPolygonMap: parentMap,
+        };
+    }, [
+        activeIncidents,
+        activeHotspots,
+        absorbedManualPinIds,
+        polygonCircleCoverageThreshold,
+    ]);
 
     // Active high-risk manual prone areas (Pins and Polygons) that are not absorbed
     const manualHighProneAreas = useMemo(() => {
@@ -2187,36 +2353,11 @@ export default function AccidentHeatmapView({
         );
     }, [selectedHotspot, activeHotspots]);
 
-    // Parent manual polygon if current activeSelectedHotspot is absorbed inside one (prioritizes newest active polygon)
+    // Parent manual polygon if current activeSelectedHotspot is absorbed inside one (via >= 60% coverage merge)
     const parentManualPolygon = useMemo(() => {
         if (!activeSelectedHotspot) return null;
-        const polyRecords = activeIncidents
-            .filter(
-                (inc) =>
-                    inc.is_manual_pin &&
-                    inc.geometry_type === 'POLYGON' &&
-                    !absorbedManualPinIds.has(inc.manual_pin_id || 0) &&
-                    Array.isArray(inc.polygon_coordinates) &&
-                    inc.polygon_coordinates.length >= 3
-            )
-            .sort((a, b) => (b.manual_pin_id || 0) - (a.manual_pin_id || 0));
-
-        return (
-            polyRecords.find((poly) => {
-                const matchesType = isHazardTypeMatch(
-                    poly.incident_type,
-                    activeSelectedHotspot.incident_type || activeSelectedHotspot.most_common_type
-                );
-                return (
-                    matchesType &&
-                    isPointInPolygon(
-                        [activeSelectedHotspot.longitude, activeSelectedHotspot.latitude],
-                        poly.polygon_coordinates!
-                    )
-                );
-            }) || null
-        );
-    }, [activeSelectedHotspot, activeIncidents, absorbedManualPinIds]);
+        return hotspotToParentPolygonMap[activeSelectedHotspot.cluster_key] || null;
+    }, [activeSelectedHotspot, hotspotToParentPolygonMap]);
 
     // Incidents inside the currently clicked pin/cluster, sorted NEWEST FIRST (latest first, oldest last)
     const inspectedIncidents = useMemo<IncidentRecord[]>(() => {
@@ -2686,18 +2827,32 @@ export default function AccidentHeatmapView({
     };
 
     const inspectProneArea = (inc: IncidentRecord) => {
-        // Collect all active system incidents (non-manual pins) inside this polygon area with matching emergency/hazard type
+        // Collect all active system incidents (non-manual pins) inside this polygon area or merged into it via 60% coverage
         const ring = inc.polygon_coordinates || [];
-        const absorbed = ring.length >= 3
+        const insideIncidents = ring.length >= 3
             ? activeIncidents.filter(
                 (other) =>
                     !other.is_manual_pin &&
                     typeof other.latitude === 'number' &&
                     typeof other.longitude === 'number' &&
-                    isPointInPolygon([other.longitude, other.latitude], ring) &&
-                    isHazardTypeMatch(inc.incident_type, other.incident_type)
+                    isPointInPolygon([other.longitude, other.latitude], ring)
             )
             : [];
+
+        // Also include incidents from 20-meter circles merged into this polygon (>= 60% coverage)
+        const mergedHotspots = activeHotspots.filter(
+            (spot) => hotspotToParentPolygonMap[spot.cluster_key]?.manual_pin_id === inc.manual_pin_id
+        );
+        const mergedIncidents = mergedHotspots.flatMap((s) => s.incidents || []);
+
+        const seenIncIds = new Set<number>();
+        const absorbed: IncidentRecord[] = [];
+        [...insideIncidents, ...mergedIncidents].forEach((item) => {
+            if (!seenIncIds.has(item.id)) {
+                seenIncIds.add(item.id);
+                absorbed.push(item);
+            }
+        });
 
         // Collect older manual pins/polygons that are absorbed / superseded by this newer manual polygon
         const supersededManualAreas = ring.length >= 3
@@ -3938,17 +4093,10 @@ export default function AccidentHeatmapView({
                                                                 Absorbed in <strong>{parentManualPolygon?.area_name || 'Manual Prone Area'}</strong>
                                                             </span>
                                                         </div>
-                                                        {parentManualPolygon && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setConfirmDeletePin(parentManualPolygon)}
-                                                                className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-300 border border-rose-500/30 text-[10px] font-bold transition-colors cursor-pointer"
-                                                                title="Delete only this manual polygon area (incidents will NOT be deleted)"
-                                                            >
-                                                                <Trash2 className="w-3 h-3" />
-                                                                <span>Delete Area</span>
-                                                            </button>
-                                                        )}
+                                                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                                            <Shield className="w-3 h-3" />
+                                                            Official Report Protected
+                                                        </span>
                                                     </div>
                                                 )}
                                             </div>
@@ -4324,28 +4472,6 @@ export default function AccidentHeatmapView({
                                                             ? 'Delete Area'
                                                             : 'Delete Pin'}
                                                     </span>
-                                                </button>
-                                            ) : activeSelectedHotspot?.cluster_key.startsWith('poly_') && inspectedIncidents[0]?.manual_pin_id ? (
-                                                <button
-                                                    type="button"
-                                                    disabled={deletingPinId === inspectedIncidents[0].manual_pin_id}
-                                                    onClick={() => setConfirmDeletePin(inspectedIncidents[0])}
-                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 dark:hover:bg-rose-500/25 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
-                                                    title="Delete only this manual polygon area (system incidents stay safe)"
-                                                >
-                                                    <Trash2 className="w-3 h-3" />
-                                                    <span>Delete Area</span>
-                                                </button>
-                                            ) : parentManualPolygon ? (
-                                                <button
-                                                    type="button"
-                                                    disabled={deletingPinId === parentManualPolygon.manual_pin_id}
-                                                    onClick={() => setConfirmDeletePin(parentManualPolygon)}
-                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-500/15 hover:bg-rose-100 dark:hover:bg-rose-500/25 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
-                                                    title="Delete only the manual polygon area (system incidents will NOT be deleted)"
-                                                >
-                                                    <Trash2 className="w-3 h-3" />
-                                                    <span>Delete Area</span>
                                                 </button>
                                             ) : null}
                                         </div>

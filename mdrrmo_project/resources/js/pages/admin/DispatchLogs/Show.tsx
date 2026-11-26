@@ -160,7 +160,7 @@ export default function DispatchLogShow({ incident }: any) {
                     isSystem: false,
                     badgeColor: 'bg-rose-500/10 text-rose-600 border-rose-200',
                     statusChange: { from: null, to: 'rejected' },
-                    remarks: `Reason: ${incident.rejection_reason || 'N/A'} (Category: ${incident.rejection_category || 'other'}${incident.is_prank ? ' - Flagged as Prank' : ''})`,
+                    remarks: `Reason: ${incident.rejection_reason || 'N/A'} (Category: ${(incident.rejection_category || 'other').replace(/_/g, ' ')}${incident.is_prank ? ' - Flagged as Prank' : ''})`,
                     icon: XCircle
                 });
             }
@@ -334,17 +334,35 @@ export default function DispatchLogShow({ incident }: any) {
 
                             <div>
                                 <span className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Incident Location</span>
-                                <div className="font-semibold text-slate-800 dark:text-slate-200">
-                                    {incident.place_of_incident && (
-                                        <div className="font-bold text-slate-900 dark:text-white mb-0.5">
-                                            {incident.place_of_incident}
+                                {(() => {
+                                    const primaryPlace = typeof incident.place_of_incident === 'string' ? incident.place_of_incident.trim() : '';
+                                    const secondaryAddress = (
+                                        typeof incident.incident_address === 'string'
+                                            ? incident.incident_address
+                                            : (typeof incident.location === 'object'
+                                                ? incident.location?.location_name || incident.location?.name
+                                                : (typeof incident.location === 'string' ? incident.location : ''))
+                                    )?.trim() || '';
+
+                                    const isDifferent = secondaryAddress && primaryPlace && secondaryAddress.toLowerCase() !== primaryPlace.toLowerCase();
+                                    const displayLocation = primaryPlace || secondaryAddress || 'Location Not Specified';
+
+                                    return (
+                                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                                            <div className="font-bold text-slate-900 dark:text-white mb-0.5">
+                                                {displayLocation}
+                                            </div>
+                                            {isDifferent && (
+                                                <div className="text-slate-600 dark:text-slate-400 text-[11px] mb-0.5">
+                                                    {secondaryAddress}
+                                                </div>
+                                            )}
+                                            <div className="text-[11px] text-slate-500 mt-0.5">
+                                                Barangay: <strong className="text-slate-700 dark:text-slate-300">{(typeof incident.barangay === 'object' ? incident.barangay?.barangay_name || incident.barangay?.name : incident.barangay) || 'Opol'}</strong>
+                                            </div>
                                         </div>
-                                    )}
-                                    <div>{incident.incident_address || (typeof incident.location === 'object' ? incident.location?.location_name || incident.location?.name : incident.location)}</div>
-                                    <div className="text-[11px] text-slate-500 mt-0.5">
-                                        Barangay: <strong className="text-slate-700 dark:text-slate-300">{(typeof incident.barangay === 'object' ? incident.barangay?.barangay_name || incident.barangay?.name : incident.barangay) || 'Opol'}</strong>
-                                    </div>
-                                </div>
+                                    );
+                                })()}
                             </div>
 
                             {incident.incident_latitude && incident.incident_longitude && (
@@ -446,7 +464,7 @@ export default function DispatchLogShow({ incident }: any) {
                                         <span>Rejection Audit Trail</span>
                                     </div>
                                     <div className="text-[11px] text-rose-800 dark:text-rose-300 space-y-0.5">
-                                        <div>Category: <strong className="uppercase">{incident.rejection_category || 'Other'}</strong></div>
+                                        <div>Category: <strong className="uppercase">{(incident.rejection_category || 'Other').replace(/_/g, ' ')}</strong></div>
                                         <div>Prank Flag: <strong>{incident.is_prank ? 'Yes (Prank)' : 'No'}</strong></div>
                                         <div>Reason: <strong>{incident.rejection_reason || 'N/A'}</strong></div>
                                     </div>

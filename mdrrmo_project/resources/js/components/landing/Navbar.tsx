@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Link } from '@inertiajs/react';
-import { Menu, X, ArrowRight, PhoneCall, Smartphone } from 'lucide-react';
+import { Link, usePage } from '@inertiajs/react';
+import { Menu, X, ArrowRight, PhoneCall, Smartphone, LayoutDashboard } from 'lucide-react';
 import { login } from '@/routes';
 
 export default function Navbar() {
     const [scrolled, setScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    const page = usePage<{ auth?: { user?: { id: number; role?: string; first_name?: string } | null } }>();
+    const user = page.props?.auth?.user;
+    const dashboardUrl = user?.role === 'dispatcher' ? '/dispatcher/dashboard' : '/admin/dashboard';
 
     useEffect(() => {
         const handleScroll = () => {
@@ -78,14 +82,23 @@ export default function Navbar() {
 
                     {/* Right Desktop Actions */}
                     <div className="hidden sm:flex items-center gap-3">
-                        {/* Sign In CTA */}
-                        <Link
-                            href={loginUrl}
-                            className="px-4.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl shadow-md shadow-blue-500/20 hover:shadow-blue-500/35 border border-blue-400/25 transition-all inline-flex items-center gap-1.5 transform hover:-translate-y-0.5 active:translate-y-0"
-                        >
-                            <span>Sign In</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                        </Link>
+                        {user ? (
+                            <Link
+                                href={dashboardUrl}
+                                className="px-4.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl shadow-md shadow-emerald-500/20 hover:shadow-emerald-500/35 border border-emerald-400/25 transition-all inline-flex items-center gap-1.5 transform hover:-translate-y-0.5 active:translate-y-0"
+                            >
+                                <LayoutDashboard className="w-3.5 h-3.5" />
+                                <span>Dashboard</span>
+                            </Link>
+                        ) : (
+                            <Link
+                                href={loginUrl}
+                                className="px-4.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl shadow-md shadow-blue-500/20 hover:shadow-blue-500/35 border border-blue-400/25 transition-all inline-flex items-center gap-1.5 transform hover:-translate-y-0.5 active:translate-y-0"
+                            >
+                                <span>Sign In</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                            </Link>
+                        )}
                     </div>
 
                     {/* Mobile Hamburger Button */}
@@ -136,13 +149,23 @@ export default function Navbar() {
                             <span>Explore OpolResq App</span>
                         </a>
 
-                        <Link
-                            href={loginUrl}
-                            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-lg shadow-blue-500/25"
-                        >
-                            <span>Access System Portal</span>
-                            <ArrowRight className="w-4 h-4" />
-                        </Link>
+                        {user ? (
+                            <Link
+                                href={dashboardUrl}
+                                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-bold shadow-lg shadow-emerald-500/25"
+                            >
+                                <LayoutDashboard className="w-4 h-4" />
+                                <span>Go to Dashboard</span>
+                            </Link>
+                        ) : (
+                            <Link
+                                href={loginUrl}
+                                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-lg shadow-blue-500/25"
+                            >
+                                <span>Access System Portal</span>
+                                <ArrowRight className="w-4 h-4" />
+                            </Link>
+                        )}
                     </div>
                 </div>
             )}

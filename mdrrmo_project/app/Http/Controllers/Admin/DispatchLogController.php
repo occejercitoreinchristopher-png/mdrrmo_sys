@@ -62,7 +62,11 @@ class DispatchLogController extends Controller
         }
 
         if ($request->filled('status')) {
-            $query->where('incident_status', $request->input('status'));
+            $statusVal = strtolower(trim($request->input('status')));
+            if ($statusVal === 'canceled') {
+                $statusVal = 'cancelled';
+            }
+            $query->where('incident_status', $statusVal);
         }
 
         if ($request->filled('priority')) {

@@ -20,7 +20,19 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::inertia('/', 'welcome')->name('home');
+Route::get('/', function () {
+    if (auth()->check()) {
+        $user = auth()->user();
+        if ($user?->role === 'admin') {
+            return redirect()->route('admin.dashboard');
+        }
+        if ($user?->role === 'dispatcher') {
+            return redirect()->route('dispatcher.dashboard');
+        }
+    }
+
+    return Inertia::render('welcome');
+})->name('home');
 
 Route::get('/download/app', function () {
     $customApk = public_path('downloads/opolresq.apk');
@@ -168,6 +180,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
 Route::prefix('dispatcher')->name('dispatcher.')->middleware(['auth', 'role:dispatcher'])->group(function () {
     Route::get('/', fn () => redirect()->route('dispatcher.dashboard'));
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/dashboard/ai-summary', [DashboardController::class, 'operationalAiSummary'])->name('dashboard.ai-summary');
     Route::get('/accident-heatmap', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'index'])->name('accident-heatmap');
     Route::post('/accident-heatmap/manual-pins', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'storeManualPin'])->name('accident-heatmap.manual-pins.store');
     Route::delete('/accident-heatmap/manual-pins/{manualPin}', [\App\Http\Controllers\Shared\AccidentHeatmapController::class, 'destroyManualPin'])->name('accident-heatmap.manual-pins.destroy');

@@ -126,6 +126,11 @@ class DashboardController extends Controller
             'total_incidents' => $totalIncidents,
             'active_incidents' => $activeIncidents,
             'pending_incidents' => Incident::where('incident_status', 'pending')->count(),
+            'verified_incidents' => Incident::where('incident_status', 'verified')->count(),
+            'assigned_incidents' => Incident::where('incident_status', 'assigned')->count(),
+            'responding_incidents' => Incident::where('incident_status', 'responding')->count(),
+            'cancelled_incidents' => Incident::where('incident_status', 'cancelled')->count(),
+            'rejected_incidents' => Incident::where('incident_status', 'rejected')->count(),
             'pending_dispatch' => $pendingDispatch,
             'resolved_incidents' => $resolvedIncidents,
             'resolved_today' => $resolvedToday,
@@ -183,12 +188,14 @@ class DashboardController extends Controller
                 ->count();
         }
 
-        // Real Incident Types Distribution
-        $incidentTypes = IncidentType::withCount('incidents')
+        // Real Incident Types Distribution (Resolved Cases Only)
+        $incidentTypes = IncidentType::withCount([
+            'incidents' => fn ($q) => $q->where('incident_status', 'resolved'),
+        ])
             ->orderByDesc('incidents_count')
             ->get()
-            ->filter(fn ($type) => (int) $type->incidents_count > 0)
             ->map(fn ($type) => [
+                'id' => $type->id,
                 'name' => $type->name ?? $type->incident_type_name,
                 'count' => (int) $type->incidents_count,
             ])
@@ -277,12 +284,37 @@ class DashboardController extends Controller
                 ];
             });
 
+        $statusOverview = Incident::select('incident_status', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
+            ->groupBy('incident_status')
+            ->pluck('count', 'incident_status')
+            ->toArray();
+
+        $extraData = [
+            'status_overview' => $statusOverview,
+        ];
+
+        $operationalSummary = (new \App\Services\OperationalSummaryService())->getSummary(false);
+
         return Inertia::render('dispatcher/Dashboard', [
             'stats' => $stats,
             'charts' => $charts,
             'community' => $community,
             'recentIncidents' => $recentIncidents,
             'recentDispatches' => $recentDispatches,
+            'extraData' => $extraData,
+            'aiSummary' => $operationalSummary,
         ]);
+    }
+
+    /**
+     * API endpoint to get or refresh the AI-powered operational summary.
+     */
+    public function operationalAiSummary(\Illuminate\Http\Request $request)
+    {
+        $forceRefresh = $request->has('refresh') ? $request->boolean('refresh') : true;
+        $service = new \App\Services\OperationalSummaryService();
+        $summary = $service->getSummary($forceRefresh);
+
+        return response()->json($summary);
     }
 }

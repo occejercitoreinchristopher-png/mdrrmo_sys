@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, RefreshCw, Clock, AlertCircle, ShieldCheck } from 'lucide-react';
 import Modal from '@/shared/components/Modal';
-import Button from '@/shared/components/Button';
 
 interface OperationalSummaryModalProps {
     initialSummary?: {
@@ -20,6 +19,7 @@ export default function OperationalSummaryModal({ initialSummary }: OperationalS
     );
     const [updatedAt, setUpdatedAt] = useState<string>(initialSummary?.updated_at || new Date().toISOString());
     const [loading, setLoading] = useState<boolean>(false);
+    const [isAutoSyncing, setIsAutoSyncing] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
     // Sync if initialSummary prop updates
@@ -32,19 +32,35 @@ export default function OperationalSummaryModal({ initialSummary }: OperationalS
         }
     }, [initialSummary]);
 
-    // Automatically check for fresh AI summary whenever the modal is opened
+    // Live endpoint helper based on current route
+    const getEndpoint = () => {
+        if (typeof window !== 'undefined' && window.location.pathname.startsWith('/dispatcher')) {
+            return '/dispatcher/dashboard/ai-summary';
+        }
+        return '/admin/dashboard/ai-summary';
+    };
+
+    // Auto-fetch fresh AI summary immediately upon opening, and auto-sync every 15 seconds while open
     useEffect(() => {
         if (!isOpen) return;
 
         let isMounted = true;
-        const fetchLatest = async () => {
+
+        const fetchLatest = async (isBackground = false) => {
+            if (isBackground) {
+                setIsAutoSyncing(true);
+            } else if (!summary) {
+                setLoading(true);
+            }
+
             try {
-                const response = await fetch('/admin/dashboard/ai-summary', {
+                const response = await fetch(`${getEndpoint()}?refresh=1`, {
                     headers: {
                         Accept: 'application/json',
                         'X-Requested-With': 'XMLHttpRequest',
                     },
                 });
+
                 if (response.ok && isMounted) {
                     const data = await response.json();
                     if (data?.summary) {
@@ -52,17 +68,30 @@ export default function OperationalSummaryModal({ initialSummary }: OperationalS
                         if (data.updated_at) {
                             setUpdatedAt(data.updated_at);
                         }
+                        setError(null);
                     }
                 }
             } catch {
                 // Silently retain current summary on network glitch
+            } finally {
+                if (isMounted) {
+                    setLoading(false);
+                    setIsAutoSyncing(false);
+                }
             }
         };
 
-        fetchLatest();
+        // 1. Immediately fetch fresh data when modal is opened
+        fetchLatest(false);
+
+        // 2. Auto-sync interval: automatically refresh every 15 seconds
+        const intervalId = setInterval(() => {
+            fetchLatest(true);
+        }, 15000);
 
         return () => {
             isMounted = false;
+            clearInterval(intervalId);
         };
     }, [isOpen]);
 
@@ -73,42 +102,11 @@ export default function OperationalSummaryModal({ initialSummary }: OperationalS
             return date.toLocaleTimeString('en-PH', {
                 hour: 'numeric',
                 minute: '2-digit',
+                second: '2-digit',
                 hour12: true,
             });
         } catch {
             return 'Just now';
-        }
-    };
-
-    const handleRefresh = async () => {
-        if (loading) return;
-        setLoading(true);
-        setError(null);
-
-        try {
-            const response = await fetch('/admin/dashboard/ai-summary?refresh=1', {
-                headers: {
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error ${response.status}`);
-            }
-
-            const data = await response.json();
-            if (data.summary) {
-                setSummary(data.summary);
-                setUpdatedAt(data.updated_at || new Date().toISOString());
-            } else {
-                throw new Error('Invalid summary response');
-            }
-        } catch (err: any) {
-            console.error('Failed to refresh AI summary:', err);
-            setError('Could not update summary at this time. Retaining latest operational record.');
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -130,70 +128,48 @@ export default function OperationalSummaryModal({ initialSummary }: OperationalS
                         <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                     </p>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 leading-none font-medium">
-                        Operational Insights
+                        Live Operational Insights
                     </p>
                 </div>
             </button>
 
-            {/* Standard System Modal matching MDRRMO Design */}
+            {/* Standard System Modal matching MDRRMO Design (No bottom buttons needed - has X close button and auto-sync) */}
             <Modal
                 open={isOpen}
                 onClose={() => setIsOpen(false)}
                 size="lg"
                 title="AI-Powered Operational Summary"
-                description="Intelligent insights based on current MDRRMO operational data."
-                footer={
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between w-full gap-3">
-                        <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
-                            <Clock className="w-3.5 h-3.5 text-slate-400" />
-                            <span>Last Updated: {formatTimestamp(updatedAt)}</span>
-                        </div>
-
-                        <div className="flex items-center gap-2.5 self-end sm:self-auto">
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => setIsOpen(false)}
-                            >
-                                Close
-                            </Button>
-
-                            <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={handleRefresh}
-                                disabled={loading}
-                                loading={loading}
-                            >
-                                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-                                <span>{loading ? 'Analyzing...' : 'Refresh Summary'}</span>
-                            </Button>
-                        </div>
-                    </div>
-                }
+                description="Intelligent insights automatically synced with live MDRRMO operational data."
             >
                 <div className="space-y-4">
-                    {/* Executive Operational Badge */}
-                    <div className="flex items-center justify-between">
+                    {/* Executive Operational Badge & Auto-Sync Status */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 text-[11px] font-bold uppercase tracking-wider">
                             <ShieldCheck className="w-3.5 h-3.5" />
                             <span>Executive Operational Briefing</span>
                         </div>
-                        <span className="text-[11px] text-slate-400 font-medium">
-                            MDRRMO Opol Command Center
-                        </span>
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>Auto-Sync Active {isAutoSyncing && '• Updating...'}</span>
+                        </div>
                     </div>
 
                     {/* Operational Summary Body */}
-                    {loading ? (
+                    {loading && !summary ? (
                         <div className="flex flex-col items-center justify-center py-10 gap-3 text-slate-500 dark:text-slate-400">
                             <RefreshCw className="w-8 h-8 animate-spin text-red-600 dark:text-red-500" />
                             <p className="text-xs sm:text-sm font-medium animate-pulse text-slate-600 dark:text-slate-300">
-                                Analyzing live incident records, ambulance fleet, and responder deployment...
+                                Analyzing live incident records, emergency types, dispatches, and fleet performance...
                             </p>
                         </div>
                     ) : (
-                        <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10">
+                        <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 relative">
+                            {isAutoSyncing && (
+                                <div className="absolute top-2.5 right-2.5 flex items-center gap-1 text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
+                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                    <span>Syncing</span>
+                                </div>
+                            )}
                             <p className="text-sm leading-relaxed text-slate-800 dark:text-slate-200 font-normal">
                                 {summary}
                             </p>
@@ -206,6 +182,17 @@ export default function OperationalSummaryModal({ initialSummary }: OperationalS
                             <span>{error}</span>
                         </div>
                     )}
+
+                    {/* Clean Footer Bar (Last Synced Timestamp & Station Identity, No Buttons) */}
+                    <div className="flex items-center justify-between text-xs font-mono text-slate-400 dark:text-slate-500 pt-1">
+                        <div className="flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Last Synced: {formatTimestamp(updatedAt)}</span>
+                        </div>
+                        <span className="text-[11px] font-sans text-slate-400">
+                            MDRRMO Opol Command Center
+                        </span>
+                    </div>
                 </div>
             </Modal>
         </>

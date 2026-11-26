@@ -203,7 +203,7 @@ export function printIncidentDetailReport(incident: any, options: PrintIncidentO
                 action: 'Incident Rejected / Cancelled',
                 user: verifiedBy ? `${verifiedBy.first_name} ${verifiedBy.last_name}` : dispatcherName,
                 statusTransition: 'rejected',
-                remarks: `Reason: ${incident.rejection_reason || 'N/A'} [Category: ${incident.rejection_category || 'other'}${incident.is_prank ? ' - Flagged as Prank' : ''}]`
+                remarks: `Reason: ${incident.rejection_reason || 'N/A'} [Category: ${(incident.rejection_category || 'other').replace(/_/g, ' ')}${incident.is_prank ? ' - Flagged as Prank' : ''}]`
             });
         }
     } else if (incident.incident_status === 'resolved') {
@@ -1625,7 +1625,7 @@ export function printDispatchLogsSummaryReport(
                                 ${latestLog ? `
                                     <strong>${latestLog.action?.name || 'Action'}</strong>
                                     <div style="font-size: 7.5px; color: #64748b;">${new Date(latestLog.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                                ` : (inc.incident_status === 'rejected' ? `<span style="color:#be123c;">Rejected (${inc.rejection_category || 'other'})</span>` : '<span style="color:#94a3b8; font-style:italic;">Reported</span>')}
+                                ` : (inc.incident_status === 'rejected' ? `<span style="color:#be123c;">Rejected (${(inc.rejection_category || 'other').replace(/_/g, ' ')})</span>` : '<span style="color:#94a3b8; font-style:italic;">Reported</span>')}
                             </td>
                         </tr>
                     `;

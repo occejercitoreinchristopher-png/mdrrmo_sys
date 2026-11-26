@@ -499,16 +499,11 @@ export default function IncidentIntelligence({
                                     <th className="py-2.5 px-3">Barangay</th>
                                     <th className="py-2.5 px-3 text-center">Incidents</th>
                                     <th className="py-2.5 px-3 text-center">Resolved</th>
-                                    <th className="py-2.5 px-3 text-center">Share</th>
                                     <th className="py-2.5 px-3 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                                 {sortedBarangays.slice(0, 7).map(([brgy, stat]: any, idx) => {
-                                    const sharePct =
-                                        incidents.length > 0
-                                            ? Math.round((stat.total / incidents.length) * 100)
-                                            : 0;
                                     const resPct =
                                         stat.total > 0
                                             ? Math.round((stat.resolved / stat.total) * 100)
@@ -547,19 +542,6 @@ export default function IncidentIntelligence({
                                                     ({resPct}%)
                                                 </span>
                                             </td>
-                                            <td className="py-2 px-3 text-center">
-                                                <div className="flex items-center justify-center gap-1.5">
-                                                    <div className="w-16 bg-slate-100 dark:bg-white/5 h-1.5 rounded-full overflow-hidden">
-                                                        <div
-                                                            className="bg-red-500 h-full rounded-full"
-                                                            style={{ width: `${sharePct}%` }}
-                                                        />
-                                                    </div>
-                                                    <span className="font-mono text-[10px] text-slate-400">
-                                                        {sharePct}%
-                                                    </span>
-                                                </div>
-                                            </td>
                                             <td className="py-2 px-3 text-right">
                                                 {isFiltered ? (
                                                     <button
@@ -589,7 +571,7 @@ export default function IncidentIntelligence({
 
                                 {sortedBarangays.length === 0 && (
                                     <tr>
-                                        <td colSpan={6} className="py-8 text-center text-xs text-slate-400 italic">
+                                        <td colSpan={5} className="py-8 text-center text-xs text-slate-400 italic">
                                             <p>No barangay activity records match the selected filters.</p>
                                             {activeBarangay && (
                                                 <button

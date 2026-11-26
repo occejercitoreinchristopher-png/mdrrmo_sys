@@ -956,7 +956,7 @@ export default function IncidentDetails({
                                                 {incident.rejection_category === 'prank' 
                                                     ? '🚨 Intentional Prank / Hoax Call' 
                                                     : (incident.rejection_category 
-                                                        ? incident.rejection_category.replace('_', ' ').toUpperCase() 
+                                                        ? incident.rejection_category.replace(/_/g, ' ').toUpperCase() 
                                                         : 'REJECTED')}
                                             </span>
                                         </div>

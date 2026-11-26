@@ -9,6 +9,8 @@ interface DashboardPageProps {
     community?: CommunityInsights;
     recentIncidents?: any[];
     recentDispatches?: any[];
+    extraData?: any;
+    aiSummary?: any;
 }
 
 export default function DashboardPage({
@@ -17,6 +19,8 @@ export default function DashboardPage({
     community,
     recentIncidents,
     recentDispatches,
+    extraData,
+    aiSummary,
 }: DashboardPageProps) {
     return (
         <DispatcherLayout title="Dashboard">
@@ -26,6 +30,8 @@ export default function DashboardPage({
                 community={community ?? {}}
                 recentIncidents={recentIncidents ?? []}
                 recentDispatches={recentDispatches ?? []}
+                extraData={extraData ?? {}}
+                aiSummary={aiSummary}
             />
         </DispatcherLayout>
     );
