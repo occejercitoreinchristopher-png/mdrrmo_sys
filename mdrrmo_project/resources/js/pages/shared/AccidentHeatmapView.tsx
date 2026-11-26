@@ -12,7 +12,7 @@ import MultiSelectFilterCombobox from '@/dispatcher/components/Incidents/MultiSe
 import ManualPinModal, { getRiskColorHex } from '@/shared/components/ManualPinModal';
 import { OPOL_LANDMARKS } from '@/dispatcher/data/opolLandmarks';
 import { useAppearance } from '@/shared/contexts/ThemeContext';
-import Map, { Source, Layer, type MapRef } from 'react-map-gl/mapbox';
+import Map, { Source, Layer, Marker, type MapRef } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
     Flame,
@@ -48,6 +48,8 @@ import {
     Phone,
     User,
     Truck,
+    CloudRain,
+    LifeBuoy,
     Camera,
     Copy,
     Check,
@@ -59,8 +61,16 @@ import {
     Users,
     Plus,
     Trash2,
-    Shapes
+    Shapes,
 } from 'lucide-react';
+import {
+    OFFICIAL_EMERGENCY_TYPES,
+    NEUTRAL_GRAY_COLOR,
+    NEUTRAL_GRAY_NAME,
+    getOfficialEmergencyType,
+    getEmergencyTypeColor,
+    getEmergencyTypeBadge,
+} from '@/shared/constants/emergencyTypes';
 
 interface IncidentRecord {
     id: number;
@@ -147,6 +157,8 @@ interface HotspotRecord {
     cluster_id?: string;
     latitude: number;
     longitude: number;
+    visual_latitude?: number;
+    visual_longitude?: number;
     seed_latitude?: number;
     seed_longitude?: number;
     location_name: string;
@@ -177,6 +189,10 @@ interface HotspotRecord {
     risk_record?: any;
     superseded_manual_areas?: IncidentRecord[];
     union_geometry?: any;
+    latest_incident_id?: number;
+    latest_incident_timestamp?: number;
+    earliest_incident_timestamp?: number;
+    earliest_incident_id?: number;
 }
 
 interface AnalyticsData {
@@ -240,6 +256,147 @@ const OPOL_CENTER = {
     latitude: 8.520,
     zoom: 12.4,
 };
+
+/**
+ * =========================================================================
+ * SMART OVERLAP-BASED CLUSTER CIRCLE MERGING CONFIGURATION
+ * =========================================================================
+ * - Radius: Initial 20-meter circle radius per incident
+ * - Overlap Threshold: Initial 30% (0.30) area overlap relative to circle area
+ * - Strict Rule: Original incident GPS coordinates are NEVER modified.
+ * =========================================================================
+ */
+export const DEFAULT_CLUSTER_CIRCLE_RADIUS_METERS = 20.0;
+export const DEFAULT_CLUSTER_MIN_OVERLAP_RATIO = 0.30;
+
+/**
+ * Calculates the exact analytical intersection area (m²) and overlap ratio
+ * between two geographic circles of radii r1 and r2 (in meters) separated by distance d (in meters).
+ * Returns overlap ratio relative to the smaller circle's area (0.0 to 1.0) and whether they should merge.
+ *
+ * Mathematical formula (exact analytical circle-circle intersection):
+ * - If d >= r1 + r2: overlap = 0.0 (0%) -> shouldMerge: false
+ * - If d <= |r1 - r2|: overlap = 1.0 (100%) -> shouldMerge: true
+ * - If |r1 - r2| < d < r1 + r2:
+ *     d1 = (r1^2 - r2^2 + d^2) / (2d)
+ *     d2 = d - d1
+ *     A_inter = r1^2 * acos(d1/r1) - d1*sqrt(r1^2 - d1^2) + r2^2 * acos(d2/r2) - d2*sqrt(r2^2 - d2^2)
+ *     ratio = A_inter / (pi * min(r1, r2)^2)
+ *     shouldMerge = ratio >= minOverlapRatio (default 0.30 / 30%)
+ */
+export function calculateCircleOverlapRatio(
+    distanceMeters: number,
+    r1: number = DEFAULT_CLUSTER_CIRCLE_RADIUS_METERS,
+    r2: number = DEFAULT_CLUSTER_CIRCLE_RADIUS_METERS,
+    minOverlapRatio: number = DEFAULT_CLUSTER_MIN_OVERLAP_RATIO
+): {
+    intersectionAreaM2: number;
+    overlapRatio: number;
+    linearOverlapRatio: number;
+    effectiveOverlapRatio: number;
+    shouldMerge: boolean;
+} {
+    if (distanceMeters >= r1 + r2) {
+        return {
+            intersectionAreaM2: 0,
+            overlapRatio: 0,
+            linearOverlapRatio: 0,
+            effectiveOverlapRatio: 0,
+            shouldMerge: false,
+        };
+    }
+    const rMin = Math.min(r1, r2);
+    const smallerArea = Math.PI * rMin * rMin;
+
+    if (distanceMeters <= Math.abs(r1 - r2)) {
+        return {
+            intersectionAreaM2: smallerArea,
+            overlapRatio: 1.0,
+            linearOverlapRatio: 1.0,
+            effectiveOverlapRatio: 1.0,
+            shouldMerge: true,
+        };
+    }
+
+    const d = distanceMeters;
+    const d1 = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
+    const d2 = d - d1;
+
+    const cos1 = Math.max(-1, Math.min(1, d1 / r1));
+    const cos2 = Math.max(-1, Math.min(1, d2 / r2));
+
+    const term1 = r1 * r1 * Math.acos(cos1);
+    const term2 = d1 * Math.sqrt(Math.max(0, r1 * r1 - d1 * d1));
+    const term3 = r2 * r2 * Math.acos(cos2);
+    const term4 = d2 * Math.sqrt(Math.max(0, r2 * r2 - d2 * d2));
+
+    const intersectionAreaM2 = Math.max(0, term1 - term2 + term3 - term4);
+    const overlapRatio = Math.max(0, Math.min(1, intersectionAreaM2 / smallerArea));
+
+    // Linear diameter overlap relative to smaller circle's diameter (2 * rMin)
+    // Ensures that visually apparent overlapping circles (e.g. 15.3m overlap on 40m diameter = 38.4%)
+    // correctly trigger merge when either area overlap OR linear overlap meets the threshold (default >= 30%)
+    const linearOverlapMeters = Math.max(0, r1 + r2 - d);
+    const linearOverlapRatio = Math.max(0, Math.min(1, linearOverlapMeters / (2 * rMin)));
+
+    const effectiveOverlapRatio = Math.max(overlapRatio, linearOverlapRatio);
+    const shouldMerge = effectiveOverlapRatio >= minOverlapRatio;
+
+    return {
+        intersectionAreaM2,
+        overlapRatio,
+        linearOverlapRatio,
+        effectiveOverlapRatio,
+        shouldMerge,
+    };
+}
+
+/**
+ * Convert local meter offsets (dx, dy) to delta latitude and longitude at a given latitude.
+ */
+function metersToDeltaLatLng(dxMeters: number, dyMeters: number, atLat: number): { dLat: number; dLng: number } {
+    const earthRadius = 6371000;
+    const dLat = (dyMeters / earthRadius) * (180 / Math.PI);
+    const latRad = (atLat * Math.PI) / 180;
+    const dLng = (dxMeters / (earthRadius * Math.cos(latRad))) * (180 / Math.PI);
+    return { dLat, dLng };
+}
+
+/**
+ * Convert delta latitude and longitude to local meter offsets (dx, dy) at a given latitude.
+ */
+function deltaLatLngToMeters(dLat: number, dLng: number, atLat: number): { dx: number; dy: number } {
+    const earthRadius = 6371000;
+    const dy = (dLat * Math.PI / 180) * earthRadius;
+    const latRad = (atLat * Math.PI) / 180;
+    const dx = (dLng * Math.PI / 180) * earthRadius * Math.cos(latRad);
+    return { dx, dy };
+}
+
+/**
+ * Translate a GeoJSON Polygon or MultiPolygon geometry by [dLng, dLat]
+ */
+function translateGeometry(geom: any, dLng: number, dLat: number): any {
+    if (!geom || (dLng === 0 && dLat === 0)) return geom;
+    if (geom.type === 'Polygon' && Array.isArray(geom.coordinates)) {
+        return {
+            ...geom,
+            coordinates: geom.coordinates.map((ring: number[][]) =>
+                ring.map(([lng, lat]) => [lng + dLng, lat + dLat])
+            ),
+        };
+    } else if (geom.type === 'MultiPolygon' && Array.isArray(geom.coordinates)) {
+        return {
+            ...geom,
+            coordinates: geom.coordinates.map((poly: number[][][]) =>
+                poly.map((ring: number[][]) =>
+                    ring.map(([lng, lat]) => [lng + dLng, lat + dLat])
+                )
+            ),
+        };
+    }
+    return geom;
+}
 
 /**
  * Simple Ray-Casting algorithm to check if a point [lng, lat] is inside a polygon ring
@@ -437,7 +594,37 @@ export default function AccidentHeatmapView({
     const [selectedEmergencyTypes, setSelectedEmergencyTypes] = useState<string[]>(filters.emergency_types || []);
     const [selectedStatus, setSelectedStatus] = useState<string>(filters.status || 'all');
     const [minThreshold, setMinThreshold] = useState<number | string>(filters.min_threshold ?? 1);
+    // Configurable Smart Cluster Parameters (Adjustable 20m radius & 30% overlap ratio)
+    const [clusterRadiusMeters, setClusterRadiusMeters] = useState<number>(DEFAULT_CLUSTER_CIRCLE_RADIUS_METERS);
+    const [clusterOverlapRatio, setClusterOverlapRatio] = useState<number>(DEFAULT_CLUSTER_MIN_OVERLAP_RATIO);
     const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+    const [manualModalCenter, setManualModalCenter] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
+
+    const handleOpenManualModal = () => {
+        let target = {
+            latitude: viewState.latitude ?? OPOL_CENTER.latitude,
+            longitude: viewState.longitude ?? OPOL_CENTER.longitude,
+            zoom: viewState.zoom ?? 14.5,
+        };
+        if (mapRef.current) {
+            try {
+                const center = mapRef.current.getCenter();
+                const zoom = mapRef.current.getZoom();
+                if (center && typeof center.lat === 'number' && typeof center.lng === 'number') {
+                    target = {
+                        latitude: center.lat,
+                        longitude: center.lng,
+                        zoom: typeof zoom === 'number' ? zoom : target.zoom,
+                    };
+                }
+            } catch {
+                // fallback to viewState
+            }
+        }
+        setManualModalCenter(target);
+        setIsManualModalOpen(true);
+    };
+
     const [deletingPinId, setDeletingPinId] = useState<number | null>(null);
     const [confirmDeletePin, setConfirmDeletePin] = useState<IncidentRecord | null>(null);
 
@@ -472,6 +659,12 @@ export default function AccidentHeatmapView({
     const [mapStyleType, setMapStyleType] = useState<'tactical' | 'satellite' | 'streets'>('tactical');
     const [showBarangayBoundaries, setShowBarangayBoundaries] = useState(true);
     const [showRiskZones, setShowRiskZones] = useState(true);
+
+    // Dynamic Zoom-Based Incident Visualization threshold
+    // When zoomed in close to street/building level (zoom >= 15.5), individual incident markers are displayed with official colors and legend is hidden
+    const ZOOM_IN_THRESHOLD = 15.5;
+    const isZoomedIn = (viewState.zoom ?? OPOL_CENTER.zoom) >= ZOOM_IN_THRESHOLD;
+    const [legendMode, setLegendMode] = useState<'emergency_types' | 'risk_zones'>('emergency_types');
 
     // Resolve Mapbox style URL based on active mode and current theme
     const getMapStyleUrl = () => {
@@ -795,18 +988,10 @@ export default function AccidentHeatmapView({
                 },
             });
             if (resp.ok) {
-                toast.success('Manual prone area deleted successfully.');
-                // 2. Re-sync with server without preserving stale state
-                const currentRoute =
-                    typeof window !== 'undefined' && window.location.pathname
-                        ? window.location.pathname
-                        : userRole === 'admin'
-                            ? '/admin/accident-heatmap'
-                            : '/dispatcher/accident-heatmap';
-                router.get(currentRoute, buildFilterParams(), {
-                    preserveState: false,
-                    preserveScroll: true,
-                    replace: true,
+                toast.success('Successfully deleted.');
+                // Re-sync with server in background (router.reload automatically preserves state & scroll)
+                router.reload({
+                    only: ['incidents', 'hotspots', 'analytics', 'barangayIncidentCounts'],
                 });
             } else {
                 // If deletion failed on server, restore from server props
@@ -1009,50 +1194,52 @@ export default function AccidentHeatmapView({
     // False when "All" (0 checked) OR 2+ Emergency Types are checked!
     const isSpecificEmergencyType = selectedEmergencyTypes.length === 1;
 
-    // Color mapper for emergency incident types (Strict Color Coding: Fire = Red, Medical = Blue, Vehicular = Orange, Rescue = Green)
+    // Centralized color mapper for official MDRRMO emergency types
     const getTypeBadgeColor = (type: string) => {
-        const lower = (type || '').toLowerCase();
-        if (lower.includes('fire')) {
-            return {
-                bg: 'bg-red-500/15 border-red-500/30 text-red-300',
-                dot: 'bg-red-500',
-                hex: '#EF4444',
-            };
-        }
-        if (lower.includes('vehicular') || lower.includes('accident') || lower.includes('traffic') || lower.includes('collision')) {
-            return {
-                bg: 'bg-orange-500/15 border-orange-500/30 text-orange-300',
-                dot: 'bg-orange-500',
-                hex: '#F97316',
-            };
-        }
-        if (lower.includes('medical') || lower.includes('cardiac') || lower.includes('trauma')) {
-            return {
-                bg: 'bg-blue-500/15 border-blue-500/30 text-blue-300',
-                dot: 'bg-blue-500',
-                hex: '#3B82F6',
-            };
-        }
-        if (lower.includes('search') || lower.includes('rescue') || lower.includes('drown') || lower.includes('water')) {
-            return {
-                bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
-                dot: 'bg-emerald-500',
-                hex: '#10B981',
-            };
-        }
-        if (lower.includes('weather') || lower.includes('flood') || lower.includes('typhoon')) {
-            return {
-                bg: 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300',
-                dot: 'bg-cyan-500',
-                hex: '#06B6D4',
-            };
-        }
+        const badge = getEmergencyTypeBadge(type);
         return {
-            bg: 'bg-violet-500/15 border-violet-500/30 text-violet-300',
-            dot: 'bg-violet-500',
-            hex: '#8B5CF6',
+            bg: `${badge.bg} ${badge.border} ${badge.text}`,
+            dot: `bg-[${badge.hex}]`,
+            hex: badge.hex,
+            name: badge.name,
         };
     };
+
+    // Valid incidents with coordinates for individual incident markers (when zoomed in)
+    const validMarkerIncidents = useMemo(() => {
+        return activeIncidents.filter(
+            (inc) =>
+                typeof inc.latitude === 'number' &&
+                typeof inc.longitude === 'number' &&
+                !isNaN(inc.latitude) &&
+                !isNaN(inc.longitude) &&
+                inc.latitude !== 0 &&
+                inc.longitude !== 0
+        );
+    }, [activeIncidents]);
+
+    // Breakdown counts for Official MDRRMO Emergency Types legend (when zoomed out)
+    const emergencyTypeStats = useMemo(() => {
+        const counts: Record<string, number> = {
+            'Medical Emergency': 0,
+            'Fire Emergency': 0,
+            'Severe Weather / Flood': 0,
+            'Crime & Security': 0,
+            'Search & Rescue': 0,
+        };
+        let unclassifiedCount = 0;
+
+        activeIncidents.forEach((inc) => {
+            const official = getOfficialEmergencyType(inc);
+            if (official) {
+                counts[official.name] = (counts[official.name] || 0) + 1;
+            } else {
+                unclassifiedCount++;
+            }
+        });
+
+        return { counts, unclassifiedCount, total: activeIncidents.length };
+    }, [activeIncidents]);
 
     const getRiskScore = (lvl?: string | null): number => {
         if (!lvl) return 0;
@@ -1233,18 +1420,17 @@ export default function AccidentHeatmapView({
     };
 
     // =========================================================================
-    // INTELLIGENT OVERLAPPING 20-METER INCIDENT CIRCLE MERGING
+    // SMART OVERLAP-BASED 20-METER INCIDENT CIRCLE MERGING
     // (DYNAMIC GEOGRAPHICAL BUFFER UNION)
-    // 1. Every incident has an exact 20-meter radius circular buffer.
-    // 2. Any incident circles within 40m (20m + 20m) overlap and are merged into
-    //    a continuous, unified hazard zone via @turf/union.
-    // 3. Isolated incident circles (distance > 40m) remain clean 20m circles.
-    // 4. Bypasses static server heatmap clusters so all active incidents and their
-    //    dynamic 20m buffer unions are immediately visualizable on the map.
+    // 1. Every incident has an exact configurable radius (default 20.0 meters).
+    // 2. Incident circles merge into a unified shape ONLY when their analytical
+    //    intersection area meets or exceeds the minimum overlap threshold (default 30%).
+    // 3. Circles with slight overlap (< 30%) or no overlap remain completely separate.
+    // 4. Original incident GPS coordinates are NEVER modified or moved.
     // =========================================================================
     const activeHotspots = useMemo(() => {
-        const circleRadiusMeters = 20.0;
-        const overlapThresholdMeters = circleRadiusMeters * 2.0; // 40m overlap threshold
+        const circleRadiusMeters = clusterRadiusMeters;
+        const overlapThresholdRatio = clusterOverlapRatio;
 
         // Get all valid incident coordinates (excluding manual polygons which are drawn separately)
         const valid = activeIncidents
@@ -1253,7 +1439,10 @@ export default function AccidentHeatmapView({
 
         if (valid.length === 0) return [];
 
-        // Adjacency graph for connected components of overlapping 20m circles
+        // Adjacency graph for connected components of overlapping circles
+        // SMART OVERLAP MERGING:
+        // Circles merge into a single shape ONLY if their actual intersection area is >= 30%
+        // of the circle area. Otherwise, they remain separate circles with their own visible borders.
         const adj: number[][] = Array.from({ length: valid.length }, () => []);
         for (let i = 0; i < valid.length; i++) {
             const lat1 = Number(valid[i].latitude);
@@ -1262,7 +1451,8 @@ export default function AccidentHeatmapView({
                 const lat2 = Number(valid[j].latitude);
                 const lng2 = Number(valid[j].longitude);
                 const dist = haversineMeters(lat1, lng1, lat2, lng2);
-                if (dist <= overlapThresholdMeters) {
+                const overlap = calculateCircleOverlapRatio(dist, circleRadiusMeters, circleRadiusMeters, overlapThresholdRatio);
+                if (overlap.shouldMerge) {
                     adj[i].push(j);
                     adj[j].push(i);
                 }
@@ -1417,9 +1607,114 @@ export default function AccidentHeatmapView({
                     union_geometry: unionGeometry,
                     latest_incident_timestamp: sorted[0]?.created_at ? new Date(sorted[0].created_at).getTime() : 0,
                     latest_incident_id: sorted[0]?.id || 0,
+                    earliest_incident_timestamp: (() => {
+                        const ts = sorted.map((i) => (i.created_at ? new Date(i.created_at).getTime() : 0)).filter((t) => t > 0);
+                        return ts.length > 0 ? Math.min(...ts) : 0;
+                    })(),
+                    earliest_incident_id: Math.min(...sorted.map((i) => i.id)),
+                    is_manual: sorted.every((i) => i.is_manual_pin),
                 } as any;
-            })
-            .filter((spot) => matchesRiskFilter(spot.level, spot.incident_count, minThreshold, isSpecificEmergencyType))
+            });
+
+        // =========================================================================
+        // PRIORITY-BASED CIRCLE POSITION ADJUSTMENT (NEWER CIRCLE ADJUSTS, OLDER REMAINS)
+        // Rule: Old circle stays. New circle adjusts. Actual incident GPS pin never moves.
+        // If two non-merged incident circles overlap (< 40m), the newer circle's visual
+        // center is adjusted outward away from all older circles until they no longer overlap.
+        // =========================================================================
+        const minNonOverlapDistance = circleRadiusMeters * 2.0 + 0.5; // 40.5 meters
+        const maxAdjustmentIterations = 20;
+
+        // Sort clusters in strict chronological creation order: Oldest cluster first
+        const chronoClusters = [...built].sort((a, b) => {
+            // Real system incidents have seniority over freshly added manual pins
+            const aHasReal = a.incidents?.some((i) => !i.is_manual_pin);
+            const bHasReal = b.incidents?.some((i) => !i.is_manual_pin);
+            if (aHasReal && !bHasReal) return -1;
+            if (!aHasReal && bHasReal) return 1;
+
+            const timeA = Number((a as any).earliest_incident_timestamp) || 0;
+            const timeB = Number((b as any).earliest_incident_timestamp) || 0;
+            if (timeA && timeB && timeA !== timeB) return timeA - timeB;
+
+            const idA = Math.min(...(a.incident_ids || [999999]));
+            const idB = Math.min(...(b.incident_ids || [999999]));
+            return idA - idB;
+        });
+
+        // Initialize visual coordinates to actual incident coordinates
+        chronoClusters.forEach((c) => {
+            c.visual_latitude = c.latitude;
+            c.visual_longitude = c.longitude;
+        });
+
+        // Priority relaxation: older clusters stay fixed; newer cluster adjusts outward
+        for (let i = 1; i < chronoClusters.length; i++) {
+            const curr = chronoClusters[i];
+
+            for (let iter = 0; iter < maxAdjustmentIterations; iter++) {
+                let adjusted = false;
+
+                for (let j = 0; j < i; j++) {
+                    const older = chronoClusters[j];
+                    const dist = haversineMeters(
+                        older.visual_latitude!,
+                        older.visual_longitude!,
+                        curr.visual_latitude!,
+                        curr.visual_longitude!
+                    );
+
+                    if (dist < minNonOverlapDistance) {
+                        adjusted = true;
+                        let { dx, dy } = deltaLatLngToMeters(
+                            curr.visual_latitude! - older.visual_latitude!,
+                            curr.visual_longitude! - older.visual_longitude!,
+                            older.visual_latitude!
+                        );
+                        let len = Math.sqrt(dx * dx + dy * dy);
+
+                        if (len < 0.001) {
+                            const idSeed = curr.latest_incident_id || (curr.incident_ids && curr.incident_ids[0]) || i;
+                            const angle = ((Math.abs(idSeed) * 137.5) % 360) * (Math.PI / 180);
+                            dx = Math.cos(angle);
+                            dy = Math.sin(angle);
+                            len = 1.0;
+                        }
+
+                        const pushFactor = minNonOverlapDistance / len;
+                        const targetDx = dx * pushFactor;
+                        const targetDy = dy * pushFactor;
+
+                        const { dLat, dLng } = metersToDeltaLatLng(targetDx, targetDy, older.visual_latitude!);
+                        curr.visual_latitude = older.visual_latitude! + dLat;
+                        curr.visual_longitude = older.visual_longitude! + dLng;
+                    }
+                }
+
+                if (!adjusted) break;
+            }
+        }
+
+        // Apply adjusted visual coordinates to the circle visualization geometry
+        built.forEach((spot) => {
+            const dLat = (spot.visual_latitude ?? spot.latitude) - spot.latitude;
+            const dLng = (spot.visual_longitude ?? spot.longitude) - spot.longitude;
+
+            if (spot.incident_count === 1) {
+                // Single incident circle: regenerate circle polygon at adjusted visual center
+                spot.union_geometry = create20mCirclePolygon(
+                    spot.visual_longitude ?? spot.longitude,
+                    spot.visual_latitude ?? spot.latitude,
+                    circleRadiusMeters
+                ).geometry;
+            } else if (dLat !== 0 || dLng !== 0) {
+                // Merged cluster: translate unified geometry by visual offset
+                spot.union_geometry = translateGeometry(spot.union_geometry, dLng, dLat);
+            }
+        });
+
+        return built
+            .filter((spot) => matchesRiskFilter(spot.level || '', spot.incident_count, minThreshold, isSpecificEmergencyType))
             .sort((a, b) => {
                 // 1. Primary Sort: Highest incident count first
                 if (b.incident_count !== a.incident_count) {
@@ -1441,12 +1736,12 @@ export default function AccidentHeatmapView({
                 return (Number((b as any).latest_incident_id) || 0) - (Number((a as any).latest_incident_id) || 0);
             })
             .map((spot, idx) => ({ ...spot, rank: idx + 1 }));
-
-        return built;
     }, [
         activeIncidents,
         minThreshold,
         isSpecificEmergencyType,
+        clusterRadiusMeters,
+        clusterOverlapRatio,
     ]);
 
     // Set of manual pin IDs (polygons and points) that are absorbed/superseded by a NEWER manual polygon area of matching emergency type
@@ -1688,7 +1983,11 @@ export default function AccidentHeatmapView({
                 }
 
                 // Strictly ensure spot is inside Opol Municipal Boundary
-                const brgyFeature = findOpolBarangayFeature(spot.longitude, spot.latitude, spot.barangay);
+                const checkLng = spot.visual_longitude ?? spot.longitude;
+                const checkLat = spot.visual_latitude ?? spot.latitude;
+                const brgyFeature =
+                    findOpolBarangayFeature(checkLng, checkLat, spot.barangay) ||
+                    findOpolBarangayFeature(spot.longitude, spot.latitude, spot.barangay);
                 if (!brgyFeature) {
                     return null; // Reject points outside Opol!
                 }
@@ -1764,6 +2063,10 @@ export default function AccidentHeatmapView({
                         risk_level: spot.level || risk.level,
                         risk_color: spot.color || risk.color,
                         incident_count: spot.incident_count,
+                        visual_latitude: spot.visual_latitude ?? spot.latitude,
+                        visual_longitude: spot.visual_longitude ?? spot.longitude,
+                        latitude: spot.latitude,
+                        longitude: spot.longitude,
                         barangay_name: brgyName,
                         location_name: spot.location_name,
                         dominant_type: dominant ? dominant.type : spot.incident_type || 'None',
@@ -2029,6 +2332,7 @@ export default function AccidentHeatmapView({
 
     // Pin and synchronize on-map floating popup with the selected cluster's incidents
     const pinHotspotPopup = (spot: HotspotRecord) => {
+        setLegendMode('risk_zones');
         let clusterIncidents: IncidentRecord[] = [];
         if (spot.incidents && spot.incidents.length > 0) {
             clusterIncidents = [...spot.incidents];
@@ -2122,6 +2426,65 @@ export default function AccidentHeatmapView({
     // Reset map view to full extent of Opol municipality
     const resetMapView = () => {
         closeInspectorPanel();
+    };
+
+    // Select and inspect individual incident marker clicked on the map
+    const handleIncidentMarkerClick = (inc: IncidentRecord) => {
+        setLegendMode('emergency_types');
+        const official = getOfficialEmergencyType(inc);
+        const color = official ? official.hex : NEUTRAL_GRAY_COLOR;
+        const typeName = official ? official.name : inc.incident_type || 'Unclassified';
+
+        const spot: HotspotRecord = {
+            cluster_key: `inc_${inc.id}`,
+            latitude: inc.latitude || OPOL_CENTER.latitude,
+            longitude: inc.longitude || OPOL_CENTER.longitude,
+            location_name: inc.area_name || inc.address || inc.purok_or_location || typeName,
+            barangay: inc.barangay || 'Opol',
+            incident_type: inc.incident_type,
+            incident_type_id: inc.incident_type_id,
+            most_common_type: typeName,
+            incident_count: 1,
+            intensity: 'Moderate',
+            intensity_class: 'moderate',
+            color: color,
+            incident_ids: [inc.id],
+            incidents: [inc],
+            recent_incidents: [
+                {
+                    id: inc.id,
+                    type: inc.incident_type,
+                    date: (inc as any).formatted_date || '',
+                    status: inc.status,
+                },
+            ],
+            badge_text: typeName,
+            meets_threshold: true,
+        };
+
+        setSelectedHotspot(spot);
+        setActiveIncidentIdx(0);
+        setCopiedCoord(false);
+
+        const pinData = {
+            barangayName: inc.barangay || 'Opol Area',
+            locationName: inc.area_name || inc.address || inc.purok_or_location || '',
+            normName: `inc_${inc.id}`,
+            riskLevel: typeName.toUpperCase(),
+            riskColor: color,
+            riskLabel: `${typeName} (${inc.incident_number || `#INC-${inc.id}`})`,
+            riskBadgeBg: 'bg-slate-700/60',
+            riskTextColor: 'text-white',
+            incidentCount: 1,
+            dominantType: typeName,
+            dominantPercentage: 100,
+            typeBreakdown: [{ type: typeName, count: 1, percentage: 100, color: color }],
+            radiusMeters: 15,
+            incidents: [inc],
+            isPinned: true,
+        };
+        hoveredBarangayRef.current = pinData;
+        setHoveredBarangay(pinData);
     };
 
     // Helper to format cluster header label ensuring Barangay is prominently displayed
@@ -2418,6 +2781,7 @@ export default function AccidentHeatmapView({
         // 1. Check if user clicked on a saved incident-prone polygon area
         const proneFeature = evt.features && evt.features.find((f: any) => f.layer?.id === 'saved-prone-polygons-fill');
         if (proneFeature && proneFeature.properties) {
+            setLegendMode('risk_zones');
             const id = Number(proneFeature.properties.id);
             const matched = activeIncidents.find((i) => i.id === id);
             if (matched) {
@@ -2429,6 +2793,7 @@ export default function AccidentHeatmapView({
         if (!showRiskZones) return;
         const feature = evt.features && evt.features.find((f: any) => f.layer?.id === 'clipped-risk-fill');
         if (feature && feature.properties) {
+            setLegendMode('risk_zones');
             const p = feature.properties;
             const key = p.cluster_key;
 
@@ -2556,43 +2921,6 @@ export default function AccidentHeatmapView({
                 <PageHeader
                     title="Incident Heatmap"
                     subtitle="Accident-prone area heatmap and incident hotspot analytics across Opol barangays."
-                    actions={
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                            {/* Add Incident-Prone Area Button (Mode A: Pin / Mode B: Draw Polygon) */}
-                            <button
-                                type="button"
-                                onClick={() => setIsManualModalOpen(true)}
-                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#F61509] hover:bg-rose-600 text-white text-xs font-bold shadow-md shadow-[#F61509]/25 transition-colors cursor-pointer"
-                                title="Add an incident-prone area: Pin Location or Draw Polygon Area"
-                            >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Add Prone Area</span>
-                            </button>
-
-                            {/* Full Screen Toggle */}
-                            <button
-                                type="button"
-                                onClick={() => setIsFullScreen(!isFullScreen)}
-                                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold shadow-2xs transition-colors cursor-pointer ${isFullScreen
-                                    ? 'bg-[#F61509] hover:bg-rose-600 border-rose-500 text-white shadow-md shadow-[#F61509]/25'
-                                    : 'bg-white dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200/80 dark:border-white/10 text-slate-700 dark:text-slate-200'
-                                    }`}
-                                title={isFullScreen ? 'Exit Full Screen (Esc)' : 'Expand Full Screen'}
-                            >
-                                {isFullScreen ? (
-                                    <>
-                                        <Minimize2 className="w-3.5 h-3.5" />
-                                        <span>Exit Full Screen</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Maximize2 className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                                        <span className="hidden md:inline">Expand</span>
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    }
                 />
 
                 {/* UNIFIED FILTER TOOLBAR CARD */}
@@ -2679,6 +3007,9 @@ export default function AccidentHeatmapView({
                                 }
 
                                 setSelectedEmergencyTypes(nextTypes);
+                                if (nextTypes.length > 0) {
+                                    setLegendMode('emergency_types');
+                                }
                                 if (nextThreshold !== minThreshold) {
                                     setMinThreshold(nextThreshold);
                                 }
@@ -2768,13 +3099,13 @@ export default function AccidentHeatmapView({
                 <div className="flex flex-col gap-4 w-full">
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                         {/* =========================================================================
-                            MAIN PANEL: INTERACTIVE INCIDENT HEATMAP
+                            MAIN PANEL: INTERACTIVE INCIDENT HEATMAP (RIGHT SIDE ON DESKTOP)
                         ========================================================================= */}
                         <div
                             className={`${isInspectingPin
                                 ? 'lg:col-span-6 xl:col-span-7'
                                 : 'lg:col-span-8 xl:col-span-9'
-                                } flex flex-col bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-white/10 rounded-2xl overflow-hidden shadow-sm relative min-h-[580px] ${isFullScreen ? 'xl:h-[calc(100vh-180px)]' : 'xl:h-[calc(100vh-230px)]'
+                                } lg:order-last flex flex-col bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-white/10 rounded-2xl overflow-hidden shadow-sm relative min-h-[580px] ${isFullScreen ? 'xl:h-[calc(100vh-180px)]' : 'xl:h-[calc(100vh-230px)]'
                                 } xl:min-h-[640px] transition-all duration-200`}
                         >
                             {/* Map Container */}
@@ -2903,6 +3234,60 @@ export default function AccidentHeatmapView({
                                             </Source>
                                         )}
 
+                                        {/* 3. DYNAMIC ZOOM-BASED INDIVIDUAL INCIDENT MARKERS */}
+                                        {/* When Zoomed In (zoom >= 13.5): Display individual incident markers using the 5 official colors */}
+                                        {isZoomedIn &&
+                                            validMarkerIncidents.map((inc) => {
+                                                const markerColor = getEmergencyTypeColor(inc);
+                                                const official = getOfficialEmergencyType(inc);
+                                                const isSelected = selectedHotspot?.cluster_key === `inc_${inc.id}`;
+
+                                                return (
+                                                    <Marker
+                                                        key={`incident-marker-${inc.id}`}
+                                                        longitude={inc.longitude!}
+                                                        latitude={inc.latitude!}
+                                                        anchor="bottom"
+                                                        onClick={(e) => {
+                                                            e.originalEvent.stopPropagation();
+                                                            handleIncidentMarkerClick(inc);
+                                                        }}
+                                                    >
+                                                        <div
+                                                            className={`relative flex flex-col items-center cursor-pointer transition-transform duration-150 select-none ${
+                                                                isSelected ? 'scale-125 z-40' : 'hover:scale-125 hover:z-30'
+                                                            }`}
+                                                        >
+                                                            {/* Selected Pulse Ring */}
+                                                            {isSelected && (
+                                                                <div
+                                                                    className="absolute -top-0.5 w-3.5 h-3.5 rounded-full opacity-40 animate-ping pointer-events-none"
+                                                                    style={{ backgroundColor: markerColor }}
+                                                                />
+                                                            )}
+
+                                                            {/* Pin Head Silhouette (Ultra Compact & Sleek Minimal Pin) */}
+                                                            <div
+                                                                className="relative w-2.5 h-2.5 rounded-full border border-white dark:border-slate-900 shadow-xs transition-all duration-150"
+                                                                style={{
+                                                                    backgroundColor: markerColor,
+                                                                    boxShadow: `0 1px 3px rgba(0,0,0,0.5), 0 0 4px ${markerColor}90`,
+                                                                }}
+                                                            />
+
+                                                            {/* Pin Tip Arrow */}
+                                                            <div
+                                                                className="w-0 h-0 -mt-[1px] border-l-[1.5px] border-l-transparent border-r-[1.5px] border-r-transparent border-t-[2px]"
+                                                                style={{
+                                                                    borderTopColor: markerColor,
+                                                                    filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))',
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </Marker>
+                                                );
+                                            })}
+
                                     </Map>
                                 ) : (
                                     <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center bg-slate-950">
@@ -2914,10 +3299,24 @@ export default function AccidentHeatmapView({
                                     </div>
                                 )}
 
-                                {/* INTERACTIVE HOVER / TAP STATISTICS HUD (Top Left, Compact & Sleek) */}
+                                {/* TOP-LEFT FLOATING CONTROL: Add Prone Area Button */}
+                                <div className="absolute top-3 left-3 z-20 pointer-events-auto">
+                                    {/* Floating Add Prone Area Button */}
+                                    <button
+                                        type="button"
+                                        onClick={handleOpenManualModal}
+                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#F61509] hover:bg-rose-600 text-white text-xs font-bold shadow-lg shadow-[#F61509]/30 border border-rose-500/50 backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer pointer-events-auto select-none"
+                                        title="Add an incident-prone area: Pin Location or Draw Polygon Area"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>Add Prone Area</span>
+                                    </button>
+                                </div>
+
+                                {/* INTERACTIVE HOVER / TAP STATISTICS HUD (Bottom Right, Clean & Unobtrusive) */}
                                 {hoveredBarangay && (
                                     <div
-                                        className="absolute top-3 left-3 z-20 w-72 max-w-[calc(100%-2rem)] bg-[#0b1329]/95 backdrop-blur-md border border-white/15 rounded-xl p-3 shadow-2xl transition-all duration-150 text-xs text-slate-200 pointer-events-auto"
+                                        className="absolute bottom-3 right-3 z-20 w-72 max-w-[calc(100%-2rem)] bg-[#0b1329]/95 backdrop-blur-md border border-white/15 rounded-xl p-3 shadow-2xl transition-all duration-150 text-xs text-slate-200 pointer-events-auto"
                                         style={{
                                             borderLeftColor:
                                                 hoveredBarangay.riskColor !== 'transparent'
@@ -2947,11 +3346,6 @@ export default function AccidentHeatmapView({
                                                     <h4 className="font-bold text-xs text-white leading-tight break-words">
                                                         {hoveredBarangay.barangayName}
                                                     </h4>
-                                                    {hoveredBarangay.isPinned && (
-                                                        <span className="text-[8.5px] px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30 shrink-0">
-                                                            Pinned
-                                                        </span>
-                                                    )}
                                                 </div>
                                                 {hoveredBarangay.locationName && (
                                                     <p className="text-[10px] text-cyan-400 font-medium mt-0.5 leading-snug break-words" title={hoveredBarangay.locationName}>
@@ -3001,7 +3395,11 @@ export default function AccidentHeatmapView({
                                             </div>
                                         ) : (
                                             <div className="grid grid-cols-2 gap-1.5 my-2">
-                                                <div className="p-1.5 rounded-lg bg-white/[0.04] border border-white/10 flex flex-col justify-center">
+                                                <div
+                                                    className="p-1.5 rounded-lg bg-white/[0.04] border border-white/10 flex flex-col justify-center cursor-pointer hover:border-blue-400/50 hover:bg-white/[0.08] transition-all"
+                                                    onClick={() => setLegendMode('risk_zones')}
+                                                    title="Switch legend to Risk Levels"
+                                                >
                                                     <span className="text-[8.5px] uppercase tracking-wider text-slate-400 font-semibold">
                                                         Risk Level
                                                     </span>
@@ -3050,7 +3448,11 @@ export default function AccidentHeatmapView({
                                                 </div>
                                             </div>
                                         ) : hoveredBarangay.dominantType && hoveredBarangay.dominantType !== 'None' ? (
-                                            <div className="p-2 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-between gap-2">
+                                            <div
+                                                className="p-2 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-between gap-2 cursor-pointer hover:border-pink-400/50 hover:bg-white/[0.08] transition-all"
+                                                onClick={() => setLegendMode('emergency_types')}
+                                                title="Switch legend to Emergency Types"
+                                            >
                                                 <div className="flex items-center gap-1.5 min-w-0">
                                                     <span
                                                         className="w-2 h-2 rounded-full shrink-0"
@@ -3074,77 +3476,130 @@ export default function AccidentHeatmapView({
                                                         </span>
                                                     </div>
                                                 </div>
-                                                {!hoveredBarangay.isManual &&
-                                                !hoveredBarangay.incidents?.some((i) => i.is_manual_pin) &&
-                                                !hoveredBarangay.normName?.startsWith('poly_') &&
-                                                hoveredBarangay.dominantPercentage > 0 && (
-                                                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/10 text-slate-200 shrink-0">
-                                                        {hoveredBarangay.dominantPercentage}%
-                                                    </span>
-                                                )}
                                             </div>
                                         ) : null}
                                     </div>
                                 )}
 
-                                {/* ON-MAP FLOATING LEGEND (Bottom Left) */}
-                                {showRiskZones && (
-                                    <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-[#0b1329]/90 border border-slate-200/90 dark:border-white/10 backdrop-blur-md rounded-xl px-3.5 py-2.5 shadow-2xl z-10 w-[236px] select-none pointer-events-auto transition-all">
-                                        <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-200 dark:border-white/10">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-800 dark:text-slate-300">
-                                                Risk Classification
-                                            </span>
-                                            <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                                Incidents
-                                            </span>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-x-3.5 gap-y-1.5 text-[10px]">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="w-2 h-2 rounded-full bg-[#EF4444] shadow-[0_0_6px_#EF4444] shrink-0" />
-                                                    <span className="text-slate-700 dark:text-slate-200 font-medium">High</span>
-                                                </div>
-                                                <span className="text-red-500 dark:text-red-400 font-mono font-bold text-[10px]">
-                                                    {isSpecificEmergencyType ? '4+' : '9+'}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="w-2 h-2 rounded-full bg-[#F97316] shadow-[0_0_6px_#F97316] shrink-0" />
-                                                    <span className="text-slate-700 dark:text-slate-200 font-medium">Mod-High</span>
-                                                </div>
-                                                <span className="text-orange-500 dark:text-orange-400 font-mono font-bold text-[10px]">
-                                                    {isSpecificEmergencyType ? '3' : '5–8'}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="w-2 h-2 rounded-full bg-[#FACC15] shadow-[0_0_6px_#FACC15] shrink-0" />
-                                                    <span className="text-slate-700 dark:text-slate-200 font-medium">Moderate</span>
-                                                </div>
-                                                <span className="text-yellow-600 dark:text-yellow-300 font-mono font-bold text-[10px]">
-                                                    {isSpecificEmergencyType ? '2' : '3–4'}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="w-2 h-2 rounded-full bg-[#3B82F6] shadow-[0_0_6px_#3B82F6] shrink-0" />
-                                                    <span className="text-slate-700 dark:text-slate-200 font-medium">Low</span>
-                                                </div>
-                                                <span className="text-blue-500 dark:text-blue-400 font-mono font-bold text-[10px]">
-                                                    {isSpecificEmergencyType ? '1' : '1–2'}
-                                                </span>
+                            {/* ON-MAP LEGEND (Bottom Left) - ALWAYS VISIBLE ZOOM IN OR OUT */}
+                                <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-[#0b1329]/95 border border-slate-200/90 dark:border-white/10 backdrop-blur-md rounded-xl px-3.5 py-2.5 shadow-2xl z-10 w-[240px] select-none pointer-events-auto transition-all">
+                                    {/* Header with Switcher between Emergency Types and Risk Levels */}
+                                    <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-200 dark:border-white/10">
+                                            <div className="flex items-center gap-1 bg-slate-100 dark:bg-white/10 p-0.5 rounded-lg">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setLegendMode('emergency_types')}
+                                                    className={`px-2 py-0.5 rounded text-[9.5px] font-bold transition-all cursor-pointer ${
+                                                        legendMode === 'emergency_types'
+                                                            ? 'bg-blue-600 text-white shadow-xs'
+                                                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                                                    }`}
+                                                >
+                                                    Emergency Types
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setLegendMode('risk_zones')}
+                                                    className={`px-2 py-0.5 rounded text-[9.5px] font-bold transition-all cursor-pointer ${
+                                                        legendMode === 'risk_zones'
+                                                            ? 'bg-blue-600 text-white shadow-xs'
+                                                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                                                    }`}
+                                                >
+                                                    Risk Levels
+                                                </button>
                                             </div>
                                         </div>
-                                        <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200 dark:border-white/10 text-[9.5px] text-slate-500 dark:text-slate-400">
-                                            <span className="flex items-center gap-1.5">
-                                                <span className="w-2 h-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_#22C55E] shrink-0" />
-                                                <span className="text-slate-700 dark:text-slate-200 font-medium">No incidents</span>
-                                            </span>
-                                            <span className="text-emerald-500 dark:text-emerald-400 font-mono font-bold text-[10px]">0</span>
-                                        </div>
+
+                                        {/* TAB 1: OFFICIAL MDRRMO EMERGENCY TYPES (5 Official Classifications - Equal Height to Risk Levels) */}
+                                        {legendMode === 'emergency_types' ? (
+                                            <div>
+                                                <div className="grid grid-cols-2 gap-x-3.5 gap-y-1.5 text-[10px]">
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                        <span className="w-2 h-2 rounded-full bg-[#EC4899] shadow-[0_0_6px_#EC4899] shrink-0" />
+                                                        <span className="text-slate-700 dark:text-slate-200 font-medium truncate" title="Medical Emergency">
+                                                            Medical
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                        <span className="w-2 h-2 rounded-full bg-[#EF4444] shadow-[0_0_6px_#EF4444] shrink-0" />
+                                                        <span className="text-slate-700 dark:text-slate-200 font-medium truncate" title="Fire Emergency">
+                                                            Fire
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                        <span className="w-2 h-2 rounded-full bg-[#F59E0B] shadow-[0_0_6px_#F59E0B] shrink-0" />
+                                                        <span className="text-slate-700 dark:text-slate-200 font-medium truncate" title="Crime & Security">
+                                                            Crime & Security
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                        <span className="w-2 h-2 rounded-full bg-[#A855F7] shadow-[0_0_6px_#A855F7] shrink-0" />
+                                                        <span className="text-slate-700 dark:text-slate-200 font-medium truncate" title="Search & Rescue">
+                                                            Search & Rescue
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200 dark:border-white/10 text-[9.5px]">
+                                                    <span className="flex items-center gap-1.5 min-w-0">
+                                                        <span className="w-2 h-2 rounded-full bg-[#06B6D4] shadow-[0_0_6px_#06B6D4] shrink-0" />
+                                                        <span className="text-slate-700 dark:text-slate-200 font-medium truncate" title="Severe Weather / Flood">
+                                                            Severe Weather / Flood
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            /* TAB 2: RISK CLASSIFICATION */
+                                            <div>
+                                                <div className="grid grid-cols-2 gap-x-3.5 gap-y-1.5 text-[10px]">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="w-2 h-2 rounded-full bg-[#EF4444] shadow-[0_0_6px_#EF4444] shrink-0" />
+                                                            <span className="text-slate-700 dark:text-slate-200 font-medium">High</span>
+                                                        </div>
+                                                        <span className="text-red-500 dark:text-red-400 font-mono font-bold text-[10px]">
+                                                            {isSpecificEmergencyType ? '4+' : '9+'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="w-2 h-2 rounded-full bg-[#F97316] shadow-[0_0_6px_#F97316] shrink-0" />
+                                                            <span className="text-slate-700 dark:text-slate-200 font-medium">Mod-High</span>
+                                                        </div>
+                                                        <span className="text-orange-500 dark:text-orange-400 font-mono font-bold text-[10px]">
+                                                            {isSpecificEmergencyType ? '3' : '5–8'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="w-2 h-2 rounded-full bg-[#FACC15] shadow-[0_0_6px_#FACC15] shrink-0" />
+                                                            <span className="text-slate-700 dark:text-slate-200 font-medium">Moderate</span>
+                                                        </div>
+                                                        <span className="text-yellow-600 dark:text-yellow-300 font-mono font-bold text-[10px]">
+                                                            {isSpecificEmergencyType ? '2' : '3–4'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="w-2 h-2 rounded-full bg-[#3B82F6] shadow-[0_0_6px_#3B82F6] shrink-0" />
+                                                            <span className="text-slate-700 dark:text-slate-200 font-medium">Low</span>
+                                                        </div>
+                                                        <span className="text-blue-500 dark:text-blue-400 font-mono font-bold text-[10px]">
+                                                            {isSpecificEmergencyType ? '1' : '1–2'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200 dark:border-white/10 text-[9.5px] text-slate-500 dark:text-slate-400">
+                                                    <span className="flex items-center gap-1.5">
+                                                        <span className="w-2 h-2 rounded-full bg-[#22C55E] shadow-[0_0_6px_#22C55E] shrink-0" />
+                                                        <span className="text-slate-700 dark:text-slate-200 font-medium">No incidents</span>
+                                                    </span>
+                                                    <span className="text-emerald-500 dark:text-emerald-400 font-mono font-bold text-[10px]">0</span>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
 
                                 {/* ON-MAP CONTROLS (Top Right) */}
                                 <div className="absolute top-3 right-3 z-10 flex items-start gap-2 pointer-events-auto">
@@ -3228,13 +3683,13 @@ export default function AccidentHeatmapView({
                         </div>
 
                         {/* =========================================================================
-                        RIGHT PANEL: EXPANDED INLINE INCIDENT INSPECTOR (ON PIN CLICK) OR COMPACT RANKED HOTSPOTS
+                        LEFT PANEL: EXPANDED INLINE INCIDENT INSPECTOR (ON PIN CLICK) OR COMPACT RANKED HOTSPOTS
                     ========================================================================= */}
                         <aside
                             className={`${isInspectingPin
                                 ? 'lg:col-span-6 xl:col-span-5'
                                 : 'lg:col-span-4 xl:col-span-3'
-                                } flex flex-col bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-white/10 rounded-2xl overflow-hidden shadow-sm min-h-[580px] ${isFullScreen ? 'xl:h-[calc(100vh-180px)]' : 'xl:h-[calc(100vh-230px)]'
+                                } lg:order-first flex flex-col bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-white/10 rounded-2xl overflow-hidden shadow-sm min-h-[580px] ${isFullScreen ? 'xl:h-[calc(100vh-180px)]' : 'xl:h-[calc(100vh-230px)]'
                                 } xl:min-h-[640px] transition-all duration-200`}
                         >
                             {activeSelectedHotspot && currentInspectedIncident ? (
@@ -4200,16 +4655,8 @@ export default function AccidentHeatmapView({
                                 ...prev.filter((p) => p.manual_pin_id !== newPin.id),
                             ]);
                         }
-                        const currentRoute =
-                            typeof window !== 'undefined' && window.location.pathname
-                                ? window.location.pathname
-                                : userRole === 'admin'
-                                    ? '/admin/accident-heatmap'
-                                    : '/dispatcher/accident-heatmap';
-                        router.get(currentRoute, buildFilterParams(), {
-                            preserveState: false,
-                            preserveScroll: true,
-                            replace: true,
+                        router.reload({
+                            only: ['incidents', 'hotspots', 'analytics', 'barangayIncidentCounts'],
                         });
                     }}
                     userRole={userRole}
@@ -4217,7 +4664,8 @@ export default function AccidentHeatmapView({
                     opolBarangays={opolBarangays}
                     existingHotspots={activeHotspots}
                     existingPronePolygons={savedPronePolygonsGeojson}
-                    initialCenter={viewState}
+                    initialCenter={manualModalCenter || viewState}
+                    initialMapStyleUrl={getMapStyleUrl()}
                     barangayGeojson={barangayGeojson}
                     activeFilterSummary={activeFilterSummary}
                     getTypeColorHex={(typeName) => getTypeBadgeColor(typeName).hex}

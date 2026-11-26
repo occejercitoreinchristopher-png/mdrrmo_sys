@@ -906,6 +906,71 @@ class AccidentHeatmapController extends Controller
         return $earthRadius * $c;
     }
 
+    public const CLUSTER_CIRCLE_RADIUS_METERS = 20.0;
+    public const CLUSTER_MIN_OVERLAP_RATIO = 0.30;
+
+    /**
+     * Exact analytical circle intersection area & overlap ratio (relative to smaller circle)
+     * - Evaluates both analytical area intersection and linear diameter overlap.
+     * - Returns overlap ratio (0.0 to 1.0) and whether it satisfies the configurable minimum threshold (30%).
+     */
+    protected function calculateCircleOverlapRatio(float $distanceMeters, float $r1 = self::CLUSTER_CIRCLE_RADIUS_METERS, float $r2 = self::CLUSTER_CIRCLE_RADIUS_METERS, float $minRatio = self::CLUSTER_MIN_OVERLAP_RATIO): array
+    {
+        if ($distanceMeters >= $r1 + $r2) {
+            return [
+                'intersection_area' => 0.0,
+                'overlap_ratio' => 0.0,
+                'linear_overlap_ratio' => 0.0,
+                'effective_overlap_ratio' => 0.0,
+                'should_merge' => false,
+            ];
+        }
+        $rMin = min($r1, $r2);
+        $smallerArea = M_PI * $rMin * $rMin;
+
+        if ($distanceMeters <= abs($r1 - $r2)) {
+            return [
+                'intersection_area' => $smallerArea,
+                'overlap_ratio' => 1.0,
+                'linear_overlap_ratio' => 1.0,
+                'effective_overlap_ratio' => 1.0,
+                'should_merge' => true,
+            ];
+        }
+
+        $d = $distanceMeters;
+        $d1 = ($r1 * $r1 - $r2 * $r2 + $d * $d) / (2 * $d);
+        $d2 = $d - $d1;
+
+        $cos1 = max(-1.0, min(1.0, $d1 / $r1));
+        $cos2 = max(-1.0, min(1.0, $d2 / $r2));
+
+        $term1 = $r1 * $r1 * acos($cos1);
+        $term2 = $d1 * sqrt(max(0.0, $r1 * $r1 - $d1 * $d1));
+        $term3 = $r2 * $r2 * acos($cos2);
+        $term4 = $d2 * sqrt(max(0.0, $r2 * $r2 - $d2 * $d2));
+
+        $intersectionArea = max(0.0, $term1 - $term2 + $term3 - $term4);
+        $overlapRatio = max(0.0, min(1.0, $intersectionArea / $smallerArea));
+
+        // Linear diameter overlap relative to smaller circle's diameter (2 * rMin)
+        // Ensures that visually apparent overlapping circles (e.g. 15.3m overlap on 40m diameter = 38.4%)
+        // correctly trigger merge when either area overlap OR linear overlap meets the threshold (default >= 30%)
+        $linearOverlapMeters = max(0.0, ($r1 + $r2) - $d);
+        $linearOverlapRatio = max(0.0, min(1.0, $linearOverlapMeters / (2.0 * $rMin)));
+
+        $effectiveOverlap = max($overlapRatio, $linearOverlapRatio);
+        $shouldMerge = $effectiveOverlap >= $minRatio;
+
+        return [
+            'intersection_area' => $intersectionArea,
+            'overlap_ratio' => $overlapRatio,
+            'linear_overlap_ratio' => $linearOverlapRatio,
+            'effective_overlap_ratio' => $effectiveOverlap,
+            'should_merge' => $shouldMerge,
+        ];
+    }
+
     /**
      * Dynamically group incidents into clean, non-overlapping 20-meter radius hotspot circles
      * using Option A (Nearest Cluster assignment via Haversine distance).
@@ -966,17 +1031,31 @@ class AccidentHeatmapController extends Controller
             $closestCount = -1;
 
             foreach ($clusters as $idx => $cluster) {
-                $dist = $this->haversineDistanceMeters($lat, $lng, $cluster['latitude'], $cluster['longitude']);
-                if ($dist > $nonOverlapMeters) {
+                // Check if new incident overlaps >= 30% with any incident in this cluster
+                $canMergeWithCluster = false;
+                $minClusterDist = 999999.0;
+                foreach ($cluster['incidents'] as $member) {
+                    $dist = $this->haversineDistanceMeters($lat, $lng, (float)$member['latitude'], (float)$member['longitude']);
+                    if ($dist < $minClusterDist) {
+                        $minClusterDist = $dist;
+                    }
+                    $overlap = $this->calculateCircleOverlapRatio($dist, $circleRadiusMeters, $circleRadiusMeters, self::CLUSTER_MIN_OVERLAP_RATIO);
+                    if ($overlap['should_merge']) {
+                        $canMergeWithCluster = true;
+                        break;
+                    }
+                }
+
+                if (!$canMergeWithCluster) {
                     continue;
                 }
 
                 // Pick strictly nearest cluster (tie-breaker: larger cluster, then earlier cluster)
-                $isCloser = $dist < ($closestDist - 0.0001);
-                $isTieLarger = abs($dist - $closestDist) <= 0.0001 && $cluster['incident_count'] > $closestCount;
+                $isCloser = $minClusterDist < ($closestDist - 0.0001);
+                $isTieLarger = abs($minClusterDist - $closestDist) <= 0.0001 && $cluster['incident_count'] > $closestCount;
 
                 if ($isCloser || $isTieLarger) {
-                    $closestDist = $dist;
+                    $closestDist = $minClusterDist;
                     $closestIdx = $idx;
                     $closestCount = $cluster['incident_count'];
                 }
@@ -1030,6 +1109,99 @@ class AccidentHeatmapController extends Controller
                 ];
             }
         }
+
+        // 3.5. Priority-Based Circle Position Adjustment (Old circle stays. New circle adjusts. Actual GPS pin never moves.)
+        // When non-merged circles overlap (< 40m), older circle remains fixed and newer circle adjusts outward.
+        $minNonOverlapDistance = $circleRadiusMeters * 2.0 + 0.5; // 40.5 meters
+        $maxAdjustmentIterations = 20;
+
+        $chronoClusters = $clusters;
+        usort($chronoClusters, function ($a, $b) {
+            $aHasReal = false;
+            foreach ($a['incidents'] as $i) {
+                if (empty($i['is_manual_pin'])) { $aHasReal = true; break; }
+            }
+            $bHasReal = false;
+            foreach ($b['incidents'] as $i) {
+                if (empty($i['is_manual_pin'])) { $bHasReal = true; break; }
+            }
+            if ($aHasReal && !$bHasReal) return -1;
+            if (!$aHasReal && $bHasReal) return 1;
+
+            $timeA = 0;
+            foreach ($a['incidents'] as $i) {
+                if (!empty($i['created_at'])) {
+                    $t = strtotime($i['created_at']);
+                    if ($t && ($timeA === 0 || $t < $timeA)) $timeA = $t;
+                }
+            }
+            $timeB = 0;
+            foreach ($b['incidents'] as $i) {
+                if (!empty($i['created_at'])) {
+                    $t = strtotime($i['created_at']);
+                    if ($t && ($timeB === 0 || $t < $timeB)) $timeB = $t;
+                }
+            }
+            if ($timeA && $timeB && $timeA !== $timeB) {
+                return $timeA <=> $timeB;
+            }
+
+            return min($a['incident_ids']) <=> min($b['incident_ids']);
+        });
+
+        foreach ($chronoClusters as &$cItem) {
+            $cItem['visual_latitude'] = $cItem['latitude'];
+            $cItem['visual_longitude'] = $cItem['longitude'];
+        }
+        unset($cItem);
+
+        $countChrono = count($chronoClusters);
+        for ($i = 1; $i < $countChrono; $i++) {
+            $curr = &$chronoClusters[$i];
+            for ($iter = 0; $iter < $maxAdjustmentIterations; $iter++) {
+                $adjusted = false;
+                for ($j = 0; $j < $i; $j++) {
+                    $older = &$chronoClusters[$j];
+                    $dist = $this->haversineDistanceMeters(
+                        (float)$older['visual_latitude'],
+                        (float)$older['visual_longitude'],
+                        (float)$curr['visual_latitude'],
+                        (float)$curr['visual_longitude']
+                    );
+                    if ($dist < $minNonOverlapDistance) {
+                        $adjusted = true;
+                        $earthRadius = 6371000.0;
+                        $dLat = ((float)$curr['visual_latitude'] - (float)$older['visual_latitude']);
+                        $dLng = ((float)$curr['visual_longitude'] - (float)$older['visual_longitude']);
+                        $latRad = deg2rad((float)$older['visual_latitude']);
+                        $dy = deg2rad($dLat) * $earthRadius;
+                        $dx = deg2rad($dLng) * $earthRadius * cos($latRad);
+                        $len = sqrt($dx * $dx + $dy * $dy);
+
+                        if ($len < 0.001) {
+                            $angle = deg2rad(fmod((abs($curr['incidents'][0]['id'] ?? $i) * 137.5), 360));
+                            $dx = cos($angle);
+                            $dy = sin($angle);
+                            $len = 1.0;
+                        }
+
+                        $scale = $minNonOverlapDistance / $len;
+                        $targetDx = $dx * $scale;
+                        $targetDy = $dy * $scale;
+
+                        $shiftLat = rad2deg($targetDy / $earthRadius);
+                        $shiftLng = rad2deg($targetDx / ($earthRadius * cos($latRad)));
+
+                        $curr['visual_latitude'] = (float)$older['visual_latitude'] + $shiftLat;
+                        $curr['visual_longitude'] = (float)$older['visual_longitude'] + $shiftLng;
+                    }
+                }
+                if (!$adjusted) break;
+            }
+            unset($curr);
+        }
+
+        $clusters = $chronoClusters;
 
         // 4. Process clusters into color classification & dominant type metadata:
         // - RED (High Concentration): 4 or more recorded incidents within the cluster

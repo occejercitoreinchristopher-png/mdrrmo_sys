@@ -54,6 +54,7 @@ interface ManualPinModalProps {
     activeFilterSummary: string;
     getTypeColorHex: (typeName: string) => string;
     initialCenter?: { latitude: number; longitude: number; zoom: number };
+    initialMapStyleUrl?: string;
 }
 
 const OPOL_DEFAULT = {
@@ -104,6 +105,7 @@ export default function ManualPinModal({
     activeFilterSummary,
     getTypeColorHex,
     initialCenter,
+    initialMapStyleUrl,
 }: ManualPinModalProps) {
     const mapRef = useRef<MapRef>(null);
     const reverseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -111,14 +113,31 @@ export default function ManualPinModal({
 
     // Sync camera to user's current view on main heatmap when modal opens
     useEffect(() => {
-        if (open && mapRef.current) {
-            const target = initialCenter || OPOL_DEFAULT;
-            mapRef.current.flyTo({
-                center: [target.longitude, target.latitude],
-                zoom: target.zoom || 13.0,
-                duration: 400,
-            });
-        }
+        if (!open) return;
+        const target = initialCenter || OPOL_DEFAULT;
+        const syncCamera = () => {
+            if (mapRef.current) {
+                try {
+                    mapRef.current.resize();
+                    mapRef.current.jumpTo({
+                        center: [target.longitude, target.latitude],
+                        zoom: target.zoom || 14.5,
+                    });
+                } catch {
+                    // map may not be initialized yet
+                }
+            }
+        };
+
+        syncCamera();
+        const t1 = setTimeout(syncCamera, 60);
+        const t2 = setTimeout(syncCamera, 200);
+        const t3 = setTimeout(syncCamera, 500);
+        return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+            clearTimeout(t3);
+        };
     }, [open, initialCenter]);
 
     // GeoJSON for existing hotspot 20m circle glows for visual reference
@@ -127,7 +146,7 @@ export default function ManualPinModal({
         const steps = 36;
         const earthRadius = 6371000;
         const features = existingHotspots.map((spot) => {
-            const radiusM = spot.radius_meters || 25;
+            const radiusM = spot.radius_meters || 20;
             const latRad = (spot.latitude * Math.PI) / 180;
             const dLat = (radiusM / earthRadius) * (180 / Math.PI);
             const dLng = ((radiusM / earthRadius) * (180 / Math.PI)) / Math.cos(latRad);
@@ -169,8 +188,16 @@ export default function ManualPinModal({
     const [detectedBarangay, setDetectedBarangay] = useState<string>('');
     const [description, setDescription] = useState<string>('');
     const [photoFiles, setPhotoFiles] = useState<Array<{ file: File; previewUrl: string }>>([]);
-    const [mapStyle, setMapStyle] = useState<'dark' | 'satellite'>('dark');
+    const [mapStyleUrl, setMapStyleUrl] = useState<string>(
+        initialMapStyleUrl || 'mapbox://styles/mapbox/dark-v11'
+    );
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (open && initialMapStyleUrl) {
+            setMapStyleUrl(initialMapStyleUrl);
+        }
+    }, [open, initialMapStyleUrl]);
 
     // Mode A: Point specific
     const [latitude, setLatitude] = useState<string>('');
@@ -186,6 +213,8 @@ export default function ManualPinModal({
 
     const [isSaving, setIsSaving] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+    const currentRiskColor = getRiskColorHex(riskLevel);
 
     // Reset form cleanly whenever modal opens
     useEffect(() => {
@@ -512,19 +541,39 @@ export default function ManualPinModal({
         };
     }, [inputMode, polygonVertices, riskLevel]);
 
-    // Centroid of closed polygon for real-time preview of High Risk radar pulse
-    const polygonCentroid = useMemo(() => {
-        if (!isPolygonClosed || polygonVertices.length < 3) return null;
-        let sLng = 0, sLat = 0;
-        polygonVertices.forEach(([lng, lat]) => {
-            sLng += lng;
-            sLat += lat;
-        });
+    // MODE A: Real-time 20-meter cluster circle preview underneath active pin
+    const activePinClusterGeojson = useMemo(() => {
+        if (inputMode !== 'POINT' || !hasValidPin) return null;
+        const steps = 48;
+        const radiusM = 20.0;
+        const earthRadius = 6371000;
+        const latRad = (parsedLat * Math.PI) / 180;
+        const dLat = (radiusM / earthRadius) * (180 / Math.PI);
+        const dLng = ((radiusM / earthRadius) * (180 / Math.PI)) / Math.cos(latRad);
+        const ring: [number, number][] = [];
+        for (let i = 0; i <= steps; i++) {
+            const angle = (i / steps) * 2 * Math.PI;
+            ring.push([
+                parsedLng + dLng * Math.cos(angle),
+                parsedLat + dLat * Math.sin(angle),
+            ]);
+        }
         return {
-            lng: sLng / polygonVertices.length,
-            lat: sLat / polygonVertices.length,
+            type: 'FeatureCollection' as const,
+            features: [
+                {
+                    type: 'Feature' as const,
+                    properties: {
+                        color: currentRiskColor,
+                    },
+                    geometry: {
+                        type: 'Polygon' as const,
+                        coordinates: [ring],
+                    },
+                },
+            ],
         };
-    }, [isPolygonClosed, polygonVertices]);
+    }, [inputMode, hasValidPin, parsedLat, parsedLng, currentRiskColor]);
 
     // Handle Map click depending on current mode
     const handleMapClick = (lat: number, lng: number) => {
@@ -667,8 +716,6 @@ export default function ManualPinModal({
     };
 
     if (!open) return null;
-
-    const currentRiskColor = getRiskColorHex(riskLevel);
 
     return (
         <div
@@ -1103,17 +1150,34 @@ export default function ManualPinModal({
                         {import.meta.env.VITE_MAPBOX_TOKEN ? (
                             <Map
                                 ref={mapRef}
-                                initialViewState={OPOL_DEFAULT}
+                                key={`manual-pin-map-${open ? 'open' : 'closed'}-${initialCenter?.latitude ?? 0}-${initialCenter?.longitude ?? 0}`}
+                                initialViewState={
+                                    initialCenter
+                                        ? {
+                                              latitude: initialCenter.latitude,
+                                              longitude: initialCenter.longitude,
+                                              zoom: initialCenter.zoom || 14.5,
+                                          }
+                                        : OPOL_DEFAULT
+                                }
                                 style={{ width: '100%', height: '100%' }}
                                 mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
-                                mapStyle={
-                                    mapStyle === 'dark'
-                                        ? 'mapbox://styles/mapbox/dark-v11'
-                                        : 'mapbox://styles/mapbox/satellite-streets-v12'
-                                }
+                                mapStyle={mapStyleUrl}
                                 attributionControl={false}
                                 cursor={inputMode === 'POLYGON' ? 'crosshair' : 'pointer'}
                                 onClick={(e) => handleMapClick(e.lngLat.lat, e.lngLat.lng)}
+                                onLoad={(e) => {
+                                    try {
+                                        e.target.resize();
+                                        const target = initialCenter || OPOL_DEFAULT;
+                                        e.target.jumpTo({
+                                            center: [target.longitude, target.latitude],
+                                            zoom: target.zoom || 14.5,
+                                        });
+                                    } catch {
+                                        // ignore
+                                    }
+                                }}
                             >
                                 {/* Opol Barangay Reference Boundary Lines */}
                                 {barangayGeojson && (
@@ -1163,7 +1227,8 @@ export default function ManualPinModal({
                                             type="fill"
                                             paint={{
                                                 'fill-color': ['get', 'color'],
-                                                'fill-opacity': 0.25,
+                                                'fill-opacity': 0.28,
+                                                'fill-antialias': true,
                                             }}
                                         />
                                         <Layer
@@ -1171,72 +1236,36 @@ export default function ManualPinModal({
                                             type="line"
                                             paint={{
                                                 'line-color': ['get', 'color'],
-                                                'line-width': 1.2,
-                                                'line-dasharray': [2, 2],
-                                                'line-opacity': 0.6,
+                                                'line-width': 2.0,
+                                                'line-opacity': 0.85,
                                             }}
                                         />
                                     </Source>
                                 )}
 
-                                {/* Existing Incident Pins (Past Incidents / Hotspots) for Visual Reference */}
-                                {existingHotspots &&
-                                    existingHotspots.map((spot, idx) => {
-                                        const isCombined = spot.incident_count > 1;
-                                        const clusterType = spot.incident_type || spot.most_common_type || 'Incident';
-                                        const pinColor = spot.color || getTypeColorHex(clusterType) || '#3B82F6';
-
-                                        return (
-                                            <Marker
-                                                key={`modal-existing-pin-${spot.cluster_key || idx}`}
-                                                longitude={spot.longitude}
-                                                latitude={spot.latitude}
-                                                anchor="bottom"
-                                            >
-                                                <div
-                                                    className="pointer-events-none group relative flex flex-col items-center filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.65)]"
-                                                    title={`${clusterType} • ${spot.incident_count} incidents (${spot.barangay})`}
-                                                >
-                                                    <svg
-                                                        width={isCombined ? 26 : 22}
-                                                        height={isCombined ? 34 : 28}
-                                                        viewBox="0 0 24 32"
-                                                        fill="none"
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                    >
-                                                        <path
-                                                            d="M12 0C5.37258 0 0 5.37258 0 12C0 19.8 12 32 12 32C12 32 24 19.8 24 12C24 5.37258 18.6274 0 12 0Z"
-                                                            fill={pinColor}
-                                                            stroke="#FFFFFF"
-                                                            strokeWidth="1.8"
-                                                            strokeLinejoin="round"
-                                                        />
-                                                        {isCombined ? (
-                                                            <>
-                                                                <circle cx="12" cy="11.5" r="6.5" fill="#0f172a" />
-                                                                <text
-                                                                    x="12"
-                                                                    y="14.3"
-                                                                    textAnchor="middle"
-                                                                    fill="#FFFFFF"
-                                                                    fontSize={spot.incident_count >= 10 ? '7.5' : '8.5'}
-                                                                    fontWeight="800"
-                                                                    fontFamily="system-ui, -apple-system, sans-serif"
-                                                                >
-                                                                    {spot.incident_count}
-                                                                </text>
-                                                            </>
-                                                        ) : (
-                                                            <circle cx="12" cy="11.5" r="4" fill="#FFFFFF" />
-                                                        )}
-                                                    </svg>
-                                                    <span className="text-[9px] font-bold px-1 rounded bg-slate-900/85 text-white mt-0.5 border border-white/20 whitespace-nowrap leading-tight">
-                                                        {spot.incident_count} {spot.incident_count === 1 ? 'inc' : 'incs'}
-                                                    </span>
-                                                </div>
-                                            </Marker>
-                                        );
-                                    })}
+                                {/* MODE A: Real-time 20-Meter Active Pin Cluster Preview */}
+                                {activePinClusterGeojson && (
+                                    <Source id="active-pin-cluster-source" type="geojson" data={activePinClusterGeojson}>
+                                        <Layer
+                                            id="active-pin-cluster-fill"
+                                            type="fill"
+                                            paint={{
+                                                'fill-color': currentRiskColor,
+                                                'fill-opacity': 0.32,
+                                                'fill-antialias': true,
+                                            }}
+                                        />
+                                        <Layer
+                                            id="active-pin-cluster-stroke"
+                                            type="line"
+                                            paint={{
+                                                'line-color': currentRiskColor,
+                                                'line-width': 2.2,
+                                                'line-opacity': 0.95,
+                                            }}
+                                        />
+                                    </Source>
+                                )}
 
                                 {/* MODE B: Real-time Polygon Area Fill & Outline */}
                                 {activeDrawingPolygonGeojson && (
@@ -1320,46 +1349,15 @@ export default function ManualPinModal({
                                         );
                                     })}
 
-                                {/* MODE B: High Risk Beating Radar Pulse at Polygon Center */}
-                                {inputMode === 'POLYGON' && isPolygonClosed && polygonCentroid && riskLevel === 'High' && (
-                                    <Marker
-                                        longitude={polygonCentroid.lng}
-                                        latitude={polygonCentroid.lat}
-                                        anchor="center"
-                                    >
-                                        <div className="relative flex items-center justify-center pointer-events-none">
-                                            <span className="w-24 h-24 rounded-full bg-red-500/20 animate-ping absolute" />
-                                            <span className="w-14 h-14 rounded-full bg-red-600/35 animate-ping absolute" />
-                                            <span className="w-5 h-5 rounded-full bg-[#E53935] animate-pulse shadow-[0_0_16px_rgba(229,57,53,0.95)] absolute" />
-                                            <span className="w-2.5 h-2.5 rounded-full bg-white absolute" />
-                                        </div>
-                                    </Marker>
-                                )}
-
-                                {/* MODE A: Draggable Single Pin Marker & High Risk Pulse */}
+                                {/* MODE A: Draggable Single Pin Marker */}
                                 {inputMode === 'POINT' && hasValidPin && (
-                                    <>
-                                        {riskLevel === 'High' && (
-                                            <Marker
-                                                longitude={parsedLng}
-                                                latitude={parsedLat}
-                                                anchor="center"
-                                            >
-                                                <div className="relative flex items-center justify-center pointer-events-none">
-                                                    <span className="w-24 h-24 rounded-full bg-red-500/20 animate-ping absolute" />
-                                                    <span className="w-14 h-14 rounded-full bg-red-600/35 animate-ping absolute" />
-                                                    <span className="w-5 h-5 rounded-full bg-[#E53935] animate-pulse shadow-[0_0_16px_rgba(229,57,53,0.95)] absolute" />
-                                                    <span className="w-2.5 h-2.5 rounded-full bg-white absolute" />
-                                                </div>
-                                            </Marker>
-                                        )}
-                                        <Marker
-                                            longitude={parsedLng}
-                                            latitude={parsedLat}
-                                            anchor="bottom"
-                                            draggable
-                                            onDragEnd={(e) => handleMapClick(e.lngLat.lat, e.lngLat.lng)}
-                                        >
+                                    <Marker
+                                        longitude={parsedLng}
+                                        latitude={parsedLat}
+                                        anchor="bottom"
+                                        draggable
+                                        onDragEnd={(e) => handleMapClick(e.lngLat.lat, e.lngLat.lng)}
+                                    >
                                         <div className="flex flex-col items-center cursor-grab active:cursor-grabbing">
                                             <span
                                                 className="mb-1 px-2 py-0.5 rounded-full text-white text-[10px] font-bold shadow-lg whitespace-nowrap border border-white/40"
@@ -1378,7 +1376,6 @@ export default function ManualPinModal({
                                             </svg>
                                         </div>
                                     </Marker>
-                                    </>
                                 )}
                             </Map>
                         ) : (
@@ -1475,27 +1472,42 @@ export default function ManualPinModal({
                         <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">
                             <button
                                 type="button"
-                                onClick={() => setMapStyle(mapStyle === 'dark' ? 'satellite' : 'dark')}
+                                onClick={() => {
+                                    setMapStyleUrl((prev) =>
+                                        prev.includes('satellite')
+                                            ? 'mapbox://styles/mapbox/streets-v12'
+                                            : prev.includes('streets')
+                                            ? 'mapbox://styles/mapbox/dark-v11'
+                                            : 'mapbox://styles/mapbox/satellite-streets-v12'
+                                    );
+                                }}
                                 className="px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-white/15 text-slate-100 text-[11px] font-semibold flex items-center gap-1 shadow-md cursor-pointer"
                                 title="Switch Map Style"
                             >
                                 <Layers className="w-3.5 h-3.5 text-rose-400" />
-                                <span>{mapStyle === 'dark' ? 'Satellite' : 'Dark'}</span>
+                                <span>
+                                    {mapStyleUrl.includes('satellite')
+                                        ? 'Satellite'
+                                        : mapStyleUrl.includes('streets')
+                                        ? 'Streets'
+                                        : 'Dark'}
+                                </span>
                             </button>
                             <button
                                 type="button"
-                                onClick={() =>
+                                onClick={() => {
+                                    const target = initialCenter || OPOL_DEFAULT;
                                     mapRef.current?.flyTo({
-                                        center: [OPOL_DEFAULT.longitude, OPOL_DEFAULT.latitude],
-                                        zoom: OPOL_DEFAULT.zoom,
-                                        duration: 700,
-                                    })
-                                }
+                                        center: [target.longitude, target.latitude],
+                                        zoom: target.zoom || 14.5,
+                                        duration: 600,
+                                    });
+                                }}
                                 className="px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-white/15 text-slate-200 text-[11px] font-semibold flex items-center justify-center gap-1 shadow-md cursor-pointer"
-                                title="Reset to Opol"
+                                title="Reset to Heatmap View"
                             >
                                 <Compass className="w-3.5 h-3.5" />
-                                <span>Opol</span>
+                                <span>Current View</span>
                             </button>
                         </div>
                     </div>
