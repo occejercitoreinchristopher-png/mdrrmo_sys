@@ -685,19 +685,22 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST, ini
                         <table className="w-full text-sm text-left border-collapse">
                             <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-200 dark:border-white/10">
                                 <tr>
-                                    <th className="px-5 py-3.5 font-semibold">Incident &amp; Type</th>
-                                    <th className="px-5 py-3.5 font-semibold">Reported &amp; Caller</th>
-                                    <th className="px-5 py-3.5 font-semibold">Status &amp; Priority</th>
-                                    <th className="px-5 py-3.5 font-semibold">Dispatcher</th>
-                                    <th className="px-5 py-3.5 font-semibold">Resources</th>
-                                    <th className="px-5 py-3.5 font-semibold">Last Action</th>
-                                    <th className="px-5 py-3.5 font-semibold text-right">Actions</th>
+                                    <th className="px-4 py-3.5 font-semibold">Incident</th>
+                                    <th className="px-4 py-3.5 font-semibold">Emergency Type</th>
+                                    <th className="px-4 py-3.5 font-semibold">Date Reported</th>
+                                    <th className="px-4 py-3.5 font-semibold">Caller</th>
+                                    <th className="px-4 py-3.5 font-semibold">Status</th>
+                                    <th className="px-4 py-3.5 font-semibold">Priority</th>
+                                    <th className="px-4 py-3.5 font-semibold">Dispatcher</th>
+                                    <th className="px-4 py-3.5 font-semibold">Resources</th>
+                                    <th className="px-4 py-3.5 font-semibold">Last Action</th>
+                                    <th className="px-4 py-3.5 font-semibold text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                                 {isError && (
                                     <tr>
-                                        <td colSpan={7} className="px-5 py-12 text-center text-rose-500 font-medium">
+                                        <td colSpan={10} className="px-5 py-12 text-center text-rose-500 font-medium">
                                             Failed to load dispatch logs. Please check your connection and try again.
                                         </td>
                                     </tr>
@@ -705,7 +708,7 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST, ini
 
                                 {!isError && data?.data?.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="px-5 py-16 text-center">
+                                        <td colSpan={10} className="px-5 py-16 text-center">
                                             <div className="inline-flex flex-col items-center">
                                                 <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
                                                     <AlertCircle className="w-6 h-6 text-slate-400" />
@@ -749,12 +752,12 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST, ini
 
                                         return (
                                             <tr key={incident.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group">
-                                                {/* 1. Incident & Type */}
-                                                <td className="px-5 py-4 align-top">
-                                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                                        <div className="font-semibold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                                            {incident.reference_number || `#${incident.id}`}
-                                                        </div>
+                                                {/* 1. Incident */}
+                                                <td className="px-4 py-4 align-top">
+                                                    <div className="font-semibold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                                        {incident.reference_number || `#${incident.id}`}
+                                                    </div>
+                                                    <div className="mt-1">
                                                         {(() => {
                                                             const channel = getChannelMeta(incident.report_source);
                                                             const ChannelIcon = channel.icon;
@@ -769,61 +772,72 @@ export default function DispatchLogsIndex({ barangays = OPOL_BARANGAYS_LIST, ini
                                                             );
                                                         })()}
                                                     </div>
-                                                    <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 font-medium">
-                                                        {incident.incident_type?.incident_type_name || incident.incident_type?.name || 'Emergency'}
-                                                    </div>
-                                                    <div className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[190px]" title={incident.place_of_incident || (typeof incident.location === 'object' ? incident.location?.location_name || incident.location?.name : incident.location)}>
+                                                    <div className="text-[11px] text-slate-400 mt-1 truncate max-w-[130px]" title={incident.place_of_incident || (typeof incident.location === 'object' ? incident.location?.location_name || incident.location?.name : incident.location)}>
                                                         {(typeof incident.barangay === 'object' ? incident.barangay?.barangay_name || incident.barangay?.name : incident.barangay) || (typeof incident.location === 'object' ? incident.location?.location_name || incident.location?.name : incident.location)}
                                                     </div>
                                                 </td>
 
-                                                {/* 2. Reported & Caller */}
-                                                <td className="px-5 py-4 align-top">
+                                                {/* 2. Emergency Type */}
+                                                <td className="px-4 py-4 align-top">
+                                                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                                        {incident.incident_type?.incident_type_name || incident.incident_type?.name || 'Emergency'}
+                                                    </span>
+                                                </td>
+
+                                                {/* 3. Date Reported */}
+                                                <td className="px-4 py-4 align-top whitespace-nowrap">
                                                     <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                         {new Date(incident.created_at).toLocaleDateString()}
                                                     </div>
-                                                    <div className="text-[10px] text-slate-500 font-normal">
+                                                    <div className="text-[10px] text-slate-500 font-normal mt-0.5">
                                                         {new Date(incident.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                     </div>
-                                                    <div className="text-xs text-slate-800 dark:text-slate-200 font-medium mt-1 truncate max-w-[150px]">
+                                                </td>
+
+                                                {/* 4. Caller */}
+                                                <td className="px-4 py-4 align-top">
+                                                    <div className="text-xs text-slate-800 dark:text-slate-200 font-medium truncate max-w-[140px]" title={caller}>
                                                         {caller}
                                                     </div>
                                                     {phone && (
-                                                        <div className="text-[10px] text-slate-400 font-mono">
+                                                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
                                                             {phone}
                                                         </div>
                                                     )}
                                                 </td>
 
-                                                {/* 3. Status & Priority */}
-                                                <td className="px-5 py-4 align-top">
-                                                    <div className="space-y-1">
-                                                        <span className={clsx(
-                                                            "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ring-1 ring-inset uppercase",
-                                                            isPending ? 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-400' :
-                                                                incident.incident_status === 'verified' ? 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/10 dark:text-blue-400' :
-                                                                    incident.incident_status === 'assigned' || incident.incident_status === 'responding' ? 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-500/10 dark:text-indigo-400' :
-                                                                        incident.incident_status === 'resolved' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400' :
-                                                                            incident.incident_status === 'cancelled' ? 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-500/10 dark:text-slate-400' :
-                                                                                incident.incident_status === 'rejected' ? 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-400' :
+                                                {/* 5. Status */}
+                                                <td className="px-4 py-4 align-top">
+                                                    <span className={clsx(
+                                                        "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ring-1 ring-inset uppercase",
+                                                        isPending ? 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-400' :
+                                                            incident.incident_status === 'verified' ? 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/10 dark:text-blue-400' :
+                                                                incident.incident_status === 'assigned' || incident.incident_status === 'responding' ? 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-500/10 dark:text-indigo-400' :
+                                                                    incident.incident_status === 'resolved' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400' :
+                                                                        incident.incident_status === 'cancelled' ? 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-500/10 dark:text-slate-400' :
+                                                                            incident.incident_status === 'rejected' ? 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-400' :
                                                                                 'bg-slate-50 text-slate-700 ring-slate-600/20 dark:bg-slate-500/10 dark:text-slate-400'
-                                                        )}>
-                                                            {incident.incident_status}
-                                                        </span>
+                                                    )}>
+                                                        {incident.incident_status}
+                                                    </span>
+                                                </td>
 
-                                                        {incident.priority && (
-                                                            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                                                <span
-                                                                    className={clsx(
-                                                                        'w-1.5 h-1.5 rounded-full',
-                                                                        incident.priority.toLowerCase() === 'critical' ? 'bg-red-500' :
-                                                                            incident.priority.toLowerCase() === 'high' ? 'bg-amber-500' : 'bg-blue-500'
-                                                                    )}
-                                                                />
-                                                                <span>{incident.priority}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                                {/* 6. Priority */}
+                                                <td className="px-4 py-4 align-top">
+                                                    {incident.priority ? (
+                                                        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                                            <span
+                                                                className={clsx(
+                                                                    'w-2 h-2 rounded-full shrink-0',
+                                                                    incident.priority.toLowerCase() === 'critical' ? 'bg-red-500' :
+                                                                        incident.priority.toLowerCase() === 'high' ? 'bg-amber-500' : 'bg-blue-500'
+                                                                )}
+                                                            />
+                                                            <span>{incident.priority}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs text-slate-400">—</span>
+                                                    )}
                                                 </td>
 
                                                 {/* 4. Dispatcher */}
