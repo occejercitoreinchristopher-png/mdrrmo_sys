@@ -10,6 +10,7 @@ import {
     Smartphone,
     Loader2,
     ArrowLeft,
+    ArrowRight,
 } from 'lucide-react';
 import { ThemeProvider } from '@/shared/contexts/ThemeContext';
 import ThemeToggle from '@/shared/components/ThemeToggle';
@@ -337,24 +338,32 @@ function LoginForm({ status, canResetPassword = true }: LoginProps) {
                                 <span className="font-semibold text-white">Staff Access:</span> Admin, Dispatcher, and Responder accounts are provided by the MDRRMO Administrator.
                             </p>
 
-                            {/* Resident Mobile App Promo Card */}
-                            <div className="p-2.5 rounded-xl bg-white/10 hover:bg-white/[0.13] border border-white/15 text-left flex items-start gap-2.5 shadow-sm transition-all duration-200">
-                                <div className="w-7 h-7 rounded-lg bg-[#FF6B35]/25 border border-[#FF6B35]/40 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                    <Smartphone className="w-3.5 h-3.5 text-[#FF6B35]" />
+                            {/* Resident Mobile App Promo Card with Direct Link to Landing Page QR Code */}
+                            <a
+                                href="/#mobile-app"
+                                className="p-2.5 sm:p-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-left flex items-start gap-2.5 sm:gap-3 shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0 group cursor-pointer block"
+                            >
+                                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[#FF6B35]/25 border border-[#FF6B35]/40 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                                    <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#FF6B35]" />
                                 </div>
-                                <div className="flex-1">
-                                    <p className="text-[11px] font-bold text-white tracking-wide">
-                                        Are you an Opol Resident?
-                                    </p>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-1">
+                                        <p className="text-[11px] font-bold text-white tracking-wide truncate">
+                                            Are you an Opol Resident?
+                                        </p>
+                                        <span className="text-[10px] text-white/90 font-bold flex items-center gap-0.5 group-hover:underline shrink-0">
+                                            Scan QR <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
+                                        </span>
+                                    </div>
                                     <p className="text-[10px] text-white/80 leading-snug mt-0.5">
                                         Create your resident account, report emergencies, and track dispatched ambulances through the{' '}
-                                        <span className="font-semibold text-white underline decoration-white/40 hover:decoration-white transition-colors">
+                                        <span className="font-semibold text-white underline decoration-white/60 group-hover:decoration-white">
                                             MDRRMO Mobile App
                                         </span>
-                                        .
+                                        . Click to view QR Code & Download APK.
                                     </p>
                                 </div>
-                            </div>
+                            </a>
                         </div>
                     </div>
                 </div>
