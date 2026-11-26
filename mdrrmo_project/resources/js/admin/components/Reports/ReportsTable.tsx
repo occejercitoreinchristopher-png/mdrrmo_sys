@@ -216,13 +216,14 @@ export default function ReportsTable({ incidents = [] }: { incidents?: IncidentR
                     <table className="w-full text-left border-collapse text-xs">
                         <thead>
                             <tr className="text-[10px] uppercase font-bold text-slate-400 bg-slate-50/50 dark:bg-white/[0.02] border-b border-slate-100 dark:border-white/5">
-                                <th className="py-3 px-4"># ID</th>
+                                <th className="py-3 px-4 whitespace-nowrap"># ID</th>
                                 <th className="py-3 px-4">Incident Type</th>
                                 <th className="py-3 px-4">Priority</th>
-                                <th className="py-3 px-4">Barangay / Location</th>
-                                <th className="py-3 px-4">Status</th>
-                                <th className="py-3 px-4">Reported At</th>
-                                <th className="py-3 px-4 text-right">Action</th>
+                                <th className="py-3 px-4 whitespace-nowrap">Barangay</th>
+                                <th className="py-3 px-4">Incident Location</th>
+                                <th className="py-3 px-4 whitespace-nowrap">Status</th>
+                                <th className="py-3 px-4 whitespace-nowrap">Reported At</th>
+                                <th className="py-3 px-4 text-right whitespace-nowrap">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -232,6 +233,7 @@ export default function ReportsTable({ incidents = [] }: { incidents?: IncidentR
                                     inc.incident_type?.incident_type_name ||
                                     'General Incident';
                                 const brgy = inc.barangay || 'Unknown';
+                                const locationText = inc.incident_address || inc.place_of_incident || '—';
                                 const reportedDate = inc.reported_at
                                     ? new Date(inc.reported_at).toLocaleString('en-PH', {
                                           month: 'short',
@@ -247,31 +249,31 @@ export default function ReportsTable({ incidents = [] }: { incidents?: IncidentR
                                         key={inc.id}
                                         className="hover:bg-slate-50/80 dark:hover:bg-white/[0.02] transition-colors"
                                     >
-                                        <td className="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">
+                                        <td className="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                                             #{inc.id}
                                         </td>
                                         <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
                                             {typeName}
                                         </td>
                                         <td className="py-3 px-4">{priorityBadge(inc.priority)}</td>
-                                        <td className="py-3 px-4">
-                                            <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                                                <MapPin className="w-3 h-3 text-red-500 shrink-0" />
+                                        <td className="py-3 px-4 whitespace-nowrap">
+                                            <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                                <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" />
                                                 <span>{brgy}</span>
                                             </div>
-                                            {inc.incident_address && (
-                                                <div className="text-[11px] text-slate-400 truncate max-w-xs">
-                                                    {inc.incident_address}
-                                                </div>
-                                            )}
                                         </td>
-                                        <td className="py-3 px-4">
+                                        <td className="py-3 px-4 min-w-[220px]">
+                                            <div className="text-[11px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed break-words" title={locationText}>
+                                                {locationText}
+                                            </div>
+                                        </td>
+                                        <td className="py-3 px-4 whitespace-nowrap">
                                             <StatusBadge status={inc.incident_status} />
                                         </td>
-                                        <td className="py-3 px-4 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+                                        <td className="py-3 px-4 text-slate-500 dark:text-slate-400 font-mono text-[11px] whitespace-nowrap">
                                             {reportedDate}
                                         </td>
-                                        <td className="py-3 px-4 text-right">
+                                        <td className="py-3 px-4 text-right whitespace-nowrap">
                                             <a
                                                 href={`/admin/dispatch-logs/${inc.id}`}
                                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors"
@@ -286,7 +288,7 @@ export default function ReportsTable({ incidents = [] }: { incidents?: IncidentR
 
                             {paginatedRecords.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="py-12 text-center text-sm text-slate-400 italic">
+                                    <td colSpan={8} className="py-12 text-center text-sm text-slate-400 italic">
                                         No incident records found.
                                     </td>
                                 </tr>
