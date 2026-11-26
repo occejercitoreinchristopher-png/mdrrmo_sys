@@ -82,7 +82,7 @@ export default function MobileAppSection() {
 
                         {/* Main Heading */}
                         <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight">
-                            Emergency Protection in the Palm of Every Opolan
+                            Emergency Protection in the Palm of Every Opolanon
                         </h2>
 
                         {/* Description */}
