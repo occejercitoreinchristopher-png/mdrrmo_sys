@@ -934,7 +934,8 @@ export default function LiveMonitoringMap({
                                         ? responderLoc.heading
                                         : (snapped?.bearing ?? 0);
 
-                                    const locTime = (typeof responderLoc.sequence === 'number' && responderLoc.sequence > 0 ? responderLoc.sequence : 0) || responderLoc.updatedAt || (responderLoc.timestamp ? new Date(responderLoc.timestamp).getTime() : 0);
+                                    const locSeq = (responderLoc as any).sequence;
+                                    const locTime = (typeof locSeq === 'number' && locSeq > 0 ? locSeq : 0) || responderLoc.updatedAt || (responderLoc.timestamp ? new Date(responderLoc.timestamp).getTime() : 0);
                                     const elapsedSeconds = locTime > 0 ? Math.max(0, Math.floor((Date.now() - locTime) / 1000)) : 9999;
                                     const isOnline = elapsedSeconds <= 35;
                                     const isStale = elapsedSeconds > 35 && elapsedSeconds <= 180;

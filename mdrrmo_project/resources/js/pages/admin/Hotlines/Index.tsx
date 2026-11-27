@@ -281,138 +281,137 @@ export default function HotlinesIndex({
 
                 {/* Hotlines Content: Data Table Layout */}
                 <Card className="border-slate-800 overflow-hidden bg-slate-900/40">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm text-slate-300">
-                                <thead className="text-xs uppercase bg-slate-800/80 text-slate-400 border-b border-slate-800 font-semibold tracking-wider">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm text-slate-300">
+                            <thead className="text-xs uppercase bg-slate-800/80 text-slate-400 border-b border-slate-800 font-semibold tracking-wider">
+                                <tr>
+                                    <th className="px-6 py-4">#</th>
+                                    <th className="px-6 py-4">Agency / Service</th>
+                                    <th className="px-6 py-4">Phone Number</th>
+                                    <th className="px-6 py-4">Emergency Scope</th>
+                                    <th className="px-6 py-4">Mobile Status</th>
+                                    <th className="px-6 py-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800/70">
+                                {hotlines.length === 0 ? (
                                     <tr>
-                                        <th className="px-6 py-4">#</th>
-                                        <th className="px-6 py-4">Agency / Service</th>
-                                        <th className="px-6 py-4">Phone Number</th>
-                                        <th className="px-6 py-4">Emergency Scope</th>
-                                        <th className="px-6 py-4">Mobile Status</th>
-                                        <th className="px-6 py-4 text-right">Actions</th>
+                                        <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                                            <Phone className="w-10 h-10 mx-auto text-slate-600 mb-2 opacity-50" />
+                                            <p className="font-semibold text-slate-400">No emergency hotlines found</p>
+                                            <p className="text-xs text-slate-600 mt-1">Click "Add Emergency Hotline" to create a new directory entry.</p>
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800/70">
-                                    {hotlines.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                                                <Phone className="w-10 h-10 mx-auto text-slate-600 mb-2 opacity-50" />
-                                                <p className="font-semibold text-slate-400">No emergency hotlines found</p>
-                                                <p className="text-xs text-slate-600 mt-1">Click "Add Emergency Hotline" to create a new directory entry.</p>
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        hotlines.map((hotline, idx) => {
-                                            const IconComp = getHotlineIcon(hotline.icon_type);
-                                            const isCopied = copiedId === hotline.id;
+                                ) : (
+                                    hotlines.map((hotline, idx) => {
+                                        const IconComp = getHotlineIcon(hotline.icon_type);
+                                        const isCopied = copiedId === hotline.id;
 
-                                            return (
-                                                <tr
-                                                    key={hotline.id}
-                                                    className="hover:bg-slate-800/30 transition-colors duration-150"
-                                                >
-                                                    <td className="px-6 py-4 font-mono text-xs text-slate-500 font-bold">
-                                                        #{hotline.sort_order || idx + 1}
-                                                    </td>
+                                        return (
+                                            <tr
+                                                key={hotline.id}
+                                                className="hover:bg-slate-800/30 transition-colors duration-150"
+                                            >
+                                                <td className="px-6 py-4 font-mono text-xs text-slate-500 font-bold">
+                                                    #{hotline.sort_order || idx + 1}
+                                                </td>
 
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div
-                                                                className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border"
-                                                                style={{
-                                                                    backgroundColor: `${hotline.accent_color}1A`,
-                                                                    borderColor: `${hotline.accent_color}4D`,
-                                                                    color: hotline.accent_color,
-                                                                }}
-                                                            >
-                                                                <IconComp className="w-5 h-5" />
-                                                            </div>
-                                                            <div>
-                                                                <span className="font-bold text-white text-sm">
-                                                                    {hotline.name}
-                                                                </span>
-                                                                <p className="text-xs text-slate-500 mt-0.5">
-                                                                    ID: {hotline.id} • Order: {hotline.sort_order}
-                                                                </p>
-                                                            </div>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div
+                                                            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border"
+                                                            style={{
+                                                                backgroundColor: `${hotline.accent_color}1A`,
+                                                                borderColor: `${hotline.accent_color}4D`,
+                                                                color: hotline.accent_color,
+                                                            }}
+                                                        >
+                                                            <IconComp className="w-5 h-5" />
                                                         </div>
-                                                    </td>
-
-                                                    <td className="px-6 py-4 font-mono font-bold text-white">
-                                                        <div className="flex items-center gap-2">
-                                                            <span>{hotline.phone_number}</span>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleCopyNumber(hotline.id, hotline.phone_number)}
-                                                                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
-                                                                title="Copy number"
-                                                            >
-                                                                {isCopied ? (
-                                                                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                                                ) : (
-                                                                    <Copy className="w-3.5 h-3.5" />
-                                                                )}
-                                                            </button>
+                                                        <div>
+                                                            <span className="font-bold text-white text-sm">
+                                                                {hotline.name}
+                                                            </span>
+                                                            <p className="text-xs text-slate-500 mt-0.5">
+                                                                ID: {hotline.id} • Order: {hotline.sort_order}
+                                                            </p>
                                                         </div>
-                                                    </td>
+                                                    </div>
+                                                </td>
 
-                                                    <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">
-                                                        {hotline.description || '—'}
-                                                    </td>
-
-                                                    <td className="px-6 py-4">
+                                                <td className="px-6 py-4 font-mono font-bold text-white">
+                                                    <div className="flex items-center gap-2">
+                                                        <span>{hotline.phone_number}</span>
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleToggleActive(hotline)}
-                                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition ${
-                                                                hotline.is_active
-                                                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-                                                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700/50'
-                                                            }`}
-                                                            title="Click to toggle mobile app visibility"
+                                                            onClick={() => handleCopyNumber(hotline.id, hotline.phone_number)}
+                                                            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                                                            title="Copy number"
                                                         >
-                                                            {hotline.is_active ? (
-                                                                <>
-                                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                                                    <span>Active (Live)</span>
-                                                                </>
+                                                            {isCopied ? (
+                                                                <Check className="w-3.5 h-3.5 text-emerald-400" />
                                                             ) : (
-                                                                <>
-                                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                                                                    <span>Inactive</span>
-                                                                </>
+                                                                <Copy className="w-3.5 h-3.5" />
                                                             )}
                                                         </button>
-                                                    </td>
+                                                    </div>
+                                                </td>
 
-                                                    <td className="px-6 py-4 text-right">
-                                                        <div className="flex items-center justify-end gap-1.5">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => openEditModal(hotline)}
-                                                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition border border-slate-700/60"
-                                                                title="Edit Hotline"
-                                                            >
-                                                                <Pencil className="w-4 h-4" />
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setDeleteTarget(hotline)}
-                                                                className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition border border-rose-500/20"
-                                                                title="Delete Hotline"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
+                                                <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">
+                                                    {hotline.description || '—'}
+                                                </td>
+
+                                                <td className="px-6 py-4">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleToggleActive(hotline)}
+                                                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition ${hotline.is_active
+                                                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                                                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700/50'
+                                                            }`}
+                                                        title="Click to toggle mobile app visibility"
+                                                    >
+                                                        {hotline.is_active ? (
+                                                            <>
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                                                <span>Active (Live)</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                                                                <span>Inactive</span>
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </td>
+
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openEditModal(hotline)}
+                                                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition border border-slate-700/60"
+                                                            title="Edit Hotline"
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setDeleteTarget(hotline)}
+                                                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition border border-rose-500/20"
+                                                            title="Delete Hotline"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
 
                     {/* Pagination */}
                     {pagination && pagination.lastPage > 1 && (
@@ -548,11 +547,10 @@ export default function HotlinesIndex({
                                                 key={value}
                                                 type="button"
                                                 onClick={() => setFormData({ ...formData, icon_type: value })}
-                                                className={`p-2.5 rounded-xl border flex items-center gap-2 text-xs font-medium transition ${
-                                                    isSelected
-                                                        ? 'bg-blue-600/20 border-blue-500 text-white'
-                                                        : 'bg-slate-800/60 border-slate-700/60 text-slate-400 hover:bg-slate-800'
-                                                }`}
+                                                className={`p-2.5 rounded-xl border flex items-center gap-2 text-xs font-medium transition ${isSelected
+                                                    ? 'bg-blue-600/20 border-blue-500 text-white'
+                                                    : 'bg-slate-800/60 border-slate-700/60 text-slate-400 hover:bg-slate-800'
+                                                    }`}
                                             >
                                                 <Icon className="w-4 h-4 text-cyan-400 shrink-0" />
                                                 <span className="truncate">{label.split(' ')[0]}</span>
@@ -574,11 +572,10 @@ export default function HotlinesIndex({
                                                 key={preset.value}
                                                 type="button"
                                                 onClick={() => setFormData({ ...formData, accent_color: preset.value })}
-                                                className={`w-7 h-7 rounded-full border-2 transition ${
-                                                    formData.accent_color.toLowerCase() === preset.value.toLowerCase()
-                                                        ? 'border-white scale-110 shadow-lg'
-                                                        : 'border-transparent opacity-70 hover:opacity-100'
-                                                }`}
+                                                className={`w-7 h-7 rounded-full border-2 transition ${formData.accent_color.toLowerCase() === preset.value.toLowerCase()
+                                                    ? 'border-white scale-110 shadow-lg'
+                                                    : 'border-transparent opacity-70 hover:opacity-100'
+                                                    }`}
                                                 style={{ backgroundColor: preset.value }}
                                                 title={preset.label}
                                             />

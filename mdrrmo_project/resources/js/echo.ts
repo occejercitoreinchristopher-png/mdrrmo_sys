@@ -35,14 +35,15 @@ if (typeof window !== 'undefined') {
         },
     });
 
-    if (window.Echo?.connector?.pusher?.connection) {
-        window.Echo.connector.pusher.connection.bind('connected', () => {
+    const echoInstance = (window as any).Echo;
+    if (echoInstance?.connector?.pusher?.connection) {
+        echoInstance.connector.pusher.connection.bind('connected', () => {
             console.log('[Echo] Connected to Reverb at', wsHost, forceTLS ? '(WSS/443)' : `(WS/${wsPort})`);
         });
-        window.Echo.connector.pusher.connection.bind('error', (err: any) => {
+        echoInstance.connector.pusher.connection.bind('error', (err: any) => {
             console.error('[Echo] Connection error:', err);
         });
-        window.Echo.connector.pusher.connection.bind('state_change', (states: any) => {
+        echoInstance.connector.pusher.connection.bind('state_change', (states: any) => {
             console.log('[Echo] State changed:', states.previous, '->', states.current);
         });
     }

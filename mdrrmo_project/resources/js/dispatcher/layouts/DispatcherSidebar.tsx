@@ -152,7 +152,7 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl,
                                 // @ts-ignore
                                 router.prefetch(href);
                             }
-                        } catch {}
+                        } catch { }
                     }}
                     onClick={(e) => {
                         if (e.ctrlKey || e.metaKey) {
@@ -231,7 +231,7 @@ function NavGroup({ group, items, currentUrl, collapsed, index }: any) {
                         key={item.label}
                         {...item}
                         active={!item.subItems && (
-                            currentUrl === item.href || 
+                            currentUrl === item.href ||
                             (item.href !== '/dispatcher/dashboard' && currentUrl.startsWith(item.href + '/')) ||
                             (item.href && item.href.includes('?') && currentUrl.includes(item.href.split('?')[1]))
                         )}
@@ -258,9 +258,9 @@ export default function DispatcherSidebar({ collapsed, onToggle }: { collapsed: 
         {
             group: 'Incident Response',
             items: [
-                { 
-                    label: 'Emergency Queue', 
-                    icon: AlertTriangle, 
+                {
+                    label: 'Emergency Queue',
+                    icon: AlertTriangle,
                     href: '/dispatcher/incidents',
                     badge: incidentCounts.active,
                     subItems: [
