@@ -122,35 +122,33 @@ export default function DashboardCharts({
     );
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start mb-6">
             {/* Main Rising Bar Trend (7-8 cols) */}
-            <div className="lg:col-span-7 xl:col-span-8 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white dark:bg-[#0b1120]/90 shadow-xs overflow-hidden flex flex-col justify-between">
-                <div>
-                    <div className="p-5 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-[#F61509]">
-                                <TrendingUp className="w-4 h-4" />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-slate-900 dark:text-white text-[15px]">
-                                    Incident &amp; Dispatch Performance
-                                </h3>
-                                <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-0.5">
-                                    {sixMonthReported} reported • {sixMonthResolved} resolved
-                                </p>
-                            </div>
+            <div className="lg:col-span-7 xl:col-span-8 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white dark:bg-[#0b1120]/90 shadow-xs overflow-hidden h-fit">
+                <div className="p-5 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-[#F61509]">
+                            <TrendingUp className="w-4 h-4" />
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-slate-900 dark:text-white text-[15px]">
+                                Incident &amp; Dispatch Performance
+                            </h3>
+                            <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-0.5">
+                                {sixMonthReported} reported • {sixMonthResolved} resolved
+                            </p>
                         </div>
                     </div>
+                </div>
 
-                    <div className="p-4">
-                        <ReactApexChart
-                            key={`trend-bar-${isDark ? 'dark' : 'light'}`}
-                            options={trendOptions}
-                            series={trendSeries}
-                            type="bar"
-                            height={320}
-                        />
-                    </div>
+                <div className="p-4">
+                    <ReactApexChart
+                        key={`trend-bar-${isDark ? 'dark' : 'light'}`}
+                        options={trendOptions}
+                        series={trendSeries}
+                        type="bar"
+                        height={320}
+                    />
                 </div>
             </div>
 
