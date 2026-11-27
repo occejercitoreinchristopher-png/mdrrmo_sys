@@ -21,9 +21,14 @@ class ReportController extends Controller
             'resident.residentProfile:id,user_id,barangay_id',
             'resident.residentProfile.barangay:id,barangay_name',
             'locationCode.barangay:id,barangay_name',
-            'dispatches.ambulance:id,plate_number,name,vehicle_type,status',
+            'dispatches.ambulance:id,ambulance_code,plate_number,vehicle_name,vehicle_type,status',
             'dispatches.crew:id,first_name,last_name',
-            'dispatches.patientCareRecord:id,dispatch_id,disposition,clinical_chief_complaint',
+            'dispatches.patientCareRecord' => fn($q) => $q->select([
+                'patient_care_records.id',
+                'patient_care_records.dispatch_id',
+                'patient_care_records.disposition',
+                'patient_care_records.clinical_chief_complaint',
+            ]),
             'dispatches.patientCareRecords:id,dispatch_id,disposition,clinical_chief_complaint',
         ]);
 
