@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { router } from '@inertiajs/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import DataTable from '@/shared/components/DataTable';
 import PageHeader from '@/shared/components/PageHeader';
 import SearchInput from '@/shared/components/SearchInput';
@@ -142,6 +142,8 @@ export default function ResponderManagement({
         !teamFilter &&
         page === (initialPagination?.current_page ?? 1);
 
+    const queryClient = useQueryClient();
+
     const { data: serverData, isFetching } = useQuery({
         queryKey: ['responders', debouncedSearch, statusFilter, roleFilter, teamFilter, page],
         queryFn: fetchResponders,
@@ -154,8 +156,31 @@ export default function ResponderManagement({
               }
             : undefined,
         staleTime: 0,
-        refetchOnWindowFocus: false,
+        refetchOnWindowFocus: true,
+        refetchInterval: 10000,
     });
+
+    // Real-time listener for responder status changes from Mobile App / Dispatcher
+    useEffect(() => {
+        // @ts-ignore
+        if (typeof window !== 'undefined' && window.Echo) {
+            // @ts-ignore
+            const channel = window.Echo.private('dispatcher');
+            const onResponderUpdate = () => {
+                queryClient.invalidateQueries({ queryKey: ['responders'] });
+            };
+            channel.listen('ResponderStatusUpdated', onResponderUpdate);
+            channel.listen('.ResponderStatusUpdated', onResponderUpdate);
+            channel.listen('DispatchStatusUpdated', onResponderUpdate);
+            channel.listen('.DispatchStatusUpdated', onResponderUpdate);
+            return () => {
+                channel.stopListening('ResponderStatusUpdated');
+                channel.stopListening('.ResponderStatusUpdated');
+                channel.stopListening('DispatchStatusUpdated');
+                channel.stopListening('.DispatchStatusUpdated');
+            };
+        }
+    }, [queryClient]);
 
     // 5. Instant client-side reactive filtering (0ms latency fallback)
     const displayedUsers = useMemo(() => {

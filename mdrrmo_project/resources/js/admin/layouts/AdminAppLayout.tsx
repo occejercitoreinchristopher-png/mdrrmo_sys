@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Head } from '@inertiajs/react';
+import { useState, useEffect } from 'react';
+import { Head, router } from '@inertiajs/react';
+import { toast } from 'sonner';
 import { ThemeProvider } from '@/shared/contexts/ThemeContext';
 import FlashMessageListener from '@/shared/components/FlashMessageListener';
 
@@ -21,6 +22,50 @@ export default function AdminAppLayout({ children, title = 'Admin Portal', Sideb
             return next;
         });
     };
+
+    // Real-time Reverb WebSocket listener for Admin portal
+    useEffect(() => {
+        // @ts-ignore
+        if (typeof window !== 'undefined' && window.Echo) {
+            // @ts-ignore
+            const channel = window.Echo.private('dispatcher');
+
+            const handleEvent = (message: string, eventTitle?: string) => {
+                toast.info(message, {
+                    description: eventTitle,
+                    duration: 4000,
+                });
+                router.reload({ preserveScroll: true, preserveState: true });
+            };
+
+            const events = [
+                { name: 'IncidentCreated', title: 'New Incident', msg: 'A new emergency report was received.' },
+                { name: 'IncidentVerified', title: 'Incident Verified', msg: 'An incident has been verified.' },
+                { name: 'IncidentCancelled', title: 'Report Cancelled', msg: 'An emergency report was cancelled.' },
+                { name: 'IncidentRejected', title: 'Report Closed', msg: 'An emergency report was rejected or closed.' },
+                { name: 'DispatchCreated', title: 'New Dispatch', msg: 'New emergency dispatch created.' },
+                { name: 'DispatchAccepted', title: 'Dispatch Accepted', msg: 'A responder accepted the dispatch.' },
+                { name: 'DispatchStatusUpdated', title: 'Dispatch Updated', msg: 'Dispatch status was updated.' },
+                { name: 'ResponderStatusUpdated', title: 'Responder Update', msg: 'A responder updated their availability status.' },
+                { name: 'PatientCareRecordSubmitted', title: 'PCR Submitted', msg: 'New Patient Care Record submitted.' },
+                { name: 'DispatchCompleted', title: 'Dispatch Complete', msg: 'An emergency dispatch was completed.' },
+                { name: 'LeaveRequestSubmitted', title: 'Leave Request', msg: 'New responder leave request submitted.' },
+                { name: 'LeaveApproved', title: 'Leave Approved', msg: 'Leave request approved.' },
+            ];
+
+            events.forEach(({ name, title, msg }) => {
+                channel.listen(name, () => handleEvent(msg, title));
+                channel.listen(`.${name}`, () => handleEvent(msg, title));
+            });
+
+            return () => {
+                events.forEach(({ name }) => {
+                    channel.stopListening(name);
+                    channel.stopListening(`.${name}`);
+                });
+            };
+        }
+    }, []);
 
     return (
         <ThemeProvider>

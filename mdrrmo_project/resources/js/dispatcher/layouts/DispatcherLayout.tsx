@@ -28,10 +28,11 @@ export default function DispatcherLayout({ children, title }) {
             const handleEvent = (message: string, title?: string, type = 'info') => {
                 toast.success(message);
                 dispatchNotification(title || 'System Notification', message, type);
-                router.reload();
+                router.reload({ preserveScroll: true, preserveState: true });
             };
 
             const events = [
+                { name: 'IncidentCreated', title: 'New Incident', msg: 'A new emergency incident was reported.', type: 'created' },
                 { name: 'IncidentVerified', title: 'Incident Verified', msg: 'Incident has been verified.', type: 'verified' },
                 { name: 'IncidentCancelled', title: 'Report Cancelled', msg: 'An emergency report was cancelled by the resident.', type: 'cancelled' },
                 { name: 'IncidentRejected', title: 'Report Closed', msg: 'An incident report was rejected or cancelled.', type: 'rejected' },
