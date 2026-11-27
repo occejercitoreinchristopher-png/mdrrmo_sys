@@ -145,6 +145,15 @@ function NavItem({ icon: Icon, label, href, active, badge, subItems, currentUrl,
             ) : (
                 <button
                     type="button"
+                    onMouseEnter={() => {
+                        try {
+                            // @ts-ignore
+                            if (typeof router.prefetch === 'function') {
+                                // @ts-ignore
+                                router.prefetch(href);
+                            }
+                        } catch {}
+                    }}
                     onClick={(e) => {
                         if (e.ctrlKey || e.metaKey) {
                             window.open(href, '_blank');

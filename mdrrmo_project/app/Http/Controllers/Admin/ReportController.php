@@ -8,6 +8,7 @@ use App\Models\Dispatch;
 use App\Models\Incident;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 
 class ReportController extends Controller
@@ -15,13 +16,15 @@ class ReportController extends Controller
     public function index(Request $request)
     {
         $query = Incident::with([
-            'incidentType',
-            'resident.residentProfile.barangay',
-            'locationCode.barangay',
-            'dispatches.ambulance',
-            'dispatches.crew',
-            'dispatches.patientCareRecord',
-            'dispatches.patientCareRecords',
+            'incidentType:id,incident_type_name',
+            'resident:id,first_name,last_name',
+            'resident.residentProfile:id,user_id,barangay_id',
+            'resident.residentProfile.barangay:id,barangay_name',
+            'locationCode.barangay:id,barangay_name',
+            'dispatches.ambulance:id,plate_number,name,vehicle_type,status',
+            'dispatches.crew:id,first_name,last_name',
+            'dispatches.patientCareRecord:id,dispatch_id,disposition,clinical_chief_complaint',
+            'dispatches.patientCareRecords:id,dispatch_id,disposition,clinical_chief_complaint',
         ]);
 
         // Period & Year Filters
@@ -166,6 +169,14 @@ class ReportController extends Controller
 
         arsort($chiefComplaints);
 
+        // Strip heavy PCR relationships so they don't bloat the JSON response over the network
+        $incidents->each(function ($incident) {
+            $incident->dispatches->each(function ($dispatch) {
+                $dispatch->unsetRelation('patientCareRecord');
+                $dispatch->unsetRelation('patientCareRecords');
+            });
+        });
+
         $stats = [
             'total_incidents' => $totalIncidents,
             'verified_count' => $verifiedCount,
@@ -202,18 +213,20 @@ class ReportController extends Controller
             'available_years' => array_values($yearsInDb),
         ];
 
-        $geojsonPath = resource_path('data/opol_barangays.json');
-        $barangayGeojson = file_exists($geojsonPath) ? json_decode(file_get_contents($geojsonPath), true) : null;
-
-        $monthlyReportService = new \App\Services\MonthlyReportService();
+        // Cache the monthly full year report for 15 minutes to eliminate massive redundant database queries
         $currentYear = (int) ($request->input('year') ?: now()->format('Y'));
-        $monthlyReportData = $monthlyReportService->getFullYearReport($currentYear);
+        $monthlyReportData = Cache::remember(
+            "full_year_report_{$currentYear}",
+            now()->addMinutes(15),
+            function () use ($currentYear) {
+                return (new \App\Services\MonthlyReportService())->getFullYearReport($currentYear);
+            }
+        );
 
         return Inertia::render('admin/Reports', [
             'stats' => $stats,
             'incidents' => $incidents->values(),
             'lookups' => $lookups,
-            'barangayGeojson' => $barangayGeojson,
             'filters' => $request->only(['period', 'year', 'date_from', 'date_to', 'barangay', 'incident_type_id', 'status', 'responder_id', 'ambulance_id', 'priority', 'search']),
             'monthlyReportData' => $monthlyReportData,
         ]);

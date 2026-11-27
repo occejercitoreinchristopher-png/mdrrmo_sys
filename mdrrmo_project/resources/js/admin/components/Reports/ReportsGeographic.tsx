@@ -1,10 +1,11 @@
 import { MapPin, Navigation } from 'lucide-react';
 import IncidentHistoryMap from '@/dispatcher/components/Incidents/IncidentHistoryMap';
 import { usePage } from '@inertiajs/react';
+import opolBarangays from '@/data/opol_barangays.json';
 
 export default function ReportsGeographic({ incidents = [] }: { incidents?: any[] }) {
     const { props } = usePage<any>();
-    const barangayGeojson = props.barangayGeojson ?? null;
+    const barangayGeojson = props.barangayGeojson || opolBarangays;
 
     const mappedIncidents = incidents.filter(
         (inc) =>
