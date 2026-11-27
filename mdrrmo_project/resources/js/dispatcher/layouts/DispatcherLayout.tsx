@@ -28,7 +28,7 @@ export default function DispatcherLayout({ children, title }) {
             const handleEvent = (message: string, title?: string, type = 'info') => {
                 toast.success(message);
                 dispatchNotification(title || 'System Notification', message, type);
-                router.reload({ preserveScroll: true, preserveState: true });
+                router.reload();
             };
 
             const events = [

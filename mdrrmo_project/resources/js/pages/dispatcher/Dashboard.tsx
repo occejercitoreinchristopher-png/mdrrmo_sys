@@ -28,7 +28,7 @@ export default function DashboardPage({
     useEffect(() => {
         const interval = setInterval(() => {
             if (typeof document !== 'undefined' && !document.hidden) {
-                router.reload({ preserveScroll: true, preserveState: true });
+                router.reload();
             }
         }, 12000);
         return () => clearInterval(interval);

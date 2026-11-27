@@ -35,7 +35,7 @@ export default function AdminAppLayout({ children, title = 'Admin Portal', Sideb
                     description: eventTitle,
                     duration: 4000,
                 });
-                router.reload({ preserveScroll: true, preserveState: true });
+                router.reload();
             };
 
             const events = [
